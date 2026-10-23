@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
+import { useSendTransaction, useWaitForTransactionReceipt, useAccount } from "wagmi";
 import { parseEther } from "viem";
 import { fetchProjectById, formatEth, fundingProgress, shortAddr } from "@/lib/api";
 import MilestoneEscrowABI from "@/config/abis/MilestoneEscrow.json";
@@ -16,7 +16,7 @@ function FundingPanel({ projectId }: { projectId: string }) {
   const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [txError, setTxError] = useState("");
 
-  const { writeContractAsync } = useWriteContract();
+  const { sendTransactionAsync } = useSendTransaction();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   useWaitForTransactionReceipt({ hash: txHash });
 
@@ -26,11 +26,8 @@ function FundingPanel({ projectId }: { projectId: string }) {
     setTxStatus("pending");
     setTxError("");
     try {
-      const hash = await writeContractAsync({
-        address: projectId as `0x${string}`,
-        abi: MilestoneEscrowABI.abi,
-        functionName: "claimTokens",   // placeholder — actual deposit via sendTransaction
-        args: [],
+      const hash = await sendTransactionAsync({
+        to: projectId as `0x${string}`, // Sends ETH directly to trigger the receive() fallback
         value: parseEther(ethAmount),
       });
       setTxHash(hash);

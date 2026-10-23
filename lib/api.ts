@@ -2,8 +2,27 @@
    lib/api.ts  –  Data fetching helpers for Express REST + Ponder GraphQL
    ───────────────────────────────────────────────────────────────────────── */
 
-const EXPRESS_API = process.env.NEXT_PUBLIC_EXPRESS_API ?? "http://localhost:3001/api";
-const PONDER_API  = process.env.NEXT_PUBLIC_PONDER_API  ?? "http://localhost:42069";
+export function getExpressApi(): string {
+  if (typeof window === "undefined") {
+    return (
+      process.env.INTERNAL_EXPRESS_API ||
+      process.env.NEXT_PUBLIC_EXPRESS_API ||
+      "http://localhost:3001/api"
+    );
+  }
+  return process.env.NEXT_PUBLIC_EXPRESS_API || "http://localhost:3001/api";
+}
+
+export function getPonderApi(): string {
+  if (typeof window === "undefined") {
+    return (
+      process.env.INTERNAL_PONDER_API ||
+      process.env.NEXT_PUBLIC_PONDER_API ||
+      "http://localhost:42069"
+    );
+  }
+  return process.env.NEXT_PUBLIC_PONDER_API || "http://localhost:42069";
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -58,23 +77,45 @@ export interface P2PListing {
 // ── Express REST helpers ───────────────────────────────────────────────────
 
 export async function fetchAllProjects(): Promise<Project[]> {
-  const res = await fetch(`${EXPRESS_API}/projects`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to fetch projects: ${res.statusText}`);
-  const json = await res.json();
-  return json.data ?? [];
+  try {
+    const api = getExpressApi();
+    const res = await fetch(`${api}/projects`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      console.warn(`[fetchAllProjects] API returned ${res.status}: ${res.statusText}`);
+      return [];
+    }
+    const json = await res.json();
+    return Array.isArray(json.data) ? json.data : [];
+  } catch (err) {
+    console.warn("[fetchAllProjects] Unable to reach API server:", err);
+    return [];
+  }
 }
 
 export async function fetchProjectById(id: string): Promise<Project | null> {
-  const res = await fetch(`${EXPRESS_API}/projects/${id}`, { cache: "no-store" });
-  if (!res.ok) return null;
-  const json = await res.json();
-  return json.data ?? null;
+  try {
+    const api = getExpressApi();
+    const res = await fetch(`${api}/projects/${id}`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data ?? null;
+  } catch (err) {
+    console.warn(`[fetchProjectById] Unable to reach API for project ${id}:`, err);
+    return null;
+  }
 }
 
 export async function createStartupProfile(
   profile: StartupProfileInput
 ): Promise<Project> {
-  const res = await fetch(`${EXPRESS_API}/projects/profile`, {
+  const api = getExpressApi();
+  const res = await fetch(`${api}/projects/profile`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(profile),
@@ -93,7 +134,8 @@ async function ponderQuery<T = unknown>(
   query: string,
   variables?: Record<string, unknown>
 ): Promise<T> {
-  const res = await fetch(`${PONDER_API}`, {
+  const ponderUrl = getPonderApi();
+  const res = await fetch(`${ponderUrl}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query, variables }),
