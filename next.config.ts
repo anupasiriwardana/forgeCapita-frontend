@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: ["@coinbase/cdp-sdk", "@base-org/account"],
   experimental: {
     agentFeedback: true,
   },
@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  webpack: (config) => {
+    config.externals.push("pino-pretty", "lokijs", "encoding");
+    return config;
   },
 };
 
