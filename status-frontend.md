@@ -4,7 +4,7 @@
 **Framework:** Next.js 16 (App Router) / React 19 / TypeScript / Tailwind CSS  
 **Web3 Stack:** Wagmi 2.x / Viem 2.x / RainbowKit 2.x  
 **Port:** 3000  
-**Last Updated:** Current Sprint  
+**Last Updated:** 2026-10-28 (plan revised; code unchanged since the previous report)  
 
 ---
 
@@ -86,11 +86,21 @@ The core page layouts (Marketplace Dashboard, Project Detail, Milestone Voting, 
 
 ---
 
-## 5. Summary Checklist of Next Steps
+## 5. Plan revision (2026-10-28)
 
-1. [ ] Update `config/wagmi.ts` to support Arbitrum Sepolia (`421614`) and BSC Testnet (`97`).
-2. [ ] Update `.env.local` with verified factory and P2P exchange addresses for each chain.
-3. [ ] Refactor `app/projects/create/page.tsx` to enforce off-chain application review prior to on-chain deployment.
-4. [ ] Build the Admin Dashboard (`/admin`) for application review and rogue contract mitigation.
-5. [ ] Build the Investor Dashboard (`/investor`) for token claiming, dividend staking, and yield collection.
-6. [ ] Build the Founder Dashboard (`/founder`) for Paymaster milestone execution and shadow wallet setup.
+The backlog was rewritten (`backlog-frontend.md`). Changes from what this report described:
+
+- **Design system first:** dark theme with a black / luminous green / white palette, mobile-first shell, `/design` preview page before dashboards (FE-01 to FE-07).
+- **Four dashboards:** investor, founder, **staff** and admin (FE-55 to FE-69); staff handle applications, KYC, complaints; admin keeps shutdown, freeze and takeover execution.
+- **Accounts:** email + password and wallet linking replace wallet-only sign-in (FE-20 to FE-24).
+- **Gasless UX:** claim tokens, stake, vote and execute milestone become sign-a-message actions with a gas tracker, queue status and clear free / paid labelling (FE-40 to FE-45). The old "fetch Paymaster signature then call `executeMilestone(gasDebt, signature)`" idea is dropped.
+- **Founder wizard:** profile → manual KYC → "I agree" agreement → GitHub / GitLab repo → shadow wallet → review → gated deploy (FE-50 to FE-52).
+- **Investor protection:** transparency panel, complaints, takeover signalling vote (FE-31, FE-72, FE-73).
+
+## 6. Summary Checklist of Next Steps
+
+1. [ ] FE-01 to FE-07 design system and app shell, reviewed on `/design`.
+2. [ ] FE-10 to FE-12 multi-chain Wagmi config (Arbitrum Sepolia + BSC Testnet); `[USER-ACTION]` WalletConnect ID, RPCs, addresses.
+3. [ ] FE-20 to FE-24 accounts, after the API accounts work exists.
+4. [ ] FE-30 to FE-35 marketplace and project page; FE-40 to FE-45 gasless UX after contracts v2 and the relayer.
+5. [ ] FE-50 to FE-52 founder wizard, then dashboards.

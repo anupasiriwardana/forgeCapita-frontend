@@ -1,96 +1,130 @@
 # ForgeCapita Frontend — Development Backlog
 
-This backlog tracks the client-side Next.js web application (`forgecapita-frontend`), responsible for founder project launches, investor crowdfunding, milestone voting, secondary P2P equity trading, and role-based dashboards (Admin, Founder, Investor).
+This backlog tracks the Next.js 16 web app (`forgecapita-frontend`): design system, accounts and wallet linking, marketplace, project pages, **gasless action UX with a gas tracker**, user-paid on-chain flows, the founder application wizard, and four role dashboards (investor, founder, staff, admin).
 
 > **Legend:**
 > - `[x]` Completed
 > - `[ ]` Pending
 > - `[USER-ACTION]` Requires manual action or credential provisioning from the repository owner/user.
+> - `[BLOCKED-BY]` Cannot start until another backlog item is done.
+> - `[DEFERRED]` Planned, not scheduled.
+
+Item IDs (`FE-xx`) are referenced from `ROADMAP.md`. Plan revised 2026-10-28.
+
+## Decisions that shape this backlog
+
+- **Theme:** dark, inspired by the Spectra Analytics Dashboard reference. Main colours are a shade of black, a luminous green and a shade of white. Tokens below are the starting point and live in `app/globals.css` as CSS variables.
+- **Mobile first:** bottom tab bar on small screens, card lists instead of wide tables, 44 px touch targets, sticky transaction bar, 16–20 px radii.
+- **Auth:** email + password account, then link a wallet. The browser never stores tokens in `localStorage`; the session is an httpOnly cookie handled by the API.
+- **Gas UX:** claim tokens, stake, vote and execute milestone are gasless (sign a message in MetaMask, the relayer submits). Invest, claim yield, refund, create project, send revenue, unstake and P2P are normal wallet transactions. The UI must always say which kind of action the user is about to take.
+- **Treasury actions** (emergency shutdown, freeze, takeover proposal) are signed by the admin in the browser wallet — the server holds no treasury key.
+
+### Design tokens (initial)
+
+| Token | Value | Use |
+|---|---|---|
+| `--bg` | `#0B0D0C` | page background |
+| `--card` | `#131715` | surfaces |
+| `--raised` | `#1B211E` | raised / hover surfaces |
+| `--border` | `#27302B` | hairlines |
+| `--text` | `#F2F6F4` | primary text |
+| `--text-2` | `#A3AFA9` | secondary text |
+| `--muted` | `#7F8B85` | muted text |
+| `--green` | `#36F59B` | primary accent (hover `#6BFFB8`, text on green `#04140C`, tint `rgba(54,245,155,0.10)`) |
+| `--amber` | `#F5B94A` | warnings |
+| `--red` | `#FF6B7A` | errors / danger |
+| `--info` | `#5CC8FF` | info |
+
+Typography: Inter or Geist, monospace for addresses and hashes.
 
 ---
 
-## Phase 1: Core Pages & Web3 Infrastructure
+## Phase 0: Existing foundation
 
-### Core Framework & Styling
-- [x] Initialize Next.js 16 (App Router) project with TypeScript and Tailwind CSS.
-- [x] Implement modern dark-mode aesthetic with custom glassmorphism design system in `globals.css`.
-- [x] Configure RainbowKit, Wagmi, and React Query client providers in `components/web3/Providers.tsx`.
-- [x] Create navigation bar (`components/Navbar.tsx`) with brand logo, route links, and `<ConnectButton />`.
+- [x] Next.js 16 (App Router) + TypeScript + Tailwind; glassmorphism dark styling in `globals.css`; RainbowKit / Wagmi / React Query providers; `Navbar` with `ConnectButton`.
+- [x] Marketplace (`app/page.tsx`) with `ProjectCard` and `lib/api.ts` (`GET /api/projects`).
+- [x] Project detail with funding panel (ETH deposit into `MilestoneEscrow`).
+- [x] Milestones page: Ponder GraphQL query + on-chain `vote(support)`.
+- [x] P2P page: listings from Ponder, `fillListing`, `createListing`.
 
-### Multi-Chain Web3 Configuration
-- [ ] **Critical Fix:** Update `config/wagmi.ts` to support **Arbitrum Sepolia** (Chain ID `421614`) and **BSC Testnet** (Chain ID `97`) instead of Ethereum Sepolia (`sepolia`).
-- [ ] Add network switching pill or chain indicator in `Navbar.tsx` so users can switch seamlessly between Arbitrum Sepolia and BSC Testnet.
-- [ ] `[USER-ACTION]` Register for a free WalletConnect Project ID at https://cloud.walletconnect.com and set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` in `.env.local`.
-- [ ] `[USER-ACTION]` Verify and update contract addresses in `.env.local` for Arbitrum Sepolia (`NEXT_PUBLIC_FACTORY_ADDRESS`, `NEXT_PUBLIC_P2P_ADDRESS`) and BSC Testnet.
-- [ ] `[USER-ACTION]` Provide dedicated testnet RPC endpoints in `.env.local` (e.g. Alchemy, QuickNode, or NodeReal) to prevent public RPC rate-limiting in user browsers.
+## Phase 1: Design system & app shell
 
-### Marketplace & Project Discovery
-- [x] Build Marketplace Dashboard (`app/page.tsx`) to display active startups.
-- [x] Create reusable `ProjectCard.tsx` component with funding progress, status badges, and startup metadata.
-- [x] Implement API helper `lib/api.ts` to fetch unified project listings from Express REST API (`GET /api/projects`).
-- [ ] Add category filters, search input, and chain filter (Arbitrum / BSC) to the marketplace dashboard.
+- [ ] **FE-01** Replace the glassmorphism styles with the token palette above (CSS variables, Tailwind theme mapping), dark-only at launch, contrast-checked (WCAG AA for text).
+- [ ] **FE-02** Component library: Button, IconButton, Card, StatCard, Badge / StatusPill, Tabs, Table → responsive CardList, Modal / BottomSheet, Toast, Skeleton, EmptyState, Stepper, FormField, AddressChip (copy, explorer link), AmountInput, ProgressBar, Tooltip, Banner.
+- [ ] **FE-03** `/design` preview page (non-production) showing every component, colour and state, so the theme can be reviewed before building dashboards.
+- [ ] **FE-04** App shell: top bar on desktop, bottom tab bar on mobile, role-aware navigation, chain indicator, notification bell, footer with legal links and "testnet" notice.
+- [ ] **FE-05** Theme RainbowKit's modal and button to the palette.
+- [ ] **FE-06** Global error boundaries, loading states and 404 / 500 pages; consistent form validation (zod + react-hook-form) and inline errors.
+- [ ] **FE-07** Security headers (CSP, frame-ancestors, referrer policy) in `next.config`; no secrets in client bundles; sanitise all rendered user content.
 
-### Crowdfunding & Project Detail Page
-- [x] Build Project Detail view (`app/projects/[id]/page.tsx`) with funding stats, founder bio, contract details, and progress bar.
-- [x] Implement Funding Panel allowing backers to deposit ETH directly into `MilestoneEscrow`.
-- [ ] Add Backer Token Claiming panel (`claimTokens()`) on `/projects/[id]` once the crowdfunding round is successfully closed.
-- [ ] Add Founder Funding Closure button (`closeFundingAndStart()`) when `fundingGoal` is reached or deadline has passed.
-- [ ] Add Refund Claim buttons for backers when campaigns fail (`refundFailedCrowdfund()`) or deadlock (`refundDeadProject()`).
+## Phase 2: Multi-chain Web3 configuration
 
-### Milestone Governance & Voting Page
-- [x] Build Milestone Governance page (`app/projects/[id]/milestones/page.tsx`).
-- [x] Query Ponder GraphQL endpoint for project milestones and voting progress (`milestone` table).
-- [x] Implement on-chain voting interface calling `vote(support)` on `MilestoneEscrow`.
-- [ ] Display staked voting power by querying `DividendDistributor.stakedBalance(user)`.
-- [ ] Add warning notification when tokens are vote-locked (`isUserVoteLocked()`).
+- [ ] **FE-10** Update `config/wagmi.ts` from Ethereum Sepolia to **Arbitrum Sepolia (421614)** and **BSC Testnet (97)**; per-chain transports and per-chain contract address map; remove `sepolia`.
+- [ ] **FE-11** Chain switcher / indicator in the shell; wrong-network prompt with one-tap switch.
+- [ ] **FE-12 `[USER-ACTION]`** WalletConnect Project ID (`NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`), dedicated RPC URLs per chain, and contract addresses per chain (v2 addresses after CON-04.2).
+- [ ] **FE-13** Sync v2 ABIs with `node .claude/scripts/sync-abi.js frontend <Contract>`; typed contract hooks per chain. `[BLOCKED-BY]` contracts v2.
+- [ ] **FE-14** Transaction toast system (submitting → pending → confirmed → failed) with explorer links; sticky transaction bar on mobile.
 
-### Secondary Market (P2P Exchange)
-- [x] Build P2P Exchange page (`app/p2p/page.tsx`) querying active listings from Ponder GraphQL (`p2pListing` table).
-- [x] Implement `P2PListingCard.tsx` with fill/buy interaction calling `P2PExchange.fillListing(listingId)`.
-- [x] Implement "Create Listing" modal calling `P2PExchange.createListing(token, amount, price)`.
-- [ ] Add token approval step (`ProjectToken.approve(p2pExchangeAddress, amount)`) prior to creating a P2P listing.
-- [ ] Add "Cancel Listing" action for sellers on their active listings.
+## Phase 3: Accounts & roles
 
----
+- [ ] **FE-20** Sign up, log in, log out, email verification result, forgot / reset password pages; generic error messages; password strength meter.
+- [ ] **FE-21** Account and security page: change password, TOTP enrolment (QR + recovery codes), active sessions, linked wallet.
+- [ ] **FE-22** Link-wallet flow: connect → request nonce → sign message → confirm; show the linked address and warn when the connected wallet differs from the linked one.
+- [ ] **FE-23** Route guards and role-aware redirects (server-side check in middleware / layouts); "forbidden" and "2FA required" screens for staff and admin.
+- [ ] **FE-24** Authenticated API client: cookie credentials, CSRF header, automatic 401 handling.
 
-## Phase 2: Pre-Launch UI Gating & Dedicated Dashboards
+## Phase 4: Marketplace & project pages
 
-### Pre-Launch UI Gating Workflow (`/projects/create`)
-- [ ] Refactor `app/projects/create/page.tsx` from immediate on-chain deployment to a 2-step gated workflow:
-  - **Step 1 (Application):** Founder submits off-chain startup metadata (name, description, pitch deck, website) to Express API (`POST /api/projects/apply`) with status set to `'PENDING'`.
-  - **Step 2 (UI Gating):** Frontend checks founder application status. The "Deploy On-Chain" button remains disabled until status is `'APPROVED'`.
-  - **Step 3 (Deployment):** Once approved, the founder executes `launchProject()` on the Factory contract and links the deployed Escrow address.
-- [ ] Replace text input for `logoUrl` with a drag-and-drop file upload component sending image files via `multipart/form-data` to the backend.
+- [ ] **FE-30** Marketplace filters: category, chain, status, search; sorting; pagination; skeleton loading; mobile filter sheet.
+- [ ] **FE-31** Project detail redesign: funding progress, milestones timeline, team, repo link, contract addresses (with explorer links), **Transparency panel** (approved shadow wallet shown permanently, compliance state, last reconciliation, deposits vs observed, freeze flag).
+- [ ] **FE-32** Investor actions on the project page: invest (user-paid), **claim tokens (gasless)**, stake / unstake, claim yield, refund buttons (`refundFailedCrowdfund`, `refundDeadProject`) with state checks and clear "you pay gas" / "free" labels.
+- [ ] **FE-33** Voting UI (gasless): show staked voting power (`DividendDistributor.stakedBalance`), vote-lock warning (`isUserVoteLocked`), vote progress vs quorum, time remaining, queued state.
+- [ ] **FE-34** P2P additions: token approval step before listing, cancel listing, trade history, fee display.
+- [ ] **FE-35** Complaint entry point on every project page (opens the complaint form, FE-72).
 
-### Admin Dashboard (`app/admin/page.tsx`)
-- [ ] Build Admin review queue for `'PENDING'` startup applications with Approve / Reject action buttons.
-- [ ] Build Rogue Contract Alert interface: Display any contracts indexed by Ponder that bypassed the UI application workflow.
-- [ ] Implement one-click "Trigger Emergency Shutdown" button calling `emergencyShutdown()` for Treasury admin wallets.
-- [ ] Build Founder KYC verification interface to toggle `kyc_verified` status.
-- [ ] Build Hostile Takeover management UI to initiate `proposeNewDeveloper()` when founders abandon projects.
+## Phase 5: Gasless action UX
 
-### Founder Dashboard (`app/founder/page.tsx`)
-- [ ] Build overview panel displaying founder's active projects, raised funds, and round status.
-- [ ] Build Milestone Execution panel: Fetches excess gas debt and cryptographic signature from `/api/paymaster`, then calls `MilestoneEscrow.executeMilestone(gasDebt, signature)`.
-- [ ] Build Shadow Wallet Registration interface: Allows KYC-verified founders to input and update their fiat-to-crypto settlement wallet.
-- [ ] Build SaaS Revenue Settlement panel: Query pending creator funds in `RevenueRouter` (`creatorPendingFunds`) and trigger `claimCreatorFunds()`.
-- [ ] Display Secret Shopper audit status and any flagged transaction discrepancies.
+`[BLOCKED-BY]` contracts v2 (EIP-712 types) and the API relayer (API-72).
 
-### Investor Dashboard (`app/investor/page.tsx`)
-- [ ] Build Portfolio Overview displaying backed projects, held `ProjectToken` balances, and staked positions.
-- [ ] Build Staking & Dividend Management panel:
-  - Approve `ProjectToken` for `DividendDistributor`.
-  - Stake tokens into `DividendDistributor` (`stake(amount)`).
-  - Unstake tokens (`withdraw(amount)`) with vote-lock check.
-  - Real-time yield claiming (`claimYield()`) displaying accrued ETH dividends.
-- [ ] Build Voting Power & Active Polls summary showing all open milestones across backed startups requiring investor attention.
+- [ ] **FE-40** Typed-data signing helper (viem `signTypedData`) for `ClaimTokens`, `Stake` (with permit), `Vote`, `ExecuteMilestone`: chain id, verifying contract, nonce read from the chain, deadline; show a human-readable summary before the wallet popup.
+- [ ] **FE-41** Gas tracker widget (header and in action dialogs): current gas vs 24-hour average for the active chain from `GET /api/v1/gas/:chainId`, status chip (Normal / Busy).
+- [ ] **FE-42** Busy-network handling: when status is Busy, warn that the action will be queued and sent when fees drop (maximum wait 6 hours, shorter when a vote closes soon); show the expected send-by time; allow "send now" only when the API marks it urgent.
+- [ ] **FE-43** Request tracker: queue states (Queued → Sending → Confirmed / Failed / Expired) with polling, toast on completion, retry from a failed or expired state, history on the investor dashboard.
+- [ ] **FE-44** Clear gas labelling on every button ("Free — ForgeCapita pays gas" vs "You pay network fee ~$x") using the gas tracker estimate.
+- [ ] **FE-45** Stake in one signature (permit) with clear copy; unstake remains a normal transaction.
 
----
+## Phase 6: Founder application wizard & dashboards
 
-## Phase 3: UX Polish & Security
+### Application wizard (`/apply`, replaces direct deployment on `/projects/create`)
+- [ ] **FE-50** Stepper: 1 Profile (name, category, description, website, pitch deck upload, logo upload) → 2 Identity (KYC document upload, manual review status) → 3 Revenue Share Agreement ("I agree" with scrollable text, typed name, wallet signature; draft banner "not legal advice") → 4 Repository (choose GitHub or GitLab; show the provisioned link) → 5 Shadow wallet (request; shown publicly once approved) → 6 Review status (Pending / Changes requested with notes / Approved / Rejected) → 7 Deploy.
+- [ ] **FE-51** Gated deploy step: `launchProject` is disabled until eligibility endpoint (API-39) says the founder is cleared; deployment uses the approved metadata; after confirmation link the escrow address to the application.
+- [ ] **FE-52** Drag-and-drop file upload component (image / PDF) with progress, size and type limits, preview; replaces the logo and pitch deck URL inputs.
 
-- [ ] Implement Sign-In with Ethereum (SIWE) popup modal for authenticated dashboard actions.
-- [ ] Add global transaction toast notification system (submitting, pending confirmation, confirmed, failed).
-- [ ] Ensure all input forms feature comprehensive client-side schema validation (Zod).
-- [ ] Implement mobile-responsive adaptations for tables, modal overlays, and stats cards.
-- [ ] Write end-to-end integration tests (Playwright or Cypress) for the complete funding and voting flows.
+### Investor dashboard (`/investor`)
+- [ ] **FE-55** Portfolio overview (backed projects, token balances, staked amounts, yield claimed); open polls needing attention; claim yield; refunds; queued gasless request history.
+
+### Founder dashboard (`/founder`)
+- [ ] **FE-58** My projects: round status, funds, milestone progress, gas ledger overflow, pending creator funds (`creatorPendingFunds` → `claimCreatorFunds()`), compliance state with plain-language explanation, shadow wallet and change request, repo link, agreement status.
+- [ ] **FE-59** Revenue report: on-chain deposits vs observed shadow-wallet inflow, tolerance, history; guidance for converting stablecoin revenue to ETH/BNB before depositing.
+- [ ] **FE-60** Milestone panel: status, who can execute, frozen warning, gasless execute request status (founders may also trigger it).
+
+### Staff dashboard (`/staff`)
+- [ ] **FE-65** Applications queue (approve / request changes / reject), KYC review (secure document viewer), repo provisioning status, shadow wallet change approvals, complaints queue and thread, read-only Risk Center, takeover case preparation and signalling vote setup.
+
+### Admin dashboard (`/admin`)
+- [ ] **FE-68** Everything in staff plus: compliance cases (WARNED / ESCALATED) with evidence, **freeze / unfreeze milestones** and **emergency shutdown** (signed by the admin's connected treasury wallet; confirmation dialog that states the consequences), takeover execution (`proposeNewDeveloper`) and repo lockout, relayer health (balance, spend, queue, circuit breaker), project gas ledgers, staff management, system settings (tolerance, token allow-list, relayer limits), audit log viewer, analytics.
+- [ ] **FE-69** Rogue contract alerts (launches without approved applications) with one-click case creation.
+
+### Investor protection features
+- [ ] **FE-72** Complaint form and "my complaints" page with thread and status.
+- [ ] **FE-73** Takeover signalling vote page (staked-balance snapshot, weight, deadline, result).
+- [ ] **FE-74** Notification centre (in-app) matching email notifications.
+
+## Phase 7: Quality
+
+- [ ] **FE-80** Responsive review at 375 / 768 / 1280 widths for every page; touch-target and keyboard-accessibility audit; reduced-motion support.
+- [ ] **FE-81** Unit tests for typed-data builders, gas-status logic and form schemas (vitest).
+- [ ] **FE-82** Playwright end-to-end tests: sign up → link wallet → apply → (staff approves via test fixtures) → deploy; invest → claim → stake → vote on a local or testnet fixture; gasless request lifecycle with mocked relayer.
+- [ ] **FE-83** Lighthouse / bundle size budget; image optimisation; lazy load heavy widgets.
+- [ ] **FE-84** Refresh `frontend-instructions.md` (it still references Sepolia and old function names).
+- [ ] **FE-85 `[USER-ACTION]`** GitHub Actions CI (lint, typecheck, build, tests).
