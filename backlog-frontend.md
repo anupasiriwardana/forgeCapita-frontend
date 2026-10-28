@@ -86,7 +86,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 `[BLOCKED-BY]` contracts v2 (EIP-712 types) and the API relayer (API-72).
 
-- [ ] **FE-40** Typed-data signing helper (viem `signTypedData`) for `ClaimTokens`, `Stake` (with permit), `Vote`, `ExecuteMilestone`: chain id, verifying contract, nonce read from the chain, deadline; show a human-readable summary before the wallet popup.
+- [ ] **FE-40** Typed-data signing helpers (viem `signTypedData`) for the two actions that need a signature: `Vote` (EIP-712) and the ERC-2612 `Permit` used for staking: chain id, verifying contract, token nonce read from the chain, deadline; show a human-readable summary before the wallet popup. Claim tokens and execute milestone need no signature (one click, no wallet popup).
 - [ ] **FE-41** Gas tracker widget (header and in action dialogs): current gas vs 24-hour average for the active chain from `GET /api/v1/gas/:chainId`, status chip (Normal / Busy).
 - [ ] **FE-42** Busy-network handling: when status is Busy, warn that the action will be queued and sent when fees drop (maximum wait 6 hours, shorter when a vote closes soon); show the expected send-by time; allow "send now" only when the API marks it urgent.
 - [ ] **FE-43** Request tracker: queue states (Queued → Sending → Confirmed / Failed / Expired) with polling, toast on completion, retry from a failed or expired state, history on the investor dashboard.
@@ -99,6 +99,8 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-50** Stepper: 1 Profile (name, category, description, website, pitch deck upload, logo upload) → 2 Identity (KYC document upload, manual review status) → 3 Revenue Share Agreement ("I agree" with scrollable text, typed name, wallet signature; draft banner "not legal advice") → 4 Repository (choose GitHub or GitLab; show the provisioned link) → 5 Shadow wallet (request; shown publicly once approved) → 6 Review status (Pending / Changes requested with notes / Approved / Rejected) → 7 Deploy.
 - [ ] **FE-51** Gated deploy step: `launchProject` is disabled until eligibility endpoint (API-39) says the founder is cleared; deployment uses the approved metadata; after confirmation link the escrow address to the application.
 - [ ] **FE-52** Drag-and-drop file upload component (image / PDF) with progress, size and type limits, preview; replaces the logo and pitch deck URL inputs.
+
+- [ ] **FE-53** Minimum funding goal per chain: the application and deploy forms show and enforce a separate minimum for Arbitrum Sepolia (ETH) and BSC Testnet (BNB), with a short explanation that the 5% platform fee must cover the sponsored gas for about 100 investors and 5 milestones (contracts v2 design section 13). Values come from per-chain configuration (public, not secret) so they can be recalibrated without a code change.
 
 ### Investor dashboard (`/investor`)
 - [ ] **FE-55** Portfolio overview (backed projects, token balances, staked amounts, yield claimed); open polls needing attention; claim yield; refunds; queued gasless request history.
