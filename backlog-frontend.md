@@ -59,9 +59,11 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 ## Phase 2: Multi-chain Web3 configuration
 
+> **Re-plan note (2026-11-01, user-approved):** the frontend is still v1. The v1 hooks, ABIs (`config/abis`), stubs (`config/stubs`) and v1 pages are DISCARDED and rebuilt against the deployed v2 contracts; no v1 compatibility. FE-10 becomes ROADMAP **WS-03.5a** (multi-chain Wagmi config with a per-chain v2 address map from `forgecapita-contracts/docs/deployments-v2.md`; public addresses go in code). FE-13 becomes **WS-05.3** (ABI sync and typed hooks; depends on WS-04 and WS-03.5a only). FE-12 is reduced to the WalletConnect Project ID and the per-chain RPC URLs (WS-03.4); contract addresses are no longer part of it.
+
 - [ ] **FE-10** Update `config/wagmi.ts` from Ethereum Sepolia to **Arbitrum Sepolia (421614)** and **BSC Testnet (97)**; per-chain transports and per-chain contract address map; remove `sepolia`.
 - [ ] **FE-11** Chain switcher / indicator in the shell; wrong-network prompt with one-tap switch.
-- [ ] **FE-12 `[USER-ACTION]`** WalletConnect Project ID (`NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`), dedicated RPC URLs per chain, and contract addresses per chain (v2 addresses after CON-04.2).
+- [ ] **FE-12 `[USER-ACTION]`** WalletConnect Project ID (`NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`) and dedicated RPC URLs per chain. (Reduced 2026-11-01: contract addresses moved into code at FE-10 / WS-03.5a.)
 - [ ] **FE-13** Sync v2 ABIs with `node .claude/scripts/sync-abi.js frontend <Contract>`; typed contract hooks per chain. `[BLOCKED-BY]` contracts v2.
 - [ ] **FE-14** Transaction toast system (submitting → pending → confirmed → failed) with explorer links; sticky transaction bar on mobile.
 

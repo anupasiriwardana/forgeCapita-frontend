@@ -4,7 +4,9 @@
 **Framework:** Next.js 16 (App Router) / React 19 / TypeScript / Tailwind CSS  
 **Web3 Stack:** Wagmi 2.x / Viem 2.x / RainbowKit 2.x  
 **Port:** 3000  
-**Last Updated:** 2026-10-28 (plan revised; code unchanged since the previous report)  
+**Last Updated:** 2026-11-01 (docs only; code unchanged)  
+
+**Current focus:** Step: none (next frontend steps: WS-03.5a, WS-05.3 after WS-05.2 indexer) | State: idle | Updated: 2026-11-01  
 
 ---
 
@@ -104,3 +106,9 @@ The backlog was rewritten (`backlog-frontend.md`). Changes from what this report
 3. [ ] FE-20 to FE-24 accounts, after the API accounts work exists.
 4. [ ] FE-30 to FE-35 marketplace and project page; FE-40 to FE-45 gasless UX after contracts v2 and the relayer.
 5. [ ] FE-50 to FE-52 founder wizard, then dashboards.
+
+Re-plan 2026-11-01: the v1 hooks, ABIs, stubs and pages are discarded and rebuilt for v2; FE-10 is WS-03.5a, FE-13 is WS-05.3, FE-12 is only the WalletConnect ID and RPC URLs.
+
+## Change log
+
+2026-11-01  re-plan  v2-first re-plan approved by the user; backlog note added above FE-10, FE-10 -> WS-03.5a, FE-13 -> WS-05.3, FE-12 reduced; no code changed  - verified by: docs only, not verified against code
