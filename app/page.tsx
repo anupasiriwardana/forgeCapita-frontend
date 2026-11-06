@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
-import { fetchAllProjects } from "@/lib/api";
+import { listProjects, type ProjectDto } from "@/lib/api";
 import { ProjectCard } from "@/components/ProjectCard";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,12 @@ function ProjectsSkeleton() {
 }
 
 async function ProjectsSection() {
-  const projects = await fetchAllProjects();
+  let projects: ProjectDto[] = [];
+  try {
+    projects = (await listProjects({ limit: 50 })).items;
+  } catch (err) {
+    console.warn("[ProjectsSection] Unable to load projects:", err);
+  }
 
   return (
     <>

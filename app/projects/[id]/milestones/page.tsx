@@ -4,7 +4,7 @@ import { useState, Suspense } from "react";
 import { useParams } from "next/navigation";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
-import { fetchMilestonesByProject, type Milestone } from "@/lib/api";
+import { fetchMilestonesByProject, parseProjectId, type Milestone } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import Link from "next/link";
 
@@ -39,7 +39,7 @@ function MilestoneCard({
     setVoteError("");
     try {
       const hash = await writeContractAsync({
-        address: projectId as `0x${string}`,
+        address: parseProjectId(projectId).escrow,
         abi: ABIS.escrow,
         functionName: "vote",
         args: [support],
@@ -188,7 +188,7 @@ function MilestonesContent({ id }: { id: string }) {
       <div className="fade-in-up" style={{ marginBottom: "24px" }}>
         <Link href="/" style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>← Marketplace</Link>
         <span style={{ color: "var(--text-muted)", margin: "0 8px", fontSize: "14px" }}>/</span>
-        <Link href={`/projects/${id}`} style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>Project</Link>
+        <Link href={`/projects/${encodeURIComponent(id)}`} style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>Project</Link>
         <span style={{ color: "var(--text-muted)", margin: "0 8px", fontSize: "14px" }}>/</span>
         <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>Milestones</span>
       </div>
@@ -230,9 +230,17 @@ function MilestonesContent({ id }: { id: string }) {
   );
 }
 
+function decodeRouteId(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export default function MilestonesPage() {
   const params = useParams();
-  const id = params.id as string;
+  const id = decodeRouteId(params.id as string);
 
   return (
     <Suspense

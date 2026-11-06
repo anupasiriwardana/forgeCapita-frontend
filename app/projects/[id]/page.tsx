@@ -3,14 +3,16 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useSendTransaction, useWaitForTransactionReceipt, useAccount } from "wagmi";
+import { useSendTransaction, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
 import { parseEther } from "viem";
-import { fetchProjectById, formatEth, fundingProgress, shortAddr } from "@/lib/api";
+import { ApiError, getProject, formatEth, fundingProgress, shortAddr, type ProjectDto } from "@/lib/api";
 import Link from "next/link";
 import { Suspense } from "react";
 
-function FundingPanel({ projectId }: { projectId: string }) {
+function FundingPanel({ project }: { project: ProjectDto }) {
   const { isConnected, address } = useAccount();
+  const walletChainId = useChainId();
+  const wrongChain = walletChainId !== project.chainId;
   const [ethAmount, setEthAmount] = useState("");
   const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [txError, setTxError] = useState("");
@@ -22,11 +24,12 @@ function FundingPanel({ projectId }: { projectId: string }) {
   async function handleFund(e: React.FormEvent) {
     e.preventDefault();
     if (!ethAmount || Number(ethAmount) <= 0) return;
+    if (wrongChain) return;
     setTxStatus("pending");
     setTxError("");
     try {
       const hash = await sendTransactionAsync({
-        to: projectId as `0x${string}`, // Sends ETH directly to trigger the receive() fallback
+        to: project.escrowAddress as `0x${string}`, // Sends ETH directly to trigger the receive() fallback
         value: parseEther(ethAmount),
       });
       setTxHash(hash);
@@ -51,6 +54,12 @@ function FundingPanel({ projectId }: { projectId: string }) {
         </div>
       ) : (
         <form onSubmit={handleFund}>
+          {wrongChain && (
+            <div className="alert alert-warning" style={{ marginBottom: "16px" }}>
+              <span>⚠️</span>
+              <span>Switch your wallet to this project&apos;s network (chain {project.chainId}) to fund it.</span>
+            </div>
+          )}
           <label className="label">Amount (ETH)</label>
           <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
             <input
@@ -66,7 +75,7 @@ function FundingPanel({ projectId }: { projectId: string }) {
             <button
               type="submit"
               className="btn-primary"
-              disabled={txStatus === "pending" || !ethAmount}
+              disabled={txStatus === "pending" || !ethAmount || wrongChain}
               style={{ flexShrink: 0, padding: "12px 20px" }}
             >
               {txStatus === "pending" ? <span className="spinner" style={{ width: "16px", height: "16px" }} /> : "Fund ⚡"}
@@ -116,7 +125,14 @@ function FundingPanel({ projectId }: { projectId: string }) {
 function ProjectDetailInner({ id }: { id: string }) {
   const { data: project } = useSuspenseQuery({
     queryKey: ["project", id],
-    queryFn: () => fetchProjectById(id),
+    queryFn: async () => {
+      try {
+        return await getProject(id);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+      }
+    },
   });
 
   if (!project) {
@@ -134,9 +150,11 @@ function ProjectDetailInner({ id }: { id: string }) {
     );
   }
 
-  const progress = fundingProgress(project.total_raised, project.funding_goal);
-  const ethRaised = formatEth(project.total_raised, 4);
-  const ethGoal = formatEth(project.funding_goal, 4);
+  const progress = fundingProgress(project.totalRaised, project.fundingGoal);
+  const ethRaised = formatEth(project.totalRaised, 4);
+  const ethGoal = formatEth(project.fundingGoal, 4);
+  const profile = project.profile;
+  const name = profile?.name ?? project.tokenName;
 
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "48px 24px" }}>
@@ -146,7 +164,7 @@ function ProjectDetailInner({ id }: { id: string }) {
           ← Marketplace
         </Link>
         <span style={{ color: "var(--text-muted)", margin: "0 8px", fontSize: "14px" }}>/</span>
-        <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{project.name ?? shortAddr(project.id)}</span>
+        <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{name || shortAddr(project.escrowAddress)}</span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "32px", alignItems: "start" }}>
@@ -170,24 +188,24 @@ function ProjectDetailInner({ id }: { id: string }) {
                   overflow: "hidden",
                 }}
               >
-                {project.logo_url ? (
+                {profile?.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={project.logo_url} alt={project.name ?? ""} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <img src={profile.logoUrl} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 ) : "🚀"}
               </div>
               <div>
-                <h1 style={{ fontSize: "28px", margin: "0 0 8px" }}>{project.name ?? "Unnamed Project"}</h1>
+                <h1 style={{ fontSize: "28px", margin: "0 0 8px" }}>{name || "Unnamed Project"}</h1>
                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-                  <span className={`badge ${project.is_funding_active ? "badge-active" : "badge-inactive"}`}>
-                    {project.is_funding_active ? "🟢 Live" : "⚫ Closed"}
+                  <span className={`badge ${project.isFundingActive ? "badge-active" : "badge-inactive"}`}>
+                    {project.isFundingActive ? "🟢 Live" : "⚫ Closed"}
                   </span>
-                  {project.website_url && (
-                    <a href={project.website_url} target="_blank" rel="noopener noreferrer" className="badge badge-brand" style={{ textDecoration: "none" }}>
+                  {profile?.websiteUrl && (
+                    <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer" className="badge badge-brand" style={{ textDecoration: "none" }}>
                       🌐 Website
                     </a>
                   )}
-                  {project.pitch_deck_url && (
-                    <a href={project.pitch_deck_url} target="_blank" rel="noopener noreferrer" className="badge badge-pending" style={{ textDecoration: "none" }}>
+                  {profile?.pitchDeckUrl && (
+                    <a href={profile.pitchDeckUrl} target="_blank" rel="noopener noreferrer" className="badge badge-pending" style={{ textDecoration: "none" }}>
                       📄 Pitch Deck
                     </a>
                   )}
@@ -195,9 +213,9 @@ function ProjectDetailInner({ id }: { id: string }) {
               </div>
             </div>
 
-            {project.description && (
+            {profile?.description && (
               <p style={{ color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: "24px", fontSize: "15px" }}>
-                {project.description}
+                {profile.description}
               </p>
             )}
 
@@ -228,13 +246,13 @@ function ProjectDetailInner({ id }: { id: string }) {
           </div>
 
           {/* Founder Bio */}
-          {project.founder_bio && (
+          {profile?.founderBio && (
             <div className="glass-card fade-in-up fade-in-up-1" style={{ padding: "24px", marginBottom: "24px" }}>
               <h2 style={{ fontSize: "16px", marginBottom: "12px", display: "flex", gap: "8px" }}>
                 👤 About the Founder
               </h2>
               <p style={{ color: "var(--text-secondary)", lineHeight: 1.7, fontSize: "14px", margin: 0 }}>
-                {project.founder_bio}
+                {profile.founderBio}
               </p>
             </div>
           )}
@@ -245,7 +263,7 @@ function ProjectDetailInner({ id }: { id: string }) {
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px" }}>
                 <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Escrow Address</span>
-                <span style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{project.id}</span>
+                <span style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{project.escrowAddress}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px" }}>
                 <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Network</span>
@@ -256,7 +274,7 @@ function ProjectDetailInner({ id }: { id: string }) {
 
           {/* Milestones Link */}
           <Link
-            href={`/projects/${id}/milestones`}
+            href={`/projects/${encodeURIComponent(id)}/milestones`}
             className="glass-card fade-in-up fade-in-up-3"
             style={{
               display: "flex",
@@ -280,7 +298,7 @@ function ProjectDetailInner({ id }: { id: string }) {
 
         {/* Right: Funding Panel */}
         <div style={{ position: "sticky", top: "88px" }}>
-          <FundingPanel projectId={id} />
+          <FundingPanel project={project} />
         </div>
       </div>
     </div>
@@ -298,9 +316,17 @@ function LoadingSkeleton() {
   );
 }
 
+function decodeRouteId(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export default function ProjectDetailPage() {
   const params = useParams();
-  const id = params.id as string;
+  const id = decodeRouteId(params.id as string);
 
   return (
     <Suspense fallback={<LoadingSkeleton />}>

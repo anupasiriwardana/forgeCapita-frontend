@@ -1,22 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import type { Project } from "@/lib/api";
+import type { ProjectDto } from "@/lib/api";
 import { formatEth, fundingProgress, shortAddr } from "@/lib/api";
 
 interface ProjectCardProps {
-  project: Project;
+  project: ProjectDto;
   index?: number;
 }
 
 export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
-  const progress = fundingProgress(project.total_raised, project.funding_goal);
-  const ethRaised = formatEth(project.total_raised, 3);
-  const ethGoal = formatEth(project.funding_goal, 3);
+  const progress = fundingProgress(project.totalRaised, project.fundingGoal);
+  const ethRaised = formatEth(project.totalRaised, 3);
+  const ethGoal = formatEth(project.fundingGoal, 3);
+  const name = project.profile?.name ?? project.tokenName;
+  const description = project.profile?.description;
+  const logoUrl = project.profile?.logoUrl;
 
   return (
     <Link
-      href={`/projects/${project.id}`}
+      href={`/projects/${encodeURIComponent(project.id)}`}
       className="glass-card fade-in-up"
       style={{
         display: "block",
@@ -44,11 +47,11 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
             fontSize: "22px",
           }}
         >
-          {project.logo_url ? (
+          {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={project.logo_url}
-              alt={project.name ?? "Project"}
+              src={logoUrl}
+              alt={name}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
@@ -70,15 +73,15 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
               textOverflow: "ellipsis",
             }}
           >
-            {project.name ?? "Unnamed Project"}
+            {name || "Unnamed Project"}
           </h3>
           <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>
-            {shortAddr(project.id)}
+            {shortAddr(project.escrowAddress)}
           </span>
         </div>
 
         {/* Status Badge */}
-        <span className={`badge ${project.is_funding_active ? "badge-active" : "badge-inactive"}`}>
+        <span className={`badge ${project.isFundingActive ? "badge-active" : "badge-inactive"}`}>
           <span
             style={{
               width: "5px",
@@ -88,12 +91,12 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
               flexShrink: 0,
             }}
           />
-          {project.is_funding_active ? "Live" : "Closed"}
+          {project.isFundingActive ? "Live" : "Closed"}
         </span>
       </div>
 
       {/* Description */}
-      {project.description && (
+      {description && (
         <p
           style={{
             fontSize: "13px",
@@ -106,7 +109,7 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
             overflow: "hidden",
           }}
         >
-          {project.description}
+          {description}
         </p>
       )}
 

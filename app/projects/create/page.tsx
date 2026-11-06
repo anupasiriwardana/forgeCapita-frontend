@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
-import { parseEther } from "viem";
+import { useWriteContract, useAccount, useChainId, usePublicClient } from "wagmi";
+import { parseEther, parseEventLogs } from "viem";
 import { useRouter } from "next/navigation";
-import { createStartupProfile } from "@/lib/api";
-import { getContractConfig } from "@/lib/contracts";
+import { projectIdOf, upsertProfile } from "@/lib/api";
+import { ABIS, getContractConfig } from "@/lib/contracts";
 
 interface MilestoneRow {
   description: string;
@@ -16,6 +16,7 @@ export default function CreateProjectPage() {
   const router = useRouter();
   const { isConnected } = useAccount();
   const chainId = useChainId();
+  const publicClient = usePublicClient();
 
   // Form state
   const [name, setName] = useState("");
@@ -40,8 +41,6 @@ export default function CreateProjectPage() {
 
   const { writeContractAsync } = useWriteContract();
 
-  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
-  const { data: receipt } = useWaitForTransactionReceipt({ hash: txHash });
 
   const totalPct = milestones.reduce((s, m) => s + Number(m.percentage || 0), 0);
 
@@ -87,45 +86,37 @@ export default function CreateProjectPage() {
         ],
       });
 
-      setTxHash(hash);
       setStatus("waiting");
 
-      // Wait for receipt
-      let escrowAddress: string | undefined;
-      let retries = 0;
-      while (!escrowAddress && retries < 60) {
-        await new Promise((r) => setTimeout(r, 2000));
-        retries++;
-        if (receipt) {
-          // First topic-less address in logs is the escrow
-          const deployLog = receipt.logs.find(
-            (log) => log.address.toLowerCase() !== factory.address.toLowerCase()
-          );
-          escrowAddress = deployLog?.address ?? receipt.logs[0]?.address;
-        }
-      }
-
-      if (!escrowAddress) {
+      if (!publicClient) throw new Error("No RPC client available for this network.");
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      const [launched] = parseEventLogs({
+        abi: ABIS.factory,
+        eventName: "ProjectLaunched",
+        logs: receipt.logs,
+      });
+      if (!launched) {
         setErrorMsg("Transaction succeeded but could not extract project address. Please save your tx hash and contact support.");
         setStatus("error");
         return;
       }
+      const projectId = projectIdOf(chainId, launched.args.milestoneEscrow);
 
       // Step 2: off-chain metadata
       setStatus("saving");
-      await createStartupProfile({
-        projectId: escrowAddress,
+      await upsertProfile({
+        projectId,
         name,
         description,
-        logoUrl: logoUrl || undefined,
-        pitchDeckUrl: pitchDeckUrl || undefined,
-        founderBio: founderBio || undefined,
-        websiteUrl: websiteUrl || undefined,
+        logoUrl,
+        pitchDeckUrl,
+        founderBio,
+        websiteUrl,
       });
 
       setStatus("done");
       setSuccessMsg(`🎉 Project launched! Redirecting to your project page...`);
-      setTimeout(() => router.push(`/projects/${escrowAddress}`), 2500);
+      setTimeout(() => router.push(`/projects/${encodeURIComponent(projectId)}`), 2500);
     } catch (err) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "An unexpected error occurred.");

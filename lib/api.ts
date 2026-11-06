@@ -1,16 +1,22 @@
 /* ─────────────────────────────────────────────────────────────────────────
-   lib/api.ts  –  Data fetching helpers for Express REST + Ponder GraphQL
+   lib/api.ts  –  Typed client for the Express REST API (/api/v1) + Ponder GraphQL
    ───────────────────────────────────────────────────────────────────────── */
 
+const ZERO = BigInt(0);
+const DEFAULT_EXPRESS_ORIGIN = "http://localhost:3001";
+const COMPOSITE_ID_REGEX = /^\d+:0x[a-fA-F0-9]{40}$/;
+
+/** Strip trailing slashes and a legacy `/api` or `/api/v1` suffix so only the origin remains. */
+function normaliseApiOrigin(raw: string): string {
+  return raw.replace(/\/+$/, "").replace(/\/api(\/v1)?$/, "").replace(/\/+$/, "");
+}
+
 export function getExpressApi(): string {
-  if (typeof window === "undefined") {
-    return (
-      process.env.INTERNAL_EXPRESS_API ||
-      process.env.NEXT_PUBLIC_EXPRESS_API ||
-      "http://localhost:3001/api"
-    );
-  }
-  return process.env.NEXT_PUBLIC_EXPRESS_API || "http://localhost:3001/api";
+  const configured =
+    typeof window === "undefined"
+      ? process.env.INTERNAL_EXPRESS_API || process.env.NEXT_PUBLIC_EXPRESS_API
+      : process.env.NEXT_PUBLIC_EXPRESS_API;
+  return `${normaliseApiOrigin(configured || DEFAULT_EXPRESS_ORIGIN)}/api/v1`;
 }
 
 export function getPonderApi(): string {
@@ -26,32 +32,86 @@ export function getPonderApi(): string {
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-export interface Project {
-  // On-chain (from Ponder via JOIN)
-  id: string;
-  total_raised?: string;
-  funding_goal?: string;
-  is_funding_active?: boolean;
-  is_deadlocked?: boolean;
-  developer?: string;
-  created_at?: string;
-  // Off-chain (from startup_profiles)
-  name?: string;
-  description?: string;
-  logo_url?: string;
-  pitch_deck_url?: string;
-  founder_bio?: string;
-  website_url?: string;
+export type ProjectState =
+  | "FUNDING"
+  | "ACTIVE"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED"
+  | "SHUTDOWN";
+
+/** Public profile; amounts elsewhere are decimal strings (wei). */
+export interface ProfileDto {
+  name: string;
+  description: string;
+  logoUrl: string | null;
+  pitchDeckUrl: string | null;
+  founderBio: string | null;
+  websiteUrl: string | null;
+  category: string | null;
+  updatedAt: string;
 }
 
-export interface StartupProfileInput {
+export interface ProjectDto {
+  /** Composite id `<chainId>:<escrow lowercase>`. */
+  id: string;
+  chainId: number;
+  escrowAddress: string;
+  tokenAddress: string;
+  distributorAddress: string;
+  developer: string;
+  fundingGoal: string;
+  totalRaised: string;
+  fundingDeadline: string;
+  closeGrace: string;
+  refundWindow: string;
+  votingPeriod: string;
+  fundingClosedAt: string | null;
+  platformFee: string | null;
+  cancelledAt: string | null;
+  shutdownAt: string | null;
+  totalStaked: string;
+  createdAt: string;
+  isFundingActive: boolean;
+  state: ProjectState;
+  failedMilestoneIndex: number | null;
+  isInvalidated: boolean;
+  currentMilestoneIndex: number;
+  tokenName: string;
+  tokenSymbol: string;
+  profile: ProfileDto | null;
+}
+
+export interface ProjectList {
+  items: ProjectDto[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListProjectsParams {
+  limit?: number;
+  offset?: number;
+  chainId?: 421614 | 97;
+  state?: ProjectState;
+  developer?: string;
+  q?: string;
+  category?: string;
+  hasProfile?: boolean;
+  sort?: "created_at" | "total_raised" | "funding_goal";
+  order?: "asc" | "desc";
+}
+
+export interface ProfileInput {
   projectId: string;
   name: string;
   description: string;
+  founderBio?: string;
   logoUrl?: string;
   pitchDeckUrl?: string;
-  founderBio?: string;
   websiteUrl?: string;
+  category?: string;
+  shadowWallet?: string;
 }
 
 export interface Milestone {
@@ -65,67 +125,103 @@ export interface Milestone {
 }
 
 export interface P2PListing {
+  /** Composite id `<chainId>:<listingId>` (the indexer's p2p_listing.id). */
   id: string;
+  chainId: number;
   seller: string;
   tokenAddress: string;
   tokenAmount: string;
   priceInETH: string;
-  isActive: boolean;
+  status: "ACTIVE" | "FILLED" | "CANCELLED";
   buyer?: string | null;
+  projectId?: string | null;
 }
 
-// ── Express REST helpers ───────────────────────────────────────────────────
+// ── Project id helpers ────────────────────────────────────────────────────
 
-export async function fetchAllProjects(): Promise<Project[]> {
-  try {
-    const api = getExpressApi();
-    const res = await fetch(`${api}/projects`, {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) {
-      console.warn(`[fetchAllProjects] API returned ${res.status}: ${res.statusText}`);
-      return [];
-    }
-    const json = await res.json();
-    return Array.isArray(json.data) ? json.data : [];
-  } catch (err) {
-    console.warn("[fetchAllProjects] Unable to reach API server:", err);
-    return [];
+export function projectIdOf(chainId: number, escrow: string): string {
+  return `${chainId}:${escrow.toLowerCase()}`;
+}
+
+export function parseProjectId(id: string): { chainId: number; escrow: `0x${string}` } {
+  if (!COMPOSITE_ID_REGEX.test(id)) throw new Error("Invalid project id");
+  const [chain = "", escrow = ""] = id.split(":");
+  return { chainId: Number(chain), escrow: escrow as `0x${string}` };
+}
+
+// ── Express REST client ───────────────────────────────────────────────────
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly requestId: string | undefined;
+  readonly details: unknown;
+
+  constructor(status: number, message: string, requestId?: string, details?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.requestId = requestId;
+    this.details = details;
   }
 }
 
-export async function fetchProjectById(id: string): Promise<Project | null> {
-  try {
-    const api = getExpressApi();
-    const res = await fetch(`${api}/projects/${id}`, {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data ?? null;
-  } catch (err) {
-    console.warn(`[fetchProjectById] Unable to reach API for project ${id}:`, err);
-    return null;
-  }
+interface ApiFetchOptions {
+  method?: "GET" | "POST";
+  body?: unknown;
+  signal?: AbortSignal;
 }
 
-export async function createStartupProfile(
-  profile: StartupProfileInput
-): Promise<Project> {
-  const api = getExpressApi();
-  const res = await fetch(`${api}/projects/profile`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(profile),
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const { method = "GET", body, signal } = options;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (method === "POST") headers["Content-Type"] = "application/json";
+
+  const res = await fetch(`${getExpressApi()}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+    signal,
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? `Request failed: ${res.statusText}`);
+
+  const json: unknown = await res.json().catch(() => null);
+
+  if (!res.ok || !isRecord(json) || json.success !== true) {
+    const err = isRecord(json) ? json : {};
+    throw new ApiError(
+      res.status,
+      typeof err.error === "string" ? err.error : `Request failed (${res.status})`,
+      typeof err.requestId === "string" ? err.requestId : undefined,
+      err.details,
+    );
   }
-  const json = await res.json();
-  return json.data;
+  return json.data as T;
+}
+
+export function listProjects(params: ListProjectsParams = {}, signal?: AbortSignal): Promise<ProjectList> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value));
+  }
+  const qs = query.toString();
+  return apiFetch<ProjectList>(`/projects${qs ? `?${qs}` : ""}`, { signal });
+}
+
+export function getProject(id: string, signal?: AbortSignal): Promise<ProjectDto> {
+  return apiFetch<ProjectDto>(`/projects/${encodeURIComponent(id)}`, { signal });
+}
+
+/** Strict API body: send only schema keys, dropping undefined values and empty strings. */
+export function upsertProfile(body: ProfileInput, signal?: AbortSignal): Promise<ProfileDto> {
+  const clean: Record<string, string> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (typeof value === "string" && value !== "") clean[key] = value;
+  }
+  return apiFetch<ProfileDto>("/projects/profile", { method: "POST", body: clean, signal });
 }
 
 // ── Ponder GraphQL helpers ────────────────────────────────────────────────
@@ -147,6 +243,7 @@ async function ponderQuery<T = unknown>(
   return json.data as T;
 }
 
+/** `projectId` is the composite project id (equals the indexer's project.id). */
 export async function fetchMilestonesByProject(
   projectId: string
 ): Promise<Milestone[]> {
@@ -178,15 +275,17 @@ export async function fetchMilestonesByProject(
 export async function fetchActiveListings(): Promise<P2PListing[]> {
   const query = `
     query ActiveListings {
-      p2pListings(where: { isActive: true }) {
+      p2pListings(where: { status: "ACTIVE" }) {
         items {
           id
+          chainId
           seller
           tokenAddress
           tokenAmount
           priceInETH
-          isActive
+          status
           buyer
+          projectId
         }
       }
     }
@@ -216,7 +315,7 @@ export function shortAddr(addr?: string | null): string {
 
 /** Calculate funding progress percentage */
 export function fundingProgress(raised?: string | null, goal?: string | null): number {
-  if (!raised || !goal || BigInt(goal) === 0n) return 0;
+  if (!raised || !goal || BigInt(goal) === ZERO) return 0;
   const pct = (Number(BigInt(raised)) / Number(BigInt(goal))) * 100;
   return Math.min(100, Math.round(pct));
 }

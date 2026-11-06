@@ -6,7 +6,7 @@
 **Port:** 3000  
 **Last Updated:** 2026-11-06  
 
-**Current focus:** Step: WS-05.3 (FE-13 done) | State: awaiting-review | Updated: 2026-11-06. Deferred: FE-13a to FE-13d (lib/api.ts is still v1)
+**Current focus:** Step: WS-05.3b (FE-13d, FE-13a) | State: awaiting-review | Updated: 2026-11-06. `lib/api.ts` now targets `/api/v1`; pages adapted. Still open: FE-13b, FE-13c, FE-13e..h
 
 ---
 
@@ -110,6 +110,8 @@ The backlog was rewritten (`backlog-frontend.md`). Changes from what this report
 Re-plan 2026-11-01: the v1 hooks, ABIs, stubs and pages are discarded and rebuilt for v2; FE-10 is WS-03.5a, FE-13 is WS-05.3, FE-12 is only the WalletConnect ID and RPC URLs.
 
 ## Change log
+
+2026-11-06  WS-05.3b (FE-13d, FE-13a)  `lib/api.ts` rewritten against `/api/v1` (typed client, ApiError, composite ids); `app/page.tsx`, `app/p2p/page.tsx`, `app/projects/[id]/page.tsx`, `.../milestones/page.tsx`, `app/projects/create/page.tsx`, `components/ProjectCard.tsx` adapted; create page uses parseEventLogs on ProjectLaunched; FE-13e..h added  - verified by: code reading against api types/projectSchemas, ABI event name, indexer p2p_listing columns; no snake_case project fields in app/components/lib; `npx tsc --noEmit` zero errors; `npm run lint` 0 errors, 2 warnings; git status shows only intended frontend files. NOT verified: GraphQL where status filter against a running indexer, wallet/browser behaviour, live API/indexer, build
 
 2026-11-06  WS-05.3 (FE-13)  7 v2 ABI JSONs synced, generated `as const` `<Name>Abi.ts`, `scripts/generate-abis.mjs` + `npm run abis`, `lib/contracts.ts`; four pages moved to `getContractConfig`/`getAddresses`; launchProject passes `BigInt(totalSupply)` (no extra 10^18); FE-13a..d added  - verified by: node compare of artifact abi vs JSON vs .ts (all 7 identical); MilestoneFailed, CLOSE_GRACE, votingEndTime, voteBySig, claimTokensFor, stakeWithPermit present; launchProject args match Factory.sol; createListing/fillListing/vote match ABI; grep finds no NEXT_PUBLIC_FACTORY/P2P_ADDRESS or abis JSON imports in code; package.json diff is only the `abis` line, lockfile unchanged; `npx tsc --noEmit` only pre-existing lib/api.ts(219,44); `npm run lint` 0 errors, 2 warnings (unused imports in app/p2p/page.tsx). NOT verified: build, browser/wallet behaviour
 

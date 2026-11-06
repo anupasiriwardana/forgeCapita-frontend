@@ -156,16 +156,19 @@ function P2PContent() {
 
   async function handleBuy(listing: P2PListing) {
     if (!isConnected) { setBuyError("Connect your wallet to buy."); return; }
-    const p2p = getContractConfig(chainId, "p2pExchange");
+    if (chainId !== listing.chainId) { setBuyError("Switch your wallet to this listing's network to buy."); return; }
+    const p2p = getContractConfig(listing.chainId, "p2pExchange");
     if (!p2p) { setBuyError("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
     setBuyingId(listing.id);
     setBuyError("");
     try {
+      // listing.id is composite `<chainId>:<listingId>`; the contract takes the numeric part
+      const listingNumericId = listing.id.split(":")[1] ?? "";
       const hash = await writeContractAsync({
         address: p2p.address,
         abi: p2p.abi,
         functionName: "fillListing",
-        args: [BigInt(listing.id)],
+        args: [BigInt(listingNumericId)],
         value: BigInt(listing.priceInETH),
       });
       setTxHash(hash);
