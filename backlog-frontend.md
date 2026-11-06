@@ -103,6 +103,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [x] **FE-27** Navbar session indicator: Sign in button, short address + role badge, Sign out.
 - [x] **FE-28** Create page: sign in before the profile step; profile POST retries only on 404 (5 x 3.5 s, "Waiting for indexer (n/5)"); 401/403 not retried.
 - [ ] **FE-29** Create page: separate "retry profile only" action. Today a failed sign-in or profile save shows an error, and resubmitting the form would launch a second project on-chain.
+- [ ] **FE-26a** (user-reported 2026-11-06, cosmetic) Treat the wagmi pre-reconnect `disconnected` status as loading (hydration) in `AuthProvider`/pages: a split-second "sign in" flash remains on /admin and /apply after refresh. (Not FE-34: that ID is P2P additions.)
 - [ ] **FE-30** Auth error messages: dedicated 403 text. Currently any 403 shows "Request origin is not allowed by the API." although it can also be a role/ownership refusal.
 - Runtime NOT verified (needs a wallet, running api with ADMIN_WALLETS and CORS_ORIGINS including http://localhost:3000).
 - Fix WS-07.3l/4l-fix (2026-11-06, code verified, runtime not verified): AuthProvider no longer logs out on wallet change/disconnect (only explicit signOut), signing keyed per wallet, 120 s signature timeout, loading while wagmi reconnects. Note on FE-26: "address mismatch/disconnect -> signed out" now means signed out locally only; the server session is not revoked.
