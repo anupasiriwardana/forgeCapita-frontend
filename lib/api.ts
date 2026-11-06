@@ -186,8 +186,11 @@ async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
+    credentials: "include",
     signal,
   });
+
+  if (res.status === 204) return undefined as T;
 
   const json: unknown = await res.json().catch(() => null);
 
@@ -223,6 +226,53 @@ export function upsertProfile(body: ProfileInput, signal?: AbortSignal): Promise
     if (typeof value === "string" && value !== "") clean[key] = value;
   }
   return apiFetch<ProfileDto>("/projects/profile", { method: "POST", body: clean, signal });
+}
+
+// ── Auth (cookie session; no tokens in JS) ────────────────────────────────
+
+export interface AuthUser {
+  id: string;
+  address: string;
+  role: string;
+}
+
+export interface NonceResponse {
+  nonce: string;
+  message: string;
+  expiresAt: string;
+}
+
+export function requestNonce(address: string, signal?: AbortSignal): Promise<NonceResponse> {
+  return apiFetch<NonceResponse>("/auth/nonce", { method: "POST", body: { address }, signal });
+}
+
+export async function verifySignature(
+  address: string,
+  signature: string,
+  signal?: AbortSignal,
+): Promise<AuthUser> {
+  const data = await apiFetch<{ user: AuthUser }>("/auth/verify", {
+    method: "POST",
+    body: { address, signature },
+    signal,
+  });
+  return data.user;
+}
+
+/** Returns null when there is no valid session (401). */
+export async function fetchSession(signal?: AbortSignal): Promise<AuthUser | null> {
+  try {
+    const data = await apiFetch<{ user: AuthUser }>("/auth/me", { signal });
+    return data.user;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) return null;
+    throw err;
+  }
+}
+
+/** Logout answers 204 with no body. */
+export async function logoutSession(): Promise<void> {
+  await apiFetch<void>("/auth/logout", { method: "POST", body: {} });
 }
 
 // ── Ponder GraphQL helpers ────────────────────────────────────────────────

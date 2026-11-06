@@ -94,6 +94,16 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-22** Link-wallet flow: connect → request nonce → sign message → confirm; show the linked address and warn when the connected wallet differs from the linked one.
 - [ ] **FE-23** Route guards and role-aware redirects (server-side check in middleware / layouts); "forbidden" and "2FA required" screens for staff and admin.
 - [ ] **FE-24** Authenticated API client: cookie credentials, CSRF header, automatic 401 handling.
+  - Partial 2026-11-06 (WS-06.3w): cookie credentials done (`apiFetch` `credentials: "include"`, 204 handled). CSRF header and global 401 handling remain.
+
+### Wallet sign-in (WS-06.3w, lean wallet-first re-plan)
+- [x] **FE-25** `lib/api.ts` auth client: `requestNonce`, `verifySignature`, `fetchSession` (401 -> null), `logoutSession` against `/api/v1/auth/*` (verified vs authController: paths, bodies, envelope, 204 logout).
+- [x] **FE-26** `AuthProvider` / `useAuth` (`components/web3/AuthProvider.tsx`): session check on mount and address change, fresh nonce per sign-in with the message signed verbatim, address mismatch/disconnect -> signed out, double-click guard, no token or localStorage handling.
+- [x] **FE-27** Navbar session indicator: Sign in button, short address + role badge, Sign out.
+- [x] **FE-28** Create page: sign in before the profile step; profile POST retries only on 404 (5 x 3.5 s, "Waiting for indexer (n/5)"); 401/403 not retried.
+- [ ] **FE-29** Create page: separate "retry profile only" action. Today a failed sign-in or profile save shows an error, and resubmitting the form would launch a second project on-chain.
+- [ ] **FE-30** Auth error messages: dedicated 403 text. Currently any 403 shows "Request origin is not allowed by the API." although it can also be a role/ownership refusal.
+- Runtime NOT verified (needs a wallet, running api with ADMIN_WALLETS and CORS_ORIGINS including http://localhost:3000).
 
 ## Phase 4: Marketplace & project pages
 

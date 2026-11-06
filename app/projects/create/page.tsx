@@ -5,8 +5,12 @@ import { useWriteContract, useAccount, useChainId, usePublicClient } from "wagmi
 import { parseEther, parseEventLogs } from "viem";
 import { useRouter } from "next/navigation";
 import { chainName } from "@/config/chains";
-import { projectIdOf, upsertProfile } from "@/lib/api";
+import { ApiError, projectIdOf, upsertProfile, type ProfileInput } from "@/lib/api";
 import { ABIS, getContractConfig } from "@/lib/contracts";
+import { useAuth } from "@/components/web3/AuthProvider";
+
+const PROFILE_MAX_ATTEMPTS = 5;
+const PROFILE_RETRY_DELAY_MS = 3500;
 
 interface MilestoneRow {
   description: string;
@@ -39,6 +43,8 @@ export default function CreateProjectPage() {
   const [status, setStatus] = useState<"idle" | "submitting" | "waiting" | "saving" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [saveNote, setSaveNote] = useState("");
+  const { user, signIn } = useAuth();
 
   const { writeContractAsync } = useWriteContract();
 
@@ -105,7 +111,17 @@ export default function CreateProjectPage() {
 
       // Step 2: off-chain metadata
       setStatus("saving");
-      await upsertProfile({
+      if (!user) {
+        const ok = await signIn();
+        if (!ok) {
+          setStatus("error");
+          setErrorMsg(
+            "The project is already launched on-chain, but the profile was not saved because sign-in failed. Sign in with your wallet and retry saving the profile."
+          );
+          return;
+        }
+      }
+      await saveProfileWithRetry({
         projectId,
         name,
         description,
@@ -121,6 +137,27 @@ export default function CreateProjectPage() {
     } catch (err) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "An unexpected error occurred.");
+    }
+  }
+
+  async function saveProfileWithRetry(input: ProfileInput): Promise<void> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await upsertProfile(input);
+        setSaveNote("");
+        return;
+      } catch (err) {
+        if (!(err instanceof ApiError)) throw err;
+        if (err.status === 401) throw new Error("Sign in with your wallet to save the profile");
+        if (err.status === 403) throw new Error("Only the project's developer wallet can edit this profile");
+        if (err.status !== 404) throw err;
+        if (attempt >= PROFILE_MAX_ATTEMPTS) {
+          setSaveNote("");
+          throw new Error("Project not indexed yet; try again shortly");
+        }
+        setSaveNote(`Waiting for indexer (attempt ${attempt}/${PROFILE_MAX_ATTEMPTS})...`);
+        await new Promise<void>((resolve) => setTimeout(resolve, PROFILE_RETRY_DELAY_MS));
+      }
     }
   }
 
@@ -376,7 +413,7 @@ export default function CreateProjectPage() {
               <span className="spinner" />
               {status === "submitting" && "Submitting Transaction..."}
               {status === "waiting" && "Waiting for Confirmation..."}
-              {status === "saving" && "Saving Profile..."}
+              {status === "saving" && (saveNote || "Saving Profile...")}
             </>
           ) : (
             "🚀 Deploy & Launch Project"

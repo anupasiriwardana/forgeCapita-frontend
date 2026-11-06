@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { usePathname } from "next/navigation";
+import { useAccount } from "wagmi";
+import { useAuth } from "@/components/web3/AuthProvider";
+import { shortAddr } from "@/lib/api";
 
 const NAV_LINKS = [
   { href: "/", label: "Dashboard" },
@@ -13,6 +16,8 @@ const NAV_LINKS = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const { isConnected } = useAccount();
+  const { user, loading, error, signIn, signOut } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 w-full">
@@ -94,7 +99,50 @@ export function Navbar() {
           </nav>
 
           {/* Connect Button */}
-          <div style={{ flexShrink: 0 }}>
+          <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "10px" }}>
+            {isConnected && !user && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => void signIn()}
+                disabled={loading}
+                title={error ?? undefined}
+                style={{ padding: "6px 12px", fontSize: "13px" }}
+              >
+                {loading ? "Signing in…" : "Sign in"}
+              </button>
+            )}
+            {user && (
+              <>
+                <span style={{ fontSize: "13px", color: "rgba(241,245,249,0.8)" }}>{shortAddr(user.address)}</span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    padding: "2px 8px",
+                    borderRadius: "999px",
+                    background: "rgba(99,102,241,0.15)",
+                    color: "#a78bfa",
+                  }}
+                >
+                  {user.role}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void signOut()}
+                  style={{ padding: "6px 12px", fontSize: "13px" }}
+                >
+                  Sign out
+                </button>
+              </>
+            )}
+            {error && !user && (
+              <span role="alert" style={{ fontSize: "12px", color: "var(--rose)", maxWidth: "200px" }}>
+                {error}
+              </span>
+            )}
             <ConnectButton
               chainStatus="icon"
               accountStatus="avatar"
