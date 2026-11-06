@@ -65,18 +65,21 @@ Typography: Inter or Geist, monospace for addresses and hashes.
   - Done 2026-11-06: `config/chains.ts`, `config/addresses.ts` (`getAddresses` returns `undefined` for an unsupported chain), `config/wagmi.ts`, `.env.example`, `.gitignore` negation, README note. Not verified: public RPCs reachable, wallet connection in a browser, build.
 - [ ] **FE-10b** Raise `tsconfig` target from ES2017 to ES2020. `config/addresses.ts` uses `BigInt("...")` instead of bigint literals because of TS2737; the raise would also clear the pre-existing error at `lib/api.ts(219,44)`.
 - [ ] **FE-11** Chain switcher / indicator in the shell; wrong-network prompt with one-tap switch.
-- [ ] **FE-12 `[USER-ACTION]`** WalletConnect Project ID (`NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`) and dedicated RPC URLs per chain. (Reduced 2026-11-01: contract addresses moved into code at FE-10 / WS-03.5a.)
+- [x] **FE-12 `[USER-ACTION]`** WalletConnect Project ID (`NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`) and dedicated RPC URLs per chain. (Reduced 2026-11-01: contract addresses moved into code at FE-10 / WS-03.5a.)
+  - Ticked 2026-11-06 on USER REPORT (not verified by Claude; `.env*` never read): user set their own frontend env and connected a wallet on Arbitrum Sepolia.
 - [x] **FE-13** Sync v2 ABIs with `node .claude/scripts/sync-abi.js frontend <Contract>`; typed contract hooks per chain. `[BLOCKED-BY]` contracts v2.
   - Done 2026-11-06 (WS-05.3, lean): 7 v2 ABI JSONs equal the compiled artifacts, generated `<Name>Abi.ts` (`as const`) via `npm run abis`, `lib/contracts.ts` (`ABIS`, `getContractConfig`), four v1 pages moved off `NEXT_PUBLIC_FACTORY_ADDRESS` / `NEXT_PUBLIC_P2P_ADDRESS` and JSON imports; launchProject supply scaling fixed. Not verified: build, browser or wallet behaviour.
 - [x] **FE-13a** Create page: read the new project from the receipt with `parseEventLogs` on `ProjectLaunched` (replace the receipt hack); `createStartupProfile` must send the composite project id `<chainId>:<escrow lowercase>` to `POST /api/v1/projects/profile` (chain_id and escrow are derived server-side).
   - Done 2026-11-06 (WS-05.3b): `waitForTransactionReceipt` + `parseEventLogs` reading `args.milestoneEscrow`, `projectIdOf` lowercase composite id, redirect to `/projects/<encoded id>`. Not verified: wallet/browser run.
-- [ ] **FE-13e** Replace cosmetic "Sepolia" labels (`app/page.tsx`, `app/projects/[id]/page.tsx` Network row, `app/p2p/page.tsx`, create page text, layout metadata) with the project's chain (`project.chainId`).
-- [ ] **FE-13f** P2P card shows the composite id as "Listing #"; show only the numeric part.
-- [ ] **FE-13g** Milestone vote has no wallet chain check against the project's chain; add a guard and switch prompt.
-- [ ] **FE-13h** Remove unused imports `shortAddr`, `formatEth` in `app/p2p/page.tsx` (lint warnings).
+- [x] **FE-13e** (done 2026-11-06, code-verified; runtime pending dev-server restart) Replace cosmetic "Sepolia" labels (`app/page.tsx`, `app/projects/[id]/page.tsx` Network row, `app/p2p/page.tsx`, create page text, layout metadata) with the project's chain (`project.chainId`).
+- [x] **FE-13f** (done, code-verified) P2P card shows the composite id as "Listing #"; show only the numeric part.
+- [x] **FE-13g** (done, code-verified: walletChainId vs project chain guard in milestones page) Milestone vote has no wallet chain check against the project's chain; add a guard and switch prompt.
+- [x] **FE-13h** (done, lint 0 warnings) Remove unused imports `shortAddr`, `formatEth` in `app/p2p/page.tsx` (lint warnings).
 - [ ] **FE-13b** P2P `createListing`: send the token `approve` to the exchange first.
-- [ ] **FE-13c** Status-rule helpers: `completed` first (never show a completed project as cancelled), `fundingPhase` with `CLOSE_GRACE`, show `votingEndTime`.
-- [x] **FE-13d** Rewrite `lib/api.ts` against `/api/v1`: `GET /api/v1/projects` returns `{ items, total, limit, offset }` with camelCase fields and bigint strings; current shapes are v1. Needed before any page that lists projects works.
+- [x] **FE-13c** Status-rule helpers: `completed` first (never show a completed project as cancelled), `fundingPhase` with `CLOSE_GRACE`, show `votingEndTime`. (done 2026-11-06: `lib/projectState.ts` mirrors the indexer's fundingPhase/refundsOpenFor; used on project detail and milestones page; runtime NOT verified, see status)
+- [ ] **FE-13i** `components/ProjectCard.tsx` still uses the old isFundingActive LIVE/CLOSED badge; switch to `displayState` / `fundingPhase`.
+- [ ] **FE-13j** Show a chain badge on `ProjectCard` (list shows 4 projects per chain with identical names, e.g. 'Smoke Alpha' twice, indistinguishable).
+- [x] **FE-13d** (runtime-confirmed 2026-11-06, user-reported: project list shows 8 projects from the live API/indexer, 4 per chain) Rewrite `lib/api.ts` against `/api/v1`: `GET /api/v1/projects` returns `{ items, total, limit, offset }` with camelCase fields and bigint strings; current shapes are v1. Needed before any page that lists projects works.
   - Done 2026-11-06 (WS-05.3b): typed `listProjects`/`getProject`/`upsertProfile`, `ApiError`, composite id helpers, `ProjectDto` equals the API type; five pages and `ProjectCard` adapted. Not verified: GraphQL `where status` filter against a running indexer, live API/indexer, browser.
 - [ ] **FE-14** Transaction toast system (submitting → pending → confirmed → failed) with explorer links; sticky transaction bar on mobile.
 

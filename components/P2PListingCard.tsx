@@ -57,7 +57,7 @@ export function P2PListingCard({ listing, onBuy, isPending, index = 0 }: P2PList
       {/* Listing ID */}
       <div style={{ marginBottom: "20px", padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px", display: "flex", justifyContent: "space-between" }}>
         <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Listing #</span>
-        <span style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{listing.id}</span>
+        <span style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{listing.id.split(":")[1] ?? listing.id}</span>
       </div>
 
       {/* Buy Button */}

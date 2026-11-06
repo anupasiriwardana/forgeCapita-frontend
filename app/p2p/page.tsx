@@ -4,7 +4,7 @@ import { useState, Suspense } from "react";
 import { useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
 import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
 import { parseEther, parseUnits } from "viem";
-import { fetchActiveListings, type P2PListing, shortAddr, formatEth } from "@/lib/api";
+import { fetchActiveListings, type P2PListing } from "@/lib/api";
 import { P2PListingCard } from "@/components/P2PListingCard";
 import { getContractConfig } from "@/lib/contracts";
 
@@ -235,7 +235,7 @@ function P2PContent() {
         <div style={{ width: "1px", background: "var(--border)" }} />
         <div>
           <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Network</div>
-          <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--brand-accent)" }}>Sepolia</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--brand-accent)" }}>Arbitrum Sepolia &amp; BSC Testnet</div>
         </div>
       </div>
 

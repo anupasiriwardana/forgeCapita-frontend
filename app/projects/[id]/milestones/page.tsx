@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import { useParams } from "next/navigation";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
 import { fetchMilestonesByProject, parseProjectId, type Milestone } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import Link from "next/link";
@@ -18,6 +18,7 @@ function MilestoneCard({
   index: number;
 }) {
   const { isConnected } = useAccount();
+  const walletChainId = useChainId();
   const { writeContractAsync } = useWriteContract();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [voting, setVoting] = useState<"yes" | "no" | null>(null);
@@ -26,6 +27,10 @@ function MilestoneCard({
 
   const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash });
 
+  const votingEnd =
+    milestone.isVotingOpen && milestone.votingEndTime && BigInt(milestone.votingEndTime) > BigInt(0)
+      ? milestone.votingEndTime
+      : null;
   const yesVotes = Number(milestone.yesVotes);
   const noVotes = Number(milestone.noVotes);
   const totalVotes = yesVotes + noVotes;
@@ -34,6 +39,11 @@ function MilestoneCard({
 
   async function handleVote(support: boolean) {
     if (!isConnected) return;
+    if (walletChainId !== parseProjectId(projectId).chainId) {
+      setVoteStatus("error");
+      setVoteError("Switch your wallet to this project's network");
+      return;
+    }
     setVoting(support ? "yes" : "no");
     setVoteStatus("pending");
     setVoteError("");
@@ -103,6 +113,11 @@ function MilestoneCard({
               Milestone {milestone.milestoneIndex + 1}
             </div>
             <div style={{ fontSize: "12px", color: statusColor, fontWeight: 600 }}>{statusLabel}</div>
+            {votingEnd && (
+              <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                Voting ends {new Date(Number(votingEnd) * 1000).toLocaleString()}
+              </div>
+            )}
           </div>
         </div>
       </div>

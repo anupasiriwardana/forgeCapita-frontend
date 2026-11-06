@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Marketplace — ForgeCapita",
   description:
-    "Browse all active Web3 startup projects. Fund milestone-gated ventures and earn equity tokens on the Ethereum Sepolia testnet.",
+    "Browse all active Web3 startup projects. Fund milestone-gated ventures and earn equity tokens on Arbitrum Sepolia and BSC Testnet.",
 };
 
 function ProjectsSkeleton() {
@@ -127,7 +127,7 @@ export default function DashboardPage() {
     <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 24px" }}>
       {/* Hero Section */}
       <div className="fade-in-up" style={{ textAlign: "center", marginBottom: "64px" }}>
-        <span className="section-tag">⚡ Live on Sepolia</span>
+        <span className="section-tag">⚡ Live on testnet</span>
         <h1
           style={{
             fontSize: "clamp(36px, 5vw, 60px)",
@@ -154,7 +154,7 @@ export default function DashboardPage() {
         {/* Hero features / stats */}
         <div style={{ display: "flex", justifyContent: "center", gap: "32px", flexWrap: "wrap" }}>
           {[
-            { label: "Network", value: "Sepolia Testnet", icon: "🔗" },
+            { label: "Network", value: "Arbitrum & BSC Testnets", icon: "🔗" },
             { label: "Milestones", value: "On-Chain Escrow", icon: "🛡️" },
             { label: "Governance", value: "Token Weighted", icon: "🗳️" },
           ].map(({ label, value, icon }) => (

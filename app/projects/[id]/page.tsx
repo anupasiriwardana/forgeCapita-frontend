@@ -8,6 +8,40 @@ import { parseEther } from "viem";
 import { ApiError, getProject, formatEth, fundingProgress, shortAddr, type ProjectDto } from "@/lib/api";
 import Link from "next/link";
 import { Suspense } from "react";
+import { chainName } from "@/config/chains";
+import {
+  displayState,
+  fundingPhase,
+  phaseInputOf as phaseOf,
+  type FundingPhase,
+  type FundingPhaseInput,
+} from "@/lib/projectState";
+
+const STATE_BADGE: Record<ProjectDto["state"], { label: string; className: string }> = {
+  FUNDING: { label: "🟢 Funding", className: "badge-active" },
+  ACTIVE: { label: "🟢 Active", className: "badge-active" },
+  COMPLETED: { label: "✅ Completed", className: "badge-brand" },
+  FAILED: { label: "⚫ Failed", className: "badge-inactive" },
+  CANCELLED: { label: "⚫ Cancelled", className: "badge-inactive" },
+  SHUTDOWN: { label: "⚫ Shut down", className: "badge-inactive" },
+};
+
+function formatDate(seconds: bigint): string {
+  return new Date(Number(seconds) * 1000).toLocaleString();
+}
+
+function phaseLabel(phase: FundingPhase, input: FundingPhaseInput): string | null {
+  switch (phase) {
+    case "OPEN":
+      return `Funding open until ${formatDate(input.fundingDeadline)}`;
+    case "CLOSEABLE":
+      return `Close window open until ${formatDate(input.fundingDeadline + input.closeGrace)}`;
+    case "REFUNDABLE":
+      return "Refund available";
+    case "NOT_APPLICABLE":
+      return null;
+  }
+}
 
 function FundingPanel({ project }: { project: ProjectDto }) {
   const { isConnected, address } = useAccount();
@@ -123,6 +157,7 @@ function FundingPanel({ project }: { project: ProjectDto }) {
 }
 
 function ProjectDetailInner({ id }: { id: string }) {
+  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
   const { data: project } = useSuspenseQuery({
     queryKey: ["project", id],
     queryFn: async () => {
@@ -155,6 +190,10 @@ function ProjectDetailInner({ id }: { id: string }) {
   const ethGoal = formatEth(project.fundingGoal, 4);
   const profile = project.profile;
   const name = profile?.name ?? project.tokenName;
+  const shownState = displayState(project);
+  const phaseInput = phaseOf(project);
+  const phase = fundingPhase(BigInt(nowSeconds), phaseInput);
+  const phaseText = phaseLabel(phase, phaseInput);
 
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "48px 24px" }}>
@@ -196,9 +235,12 @@ function ProjectDetailInner({ id }: { id: string }) {
               <div>
                 <h1 style={{ fontSize: "28px", margin: "0 0 8px" }}>{name || "Unnamed Project"}</h1>
                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-                  <span className={`badge ${project.isFundingActive ? "badge-active" : "badge-inactive"}`}>
-                    {project.isFundingActive ? "🟢 Live" : "⚫ Closed"}
+                  <span className={`badge ${STATE_BADGE[shownState].className}`}>
+                    {STATE_BADGE[shownState].label}
                   </span>
+                  {phaseText && (
+                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{phaseText}</span>
+                  )}
                   {profile?.websiteUrl && (
                     <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer" className="badge badge-brand" style={{ textDecoration: "none" }}>
                       🌐 Website
@@ -267,7 +309,7 @@ function ProjectDetailInner({ id }: { id: string }) {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px" }}>
                 <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Network</span>
-                <span style={{ fontSize: "12px", color: "var(--teal)", fontWeight: 600 }}>Ethereum Sepolia</span>
+                <span style={{ fontSize: "12px", color: "var(--teal)", fontWeight: 600 }}>{chainName(project.chainId)}</span>
               </div>
             </div>
           </div>

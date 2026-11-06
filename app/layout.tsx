@@ -6,7 +6,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "ForgeCapita — Web3 Milestone-Gated Crowdfunding",
   description:
-    "ForgeCapita is a decentralized crowdfunding platform where investors fund startups milestone by milestone on Ethereum Sepolia. Invest, vote on milestones, and trade tokens on the P2P market.",
+    "ForgeCapita is a decentralized crowdfunding platform where investors fund startups milestone by milestone on Arbitrum Sepolia and BSC Testnet. Invest, vote on milestones, and trade tokens on the P2P market.",
   keywords: ["web3", "crowdfunding", "ethereum", "defi", "startup", "milestone"],
 };
 

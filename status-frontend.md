@@ -6,7 +6,7 @@
 **Port:** 3000  
 **Last Updated:** 2026-11-06  
 
-**Current focus:** Step: WS-05.3b (FE-13d, FE-13a) | State: awaiting-review | Updated: 2026-11-06. `lib/api.ts` now targets `/api/v1`; pages adapted. Still open: FE-13b, FE-13c, FE-13e..h
+**Current focus:** Step: WS-05.3c | State: awaiting-review | Updated: 2026-11-06. Code verified (tsc/lint clean); runtime verification pending dev-server restart in WSL. Previous:  WS-05.3b reviewed and committed (user-reported); WS-03.4 / FE-12 done (user-reported); project list renders 8 live projects. Still open: FE-13b, FE-13c, FE-13e..h
 
 ---
 
@@ -110,6 +110,10 @@ The backlog was rewritten (`backlog-frontend.md`). Changes from what this report
 Re-plan 2026-11-01: the v1 hooks, ABIs, stubs and pages are discarded and rebuilt for v2; FE-10 is WS-03.5a, FE-13 is WS-05.3, FE-12 is only the WalletConnect ID and RPC URLs.
 
 ## Change log
+
+2026-11-06  WS-05.3c (FE-13c, FE-13e, FE-13f, FE-13g, FE-13h)  Closed, awaiting-review. lib/projectState.ts mirrors the indexer (fundingPhase/refundsOpenFor branch order, bigint compares; SHUTDOWN branch explicit but equivalent), displayState lets COMPLETED win; chainName() in config/chains.ts replaces bare 'Sepolia' labels; P2P card shows numeric listing id; milestone vote has wallet chain guard; unused imports removed. New backlog: FE-13i (ProjectCard still LIVE/CLOSED badge), FE-13j (chain badge on ProjectCard). MAIN-SESSION-REPORTED walkthrough ran on STALE code (WSL dev server on localhost:3000 did not pick up Windows-drive file changes): old code showed 8 list cards with no console errors, project detail renders, /p2p 0 listings (correct). The NEW code is NOT runtime-verified; user must restart the dev server in WSL and/or set WATCHPACK_POLLING=true  - verified by: npx tsc --noEmit 0 errors, npm run lint 0 errors 0 warnings, code reading, grep (no bare 'Sepolia' in app/ or components/; remaining mentions are 'Arbitrum Sepolia' via chain names); package.json/lockfile unchanged. The indexer's milestone votingEndTime column exists (ponder.schema.ts) and api.ts selects it; per-page diffs read only partly (git diff blocked by guard hook), not verified line by line
+
+2026-11-06  WS-05.3b / WS-03.4 (FE-12)  USER-REPORTED: WS-05.3b reviewed and committed; user set their own frontend env (WalletConnect id, RPCs), started the frontend, connected a wallet on Arbitrum Sepolia, project list shows 8 projects (4 per chain, BSC projects already indexed; BSC backfill about 80%, Arbitrum caught up). FE-12 ticked, FE-13d/FE-13a runtime-confirmed for the list page  - verified by: user report only, not verified by Claude (no env read, nothing run)
 
 2026-11-06  WS-05.3b (FE-13d, FE-13a)  `lib/api.ts` rewritten against `/api/v1` (typed client, ApiError, composite ids); `app/page.tsx`, `app/p2p/page.tsx`, `app/projects/[id]/page.tsx`, `.../milestones/page.tsx`, `app/projects/create/page.tsx`, `components/ProjectCard.tsx` adapted; create page uses parseEventLogs on ProjectLaunched; FE-13e..h added  - verified by: code reading against api types/projectSchemas, ABI event name, indexer p2p_listing columns; no snake_case project fields in app/components/lib; `npx tsc --noEmit` zero errors; `npm run lint` 0 errors, 2 warnings; git status shows only intended frontend files. NOT verified: GraphQL where status filter against a running indexer, wallet/browser behaviour, live API/indexer, build
 

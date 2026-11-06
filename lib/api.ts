@@ -120,6 +120,7 @@ export interface Milestone {
   milestoneIndex: number;
   isVotingOpen: boolean;
   isExecuted: boolean;
+  votingEndTime: string | null;
   yesVotes: string;
   noVotes: string;
 }
@@ -256,6 +257,7 @@ export async function fetchMilestonesByProject(
           milestoneIndex
           isVotingOpen
           isExecuted
+          votingEndTime
           yesVotes
           noVotes
         }

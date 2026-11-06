@@ -12,6 +12,12 @@ export const RPC_URLS: Record<SupportedChainId, string> = {
   97: process.env.NEXT_PUBLIC_RPC_URL_97 || "https://bsc-testnet-rpc.publicnode.com",
 };
 
+export function chainName(chainId: number): string {
+  if (chainId === 421614) return "Arbitrum Sepolia";
+  if (chainId === 97) return "BSC Testnet";
+  return `Chain ${chainId}`;
+}
+
 export const EXPLORER_URLS: Record<SupportedChainId, string> = {
   421614: "https://sepolia.arbiscan.io",
   97: "https://testnet.bscscan.com",

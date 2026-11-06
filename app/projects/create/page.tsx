@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useWriteContract, useAccount, useChainId, usePublicClient } from "wagmi";
 import { parseEther, parseEventLogs } from "viem";
 import { useRouter } from "next/navigation";
+import { chainName } from "@/config/chains";
 import { projectIdOf, upsertProfile } from "@/lib/api";
 import { ABIS, getContractConfig } from "@/lib/contracts";
 
@@ -132,7 +133,7 @@ export default function CreateProjectPage() {
         <span className="section-tag">🚀 Founder Dashboard</span>
         <h1 style={{ fontSize: "36px", margin: "0 0 12px" }}>Launch Your Project</h1>
         <p style={{ color: "var(--text-secondary)", fontSize: "16px", lineHeight: 1.6 }}>
-          Deploy a milestone-gated escrow on Sepolia and register your startup metadata in one workflow.
+          Deploy a milestone-gated escrow on {chainName(chainId)} and register your startup metadata in one workflow.
         </p>
       </div>
 
