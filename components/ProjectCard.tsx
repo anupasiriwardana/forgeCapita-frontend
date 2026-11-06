@@ -3,6 +3,17 @@
 import Link from "next/link";
 import type { ProjectDto } from "@/lib/api";
 import { formatEth, fundingProgress, shortAddr } from "@/lib/api";
+import { chainName } from "@/config/chains";
+import { displayState } from "@/lib/projectState";
+
+const STATE_BADGE: Record<ProjectDto["state"], { label: string; className: string }> = {
+  FUNDING: { label: "🟢 Funding", className: "badge-active" },
+  ACTIVE: { label: "🟢 Active", className: "badge-active" },
+  COMPLETED: { label: "✅ Completed", className: "badge-brand" },
+  FAILED: { label: "⚫ Failed", className: "badge-inactive" },
+  CANCELLED: { label: "⚫ Cancelled", className: "badge-inactive" },
+  SHUTDOWN: { label: "⚫ Shut down", className: "badge-inactive" },
+};
 
 interface ProjectCardProps {
   project: ProjectDto;
@@ -16,6 +27,7 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
   const name = project.profile?.name ?? project.tokenName;
   const description = project.profile?.description;
   const logoUrl = project.profile?.logoUrl;
+  const stateBadge = STATE_BADGE[displayState(project)];
 
   return (
     <Link
@@ -78,21 +90,13 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
           <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>
             {shortAddr(project.escrowAddress)}
           </span>
+          <span style={{ fontSize: "11px", color: "var(--teal)", fontWeight: 600, marginLeft: "8px" }}>
+            {chainName(project.chainId)}
+          </span>
         </div>
 
         {/* Status Badge */}
-        <span className={`badge ${project.isFundingActive ? "badge-active" : "badge-inactive"}`}>
-          <span
-            style={{
-              width: "5px",
-              height: "5px",
-              borderRadius: "50%",
-              background: "currentColor",
-              flexShrink: 0,
-            }}
-          />
-          {project.isFundingActive ? "Live" : "Closed"}
-        </span>
+        <span className={`badge ${stateBadge.className}`}>{stateBadge.label}</span>
       </div>
 
       {/* Description */}

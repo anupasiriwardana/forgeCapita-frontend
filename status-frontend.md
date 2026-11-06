@@ -6,7 +6,7 @@
 **Port:** 3000  
 **Last Updated:** 2026-11-06  
 
-**Current focus:** Step: WS-05.3c | State: awaiting-review | Updated: 2026-11-06. Code verified (tsc/lint clean); runtime verification pending dev-server restart in WSL. Previous:  WS-05.3b reviewed and committed (user-reported); WS-03.4 / FE-12 done (user-reported); project list renders 8 live projects. Still open: FE-13b, FE-13c, FE-13e..h
+**Current focus:** Step: WS-05.3d | State: awaiting-review | Updated: 2026-11-06. Code verified (tsc/lint clean); browser-unverified, main session to check after hot-reload. WS-05.3c also still awaiting runtime verification. Previous:  WS-05.3b reviewed and committed (user-reported); WS-03.4 / FE-12 done (user-reported); project list renders 8 live projects. Still open: FE-13b, FE-13c, FE-13e..h
 
 ---
 
@@ -110,6 +110,8 @@ The backlog was rewritten (`backlog-frontend.md`). Changes from what this report
 Re-plan 2026-11-01: the v1 hooks, ABIs, stubs and pages are discarded and rebuilt for v2; FE-10 is WS-03.5a, FE-13 is WS-05.3, FE-12 is only the WalletConnect ID and RPC URLs.
 
 ## Change log
+
+2026-11-06  WS-05.3d (FE-13i, FE-13j)  ProjectCard badge now via displayState(project) with its own STATE_BADGE map (old isFundingActive badge removed) and teal chainName label beside the short address; milestones page vote totals are bigint, percentages by integer maths, `formatVotes` helper (formatUnits 18, max 4 decimals), no Number() on wei. Note: tsconfig target < ES2020, use BigInt(100) not 100n  - verified by: code reading of both files, npx tsc --noEmit 0 errors, npm run lint 0 errors 0 warnings, git diff --stat on package.json/lockfile empty. NOT verified: browser rendering
 
 2026-11-06  WS-05.3c (FE-13c, FE-13e, FE-13f, FE-13g, FE-13h)  Closed, awaiting-review. lib/projectState.ts mirrors the indexer (fundingPhase/refundsOpenFor branch order, bigint compares; SHUTDOWN branch explicit but equivalent), displayState lets COMPLETED win; chainName() in config/chains.ts replaces bare 'Sepolia' labels; P2P card shows numeric listing id; milestone vote has wallet chain guard; unused imports removed. New backlog: FE-13i (ProjectCard still LIVE/CLOSED badge), FE-13j (chain badge on ProjectCard). MAIN-SESSION-REPORTED walkthrough ran on STALE code (WSL dev server on localhost:3000 did not pick up Windows-drive file changes): old code showed 8 list cards with no console errors, project detail renders, /p2p 0 listings (correct). The NEW code is NOT runtime-verified; user must restart the dev server in WSL and/or set WATCHPACK_POLLING=true  - verified by: npx tsc --noEmit 0 errors, npm run lint 0 errors 0 warnings, code reading, grep (no bare 'Sepolia' in app/ or components/; remaining mentions are 'Arbitrum Sepolia' via chain names); package.json/lockfile unchanged. The indexer's milestone votingEndTime column exists (ponder.schema.ts) and api.ts selects it; per-page diffs read only partly (git diff blocked by guard hook), not verified line by line
 

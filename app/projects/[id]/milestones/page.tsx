@@ -7,6 +7,13 @@ import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId 
 import { fetchMilestonesByProject, parseProjectId, type Milestone } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import Link from "next/link";
+import { formatUnits } from "viem";
+
+function formatVotes(wei: bigint): string {
+  const [whole, frac = ""] = formatUnits(wei, 18).split(".");
+  const trimmed = frac.slice(0, 4).replace(/0+$/, "");
+  return trimmed ? `${whole}.${trimmed}` : whole;
+}
 
 function MilestoneCard({
   milestone,
@@ -31,11 +38,12 @@ function MilestoneCard({
     milestone.isVotingOpen && milestone.votingEndTime && BigInt(milestone.votingEndTime) > BigInt(0)
       ? milestone.votingEndTime
       : null;
-  const yesVotes = Number(milestone.yesVotes);
-  const noVotes = Number(milestone.noVotes);
+  const yesVotes = BigInt(milestone.yesVotes);
+  const noVotes = BigInt(milestone.noVotes);
   const totalVotes = yesVotes + noVotes;
-  const yesPct = totalVotes > 0 ? Math.round((yesVotes / totalVotes) * 100) : 0;
-  const noPct = totalVotes > 0 ? 100 - yesPct : 0;
+  const hasVotes = totalVotes > BigInt(0);
+  const yesPct = hasVotes ? Number((yesVotes * BigInt(100)) / totalVotes) : 0;
+  const noPct = hasVotes ? 100 - yesPct : 0;
 
   async function handleVote(support: boolean) {
     if (!isConnected) return;
@@ -125,8 +133,8 @@ function MilestoneCard({
       {/* Vote counts */}
       <div style={{ marginBottom: "16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-          <span style={{ fontSize: "12px", color: "var(--emerald)", fontWeight: 600 }}>Yes: {yesVotes.toLocaleString()} ({yesPct}%)</span>
-          <span style={{ fontSize: "12px", color: "var(--rose)", fontWeight: 600 }}>No: {noVotes.toLocaleString()} ({noPct}%)</span>
+          <span style={{ fontSize: "12px", color: "var(--emerald)", fontWeight: 600 }}>Yes: {formatVotes(yesVotes)} ({yesPct}%)</span>
+          <span style={{ fontSize: "12px", color: "var(--rose)", fontWeight: 600 }}>No: {formatVotes(noVotes)} ({noPct}%)</span>
         </div>
         <div style={{ height: "6px", borderRadius: "999px", background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${yesPct}%`, background: "linear-gradient(90deg, var(--emerald), var(--teal))", transition: "width 0.8s" }} />

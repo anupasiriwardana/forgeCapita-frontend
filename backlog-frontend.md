@@ -77,8 +77,9 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [x] **FE-13h** (done, lint 0 warnings) Remove unused imports `shortAddr`, `formatEth` in `app/p2p/page.tsx` (lint warnings).
 - [ ] **FE-13b** P2P `createListing`: send the token `approve` to the exchange first.
 - [x] **FE-13c** Status-rule helpers: `completed` first (never show a completed project as cancelled), `fundingPhase` with `CLOSE_GRACE`, show `votingEndTime`. (done 2026-11-06: `lib/projectState.ts` mirrors the indexer's fundingPhase/refundsOpenFor; used on project detail and milestones page; runtime NOT verified, see status)
-- [ ] **FE-13i** `components/ProjectCard.tsx` still uses the old isFundingActive LIVE/CLOSED badge; switch to `displayState` / `fundingPhase`.
-- [ ] **FE-13j** Show a chain badge on `ProjectCard` (list shows 4 projects per chain with identical names, e.g. 'Smoke Alpha' twice, indistinguishable).
+- [x] **FE-13i** (done 2026-11-06, code verified, browser-unverified) `components/ProjectCard.tsx` still uses the old isFundingActive LIVE/CLOSED badge; switch to `displayState` / `fundingPhase`.
+- [x] **FE-13j** (done 2026-11-06, code verified, browser-unverified) Show a chain badge on `ProjectCard` (list shows 4 projects per chain with identical names, e.g. 'Smoke Alpha' twice, indistinguishable).
+- Note: tsconfig target is below ES2020, so bigint literals (`100n`) do not compile; use `BigInt(100)`. (FE-10b would lift this.) Milestones page vote totals now bigint with `formatVotes` (formatUnits 18, max 4 decimals).
 - [x] **FE-13d** (runtime-confirmed 2026-11-06, user-reported: project list shows 8 projects from the live API/indexer, 4 per chain) Rewrite `lib/api.ts` against `/api/v1`: `GET /api/v1/projects` returns `{ items, total, limit, offset }` with camelCase fields and bigint strings; current shapes are v1. Needed before any page that lists projects works.
   - Done 2026-11-06 (WS-05.3b): typed `listProjects`/`getProject`/`upsertProfile`, `ApiError`, composite id helpers, `ProjectDto` equals the API type; five pages and `ProjectCard` adapted. Not verified: GraphQL `where status` filter against a running indexer, live API/indexer, browser.
 - [ ] **FE-14** Transaction toast system (submitting → pending → confirmed → failed) with explorer links; sticky transaction bar on mobile.
