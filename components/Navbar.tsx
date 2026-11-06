@@ -17,7 +17,10 @@ const NAV_LINKS = [
 export function Navbar() {
   const pathname = usePathname();
   const { isConnected } = useAccount();
-  const { user, loading, error, signIn, signOut } = useAuth();
+  const { user, role, loading, error, signIn, signOut } = useAuth();
+  const links = [...NAV_LINKS];
+  if (role === "investor" || role === "founder") links.push({ href: "/apply", label: "Apply" });
+  if (role === "staff" || role === "admin") links.push({ href: "/admin", label: "Admin" });
 
   return (
     <header className="sticky top-0 z-40 w-full">
@@ -74,7 +77,7 @@ export function Navbar() {
 
           {/* Nav links */}
           <nav style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            {NAV_LINKS.map(({ href, label }) => {
+            {links.map(({ href, label }) => {
               const active = pathname === href;
               return (
                 <Link

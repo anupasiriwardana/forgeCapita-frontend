@@ -130,7 +130,8 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 ## Phase 6: Founder application wizard & dashboards
 
 ### Application wizard (`/apply`, replaces direct deployment on `/projects/create`)
-- [ ] **FE-50** Stepper: 1 Profile (name, category, description, website, pitch deck upload, logo upload) → 2 Identity (KYC document upload, manual review status) → 3 Revenue Share Agreement ("I agree" with scrollable text, typed name, wallet signature; draft banner "not legal advice") → 4 Repository (choose GitHub or GitLab; show the provisioned link) → 5 Shadow wallet (request; shown publicly once approved) → 6 Review status (Pending / Changes requested with notes / Approved / Rejected) → 7 Deploy.
+- [x] **FE-50** (LEAN, ticked per user direction 2026-11-06 WS-07.3l: single-page `/apply` form + status card, not the stepper) Stepper: 1 Profile (name, category, description, website, pitch deck upload, logo upload) → 2 Identity (KYC document upload, manual review status) → 3 Revenue Share Agreement ("I agree" with scrollable text, typed name, wallet signature; draft banner "not legal advice") → 4 Repository (choose GitHub or GitLab; show the provisioned link) → 5 Shadow wallet (request; shown publicly once approved) → 6 Review status (Pending / Changes requested with notes / Approved / Rejected) → 7 Deploy.
+  - Done: `/apply` (name, summary, https website and pitch deck URLs, optional github/gitlab repo, contact; status card pending/approved/rejected, review note, KYC verified, re-apply after reject). Remaining of the full stepper: identity/KYC upload, agreement signing, repository choice, shadow wallet, uploads, deploy (WS-07.2l, WS-07.10).
 - [ ] **FE-51** Gated deploy step: `launchProject` is disabled until eligibility endpoint (API-39) says the founder is cleared; deployment uses the approved metadata; after confirmation link the escrow address to the application.
 - [ ] **FE-52** Drag-and-drop file upload component (image / PDF) with progress, size and type limits, preview; replaces the logo and pitch deck URL inputs.
 
@@ -147,6 +148,12 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 ### Staff dashboard (`/staff`)
 - [ ] **FE-65** Applications queue (approve / request changes / reject), KYC review (secure document viewer), repo provisioning status, shadow wallet change approvals, complaints queue and thread, read-only Risk Center, takeover case preparation and signalling vote setup.
+  - Partial (2026-11-06, WS-07.4l, FIRST PART ticked per user direction): `/admin` applications queue (tabs, paging 20, detail, approve with KYC checkbox, reject with required note) and admin-only Users role management done. Remaining: request-changes, KYC document viewer, repo provisioning, shadow wallet approvals, complaints, Risk Center, takeover prep.
+
+- [ ] Extract duplicated `SafeLink` and `Row` helpers from `app/apply/page.tsx` and `app/admin/page.tsx` into a shared component
+- [ ] Decide whether staff may see the Users list (API allows staff to list; UI shows Users to admin only)
+- [ ] Gate `/projects/create` on approved founder status (needs WS-07.2l launch-eligibility)
+- [ ] Replace `window.confirm` role-change confirmation in `/admin` with a proper confirm modal
 
 ### Admin dashboard (`/admin`)
 - [ ] **FE-68** Everything in staff plus: compliance cases (WARNED / ESCALATED) with evidence, **freeze / unfreeze milestones** and **emergency shutdown** (signed by the admin's connected treasury wallet; confirmation dialog that states the consequences), takeover execution (`proposeNewDeveloper`) and repo lockout, relayer health (balance, spend, queue, circuit breaker), project gas ledgers, staff management, system settings (tolerance, token allow-list, relayer limits), audit log viewer, analytics.

@@ -167,7 +167,7 @@ export class ApiError extends Error {
 }
 
 interface ApiFetchOptions {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH";
   body?: unknown;
   signal?: AbortSignal;
 }
@@ -179,7 +179,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { method = "GET", body, signal } = options;
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (method === "POST") headers["Content-Type"] = "application/json";
+  if (method === "POST" || method === "PATCH") headers["Content-Type"] = "application/json";
 
   const res = await fetch(`${getExpressApi()}${path}`, {
     method,
@@ -273,6 +273,171 @@ export async function fetchSession(signal?: AbortSignal): Promise<AuthUser | nul
 /** Logout answers 204 with no body. */
 export async function logoutSession(): Promise<void> {
   await apiFetch<void>("/auth/logout", { method: "POST", body: {} });
+}
+
+// ── Applications and admin ────────────────────────────────────────────────
+
+export type ApplicationStatus = "pending" | "approved" | "rejected";
+export type ManagedRole = "founder" | "staff" | "investor";
+export type UserRole = ManagedRole | "admin";
+
+export interface ApplicationDto {
+  id: string;
+  walletAddress: string;
+  projectName: string;
+  summary: string;
+  websiteUrl: string;
+  pitchDeckUrl: string;
+  repoUrl: string | null;
+  contact: string | null;
+  status: ApplicationStatus;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  kycVerifiedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  userId?: string;
+  reviewedBy?: string | null;
+  kycVerifiedBy?: string | null;
+}
+
+export interface AdminUserDto {
+  id: string;
+  address: string;
+  role: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface Page<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ApplicationInput {
+  projectName: string;
+  summary: string;
+  websiteUrl: string;
+  pitchDeckUrl: string;
+  repoUrl?: string;
+  contact?: string;
+}
+
+function buildQuery(params: Record<string, string | number | undefined>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export async function submitApplication(
+  body: ApplicationInput,
+  signal?: AbortSignal,
+): Promise<ApplicationDto> {
+  const clean: Record<string, string> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (typeof value === "string" && value !== "") clean[key] = value;
+  }
+  const data = await apiFetch<{ application: ApplicationDto }>("/applications", {
+    method: "POST",
+    body: clean,
+    signal,
+  });
+  return data.application;
+}
+
+export async function fetchMyApplication(signal?: AbortSignal): Promise<ApplicationDto | null> {
+  const data = await apiFetch<{ application: ApplicationDto | null }>("/applications/mine", {
+    signal,
+  });
+  return data.application;
+}
+
+export function listAdminApplications(
+  params: { status?: ApplicationStatus; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+): Promise<Page<ApplicationDto>> {
+  return apiFetch<Page<ApplicationDto>>(`/admin/applications${buildQuery(params)}`, { signal });
+}
+
+export async function getAdminApplication(id: string, signal?: AbortSignal): Promise<ApplicationDto> {
+  const data = await apiFetch<{ application: ApplicationDto }>(
+    `/admin/applications/${encodeURIComponent(id)}`,
+    { signal },
+  );
+  return data.application;
+}
+
+export async function approveApplication(
+  id: string,
+  note?: string,
+  signal?: AbortSignal,
+): Promise<ApplicationDto> {
+  const body: { kycVerified: true; note?: string } = { kycVerified: true };
+  if (note) body.note = note;
+  const data = await apiFetch<{ application: ApplicationDto }>(
+    `/admin/applications/${encodeURIComponent(id)}/approve`,
+    { method: "POST", body, signal },
+  );
+  return data.application;
+}
+
+export async function rejectApplication(
+  id: string,
+  note: string,
+  signal?: AbortSignal,
+): Promise<ApplicationDto> {
+  const data = await apiFetch<{ application: ApplicationDto }>(
+    `/admin/applications/${encodeURIComponent(id)}/reject`,
+    { method: "POST", body: { note }, signal },
+  );
+  return data.application;
+}
+
+export function listAdminUsers(
+  params: { role?: UserRole; q?: string; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+): Promise<Page<AdminUserDto>> {
+  return apiFetch<Page<AdminUserDto>>(`/admin/users${buildQuery(params)}`, { signal });
+}
+
+export async function setUserRole(
+  address: string,
+  role: ManagedRole,
+  signal?: AbortSignal,
+): Promise<AdminUserDto> {
+  const data = await apiFetch<{ user: AdminUserDto }>(
+    `/admin/users/${encodeURIComponent(address.toLowerCase())}/role`,
+    { method: "PATCH", body: { role }, signal },
+  );
+  return data.user;
+}
+
+/** Map an API/network error to a safe UI message; never exposes stacks or raw objects. */
+export function describeApiError(err: unknown, fallback = "Something went wrong"): string {
+  if (!(err instanceof ApiError)) return fallback;
+  if (err.status === 401) return "Please sign in";
+  if (err.status === 403) return "You do not have permission for this action";
+  if (err.status === 404) return "Not found";
+  if (err.status === 400) {
+    const fields = fieldDetails(err.details);
+    return fields || err.message;
+  }
+  return err.message || fallback;
+}
+
+function fieldDetails(details: unknown): string {
+  if (!Array.isArray(details)) return "";
+  const parts: string[] = [];
+  for (const item of details) {
+    if (!isRecord(item) || typeof item.message !== "string") continue;
+    parts.push(typeof item.path === "string" && item.path ? `${item.path}: ${item.message}` : item.message);
+  }
+  return parts.join("; ");
 }
 
 // ── Ponder GraphQL helpers ────────────────────────────────────────────────
