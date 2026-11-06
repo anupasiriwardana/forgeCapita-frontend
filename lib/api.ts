@@ -181,14 +181,22 @@ async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise
   const headers: Record<string, string> = { Accept: "application/json" };
   if (method === "POST" || method === "PATCH") headers["Content-Type"] = "application/json";
 
-  const res = await fetch(`${getExpressApi()}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    cache: "no-store",
-    credentials: "include",
-    signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${getExpressApi()}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: "no-store",
+      credentials: "include",
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof TypeError && !signal?.aborted) {
+      throw new ApiError(0, "Cannot reach the API. Check that it is running and try again.");
+    }
+    throw err;
+  }
 
   if (res.status === 204) return undefined as T;
 

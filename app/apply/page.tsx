@@ -71,7 +71,7 @@ function validate(f: FormState): string | null {
 export default function ApplyPage() {
   const { user, role, loading, signIn } = useAuth();
   const [application, setApplication] = useState<ApplicationDto | null>(null);
-  const [fetched, setFetched] = useState(false);
+  const [fetchedFor, setFetchedFor] = useState<string | undefined>(undefined);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -90,12 +90,12 @@ export default function ApplyPage() {
         if (signal.aborted) return;
         setApplication(found);
         setLoadError("");
-        setFetched(true);
+        setFetchedFor(userId);
       })
       .catch((err: unknown) => {
         if (signal.aborted) return;
         setLoadError(describeApiError(err, "Failed to load your application"));
-        setFetched(true);
+        setFetchedFor(userId);
       });
     return () => controller.abort();
   }, [userId, canApply, reloadKey]);
@@ -122,7 +122,7 @@ export default function ApplyPage() {
       try {
         await submitApplication(body);
         setForm(EMPTY_FORM);
-        setFetched(false);
+        setFetchedFor(undefined);
         setReloadKey((k) => k + 1);
       } catch (err) {
         setFormError(describeApiError(err, "Could not submit the application"));
@@ -137,7 +137,7 @@ export default function ApplyPage() {
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   let content: React.ReactNode;
-  if (loading) {
+  if (loading && !user) {
     content = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
   } else if (!user) {
     content = (
@@ -154,7 +154,7 @@ export default function ApplyPage() {
         Applications are for investors and founders. Review them in <Link href="/admin">Admin</Link>.
       </div>
     );
-  } else if (!fetched) {
+  } else if (fetchedFor !== userId) {
     content = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
   } else {
     const showForm = !loadError && (application === null || application.status === "rejected");

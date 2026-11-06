@@ -180,6 +180,9 @@ function ApplicationsSection({ selfAddress }: { selfAddress: string }) {
             {t.label}
           </button>
         ))}
+        <button type="button" className="btn-secondary" onClick={() => setReloadKey((k) => k + 1)}>
+          Refresh
+        </button>
       </div>
       {error && <div role="alert" className="alert alert-error" style={{ marginBottom: "12px" }}>{error}</div>}
       {success && <div role="status" className="alert alert-success" style={{ marginBottom: "12px" }}>{success}</div>}
@@ -386,7 +389,7 @@ function UsersSection() {
 export default function AdminPage() {
   const { user, role, loading, signIn } = useAuth();
   let content: React.ReactNode;
-  if (loading) {
+  if (loading && !user) {
     content = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
   } else if (!user) {
     content = (

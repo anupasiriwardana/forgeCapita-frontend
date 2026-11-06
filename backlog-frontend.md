@@ -105,6 +105,10 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-29** Create page: separate "retry profile only" action. Today a failed sign-in or profile save shows an error, and resubmitting the form would launch a second project on-chain.
 - [ ] **FE-30** Auth error messages: dedicated 403 text. Currently any 403 shows "Request origin is not allowed by the API." although it can also be a role/ownership refusal.
 - Runtime NOT verified (needs a wallet, running api with ADMIN_WALLETS and CORS_ORIGINS including http://localhost:3000).
+- Fix WS-07.3l/4l-fix (2026-11-06, code verified, runtime not verified): AuthProvider no longer logs out on wallet change/disconnect (only explicit signOut), signing keyed per wallet, 120 s signature timeout, loading while wagmi reconnects. Note on FE-26: "address mismatch/disconnect -> signed out" now means signed out locally only; the server session is not revoked.
+- [ ] **FE-31** Investigate RainbowKit connect button flicker/missing on refresh (likely wagmi reconnect/hydration in WSL dev).
+- [ ] **FE-32** Session left valid on wallet switch: the previous wallet's cookie session stays valid on the server until idle/absolute expiry or explicit sign out. Revoke other sessions of the same browser on verify, or add "sign out everywhere" (api + frontend).
+- [ ] **FE-33** Ask user: why one wallet showed 'founder' before any approval (likely a role set earlier via Users in a previous test); unresolved, not investigated.
 
 ## Phase 4: Marketplace & project pages
 

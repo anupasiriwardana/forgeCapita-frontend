@@ -23,6 +23,9 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const SIGN_TIMEOUT_MS = 120_000;
+const SIGN_TIMEOUT_MESSAGE = "Signature request timed out. Please try again.";
+
 function isUserRejection(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as { name?: unknown; code?: unknown; message?: unknown };
@@ -35,6 +38,7 @@ function isUserRejection(err: unknown): boolean {
 
 function describeError(err: unknown): string {
   if (isUserRejection(err)) return "Signature request was rejected.";
+  if (err instanceof Error && err.message === SIGN_TIMEOUT_MESSAGE) return SIGN_TIMEOUT_MESSAGE;
   if (err instanceof ApiError) {
     if (err.status === 403) return "Request origin is not allowed by the API.";
     return err.message;
@@ -43,39 +47,27 @@ function describeError(err: unknown): string {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { address } = useAccount();
+  const { address, status } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const [session, setSession] = useState<AuthUser | null>(null);
   const [checkedFor, setCheckedFor] = useState<string | undefined>(undefined);
-  const [signing, setSigning] = useState(false);
+  const [signingFor, setSigningFor] = useState<string | undefined>(undefined);
   const [errorState, setErrorState] = useState<{ address: string; message: string } | null>(null);
   const busyRef = useRef(false);
   const addressRef = useRef<string | undefined>(address);
-  const hadSessionRef = useRef(false);
 
   useEffect(() => {
     addressRef.current = address;
   }, [address]);
 
   useEffect(() => {
-    hadSessionRef.current = session !== null;
-  }, [session]);
-
-  useEffect(() => {
-    if (!address) {
-      if (hadSessionRef.current) void logoutSession().catch(() => undefined);
-      return;
-    }
+    busyRef.current = false;
+    if (!address) return;
     const controller = new AbortController();
     fetchSession(controller.signal)
-      .then(async (found) => {
+      .then((found) => {
         if (controller.signal.aborted) return;
-        if (found && found.address.toLowerCase() !== address.toLowerCase()) {
-          setSession(null);
-          await logoutSession().catch(() => undefined);
-        } else {
-          setSession(found);
-        }
+        setSession(found && found.address.toLowerCase() === address.toLowerCase() ? found : null);
       })
       .catch(() => {
         if (!controller.signal.aborted) setSession(null);
@@ -88,18 +80,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const user =
     address && session && session.address.toLowerCase() === address.toLowerCase() ? session : null;
-  const loading = signing || (address !== undefined && checkedFor !== address);
+  const reconnecting = status === "connecting" || status === "reconnecting";
+  const signing = address !== undefined && signingFor === address;
+  const loading = reconnecting || signing || (address !== undefined && checkedFor !== address);
   const error = errorState && errorState.address === address ? errorState.message : null;
 
   const signIn = useCallback(async (): Promise<boolean> => {
     const wallet = addressRef.current;
     if (!wallet || busyRef.current) return false;
     busyRef.current = true;
-    setSigning(true);
+    setSigningFor(wallet);
     setErrorState(null);
     try {
       const { message } = await requestNonce(wallet);
-      const signature = await signMessageAsync({ message });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(SIGN_TIMEOUT_MESSAGE)), SIGN_TIMEOUT_MS);
+      });
+      let signature: string;
+      try {
+        signature = await Promise.race([signMessageAsync({ message }), timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
       const verified = await verifySignature(wallet, signature);
       if (addressRef.current?.toLowerCase() !== wallet.toLowerCase()) return false;
       setSession(verified);
@@ -109,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false;
     } finally {
       busyRef.current = false;
-      setSigning(false);
+      setSigningFor(undefined);
     }
   }, [signMessageAsync]);
 
