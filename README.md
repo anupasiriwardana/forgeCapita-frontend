@@ -34,3 +34,8 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Chains and addresses
+Supported chains: Arbitrum Sepolia (421614) and BSC Testnet (97), configured in `config/chains.ts` and `config/wagmi.ts`.
+Public contract addresses and indexer start blocks live in `config/addresses.ts` (`getAddresses(chainId)`).
+Optional env vars (see `.env.example`): `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_RPC_URL_421614`, `NEXT_PUBLIC_RPC_URL_97`.

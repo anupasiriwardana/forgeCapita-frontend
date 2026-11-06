@@ -4,9 +4,9 @@
 **Framework:** Next.js 16 (App Router) / React 19 / TypeScript / Tailwind CSS  
 **Web3 Stack:** Wagmi 2.x / Viem 2.x / RainbowKit 2.x  
 **Port:** 3000  
-**Last Updated:** 2026-11-01 (docs only; code unchanged)  
+**Last Updated:** 2026-11-06  
 
-**Current focus:** Step: none (next frontend steps: WS-03.5a, WS-05.3 after WS-05.2 indexer) | State: idle | Updated: 2026-11-01  
+**Current focus:** Step: WS-03.5a (FE-10 done) | State: awaiting-review | Updated: 2026-11-06. Next frontend step: WS-05.3  
 
 ---
 
@@ -39,7 +39,7 @@ The core page layouts (Marketplace Dashboard, Project Detail, Milestone Voting, 
 ## 3. Critical Issues & Immediate Blockers
 
 ### A. Network & Chain Configuration Mismatch
-- **Status:** **CRITICAL BLOCKER** 🚨
+- **Status:** **RESOLVED in config 2026-11-06 (WS-03.5a / FE-10)**: `config/wagmi.ts` now uses Arbitrum Sepolia and BSC Testnet with per-chain transports; `config/addresses.ts` holds the v2 addresses. Remaining: UI chain selection, and v1 pages still read `NEXT_PUBLIC_FACTORY_ADDRESS` / `NEXT_PUBLIC_P2P_ADDRESS` until WS-05.3. Not verified in a browser. The text below is the original (v1) problem description.
 - **Problem:**
   - According to `about.md` and `forgecapita-indexer`, ForgeCapita contracts are deployed and verified on **Arbitrum Sepolia** (Chain ID `421614`) and **BSC Testnet** (Chain ID `97`).
   - However, `config/wagmi.ts` strictly configures **Ethereum Sepolia** (`sepolia`, Chain ID `11155111`):
@@ -110,5 +110,7 @@ The backlog was rewritten (`backlog-frontend.md`). Changes from what this report
 Re-plan 2026-11-01: the v1 hooks, ABIs, stubs and pages are discarded and rebuilt for v2; FE-10 is WS-03.5a, FE-13 is WS-05.3, FE-12 is only the WalletConnect ID and RPC URLs.
 
 ## Change log
+
+2026-11-06  WS-03.5a (FE-10)  multi-chain wagmi config (421614, 97), `config/chains.ts`, `config/addresses.ts` (v2 addresses and start blocks), `.env.example`, `.gitignore` negation, README note; FE-10b added (raise tsconfig target to ES2020)  - verified by: addresses and start blocks compared character by character with deployments-v2.md; grep config/ for sepolia/SEPOLIA_RPC (only Arbitrum Sepolia); package files unchanged; `npx tsc --noEmit` only pre-existing lib/api.ts(219,44); `npm run lint` 0 errors, 3 pre-existing warnings. NOT verified: public RPCs reachable, wallet connection in a browser, build
 
 2026-11-01  re-plan  v2-first re-plan approved by the user; backlog note added above FE-10, FE-10 -> WS-03.5a, FE-13 -> WS-05.3, FE-12 reduced; no code changed  - verified by: docs only, not verified against code
