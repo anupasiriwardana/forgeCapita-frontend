@@ -127,6 +127,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 ### Investor dashboard (`/investor`)
 - [ ] **FE-55** Portfolio overview (backed projects, token balances, staked amounts, yield claimed); open polls needing attention; claim yield; refunds; queued gasless request history.
+  - Partial (2026-11-06, WS-09.4-lean): minimal `/portfolio` done (positions list from indexer `GET /investors/:address/positions`: invested net of refunds, refunded, staked, token balance, yield claimed, Navbar link). Remaining: open polls needing attention, refunds list, gasless request history, claimable yield figure (currently "open project"), project-name join beyond first 100 projects. Runtime not verified.
 
 ### Founder dashboard (`/founder`)
 - [ ] **FE-58** My projects: round status, funds, milestone progress, gas ledger overflow, pending creator funds (`creatorPendingFunds` → `claimCreatorFunds()`), compliance state with plain-language explanation, shadow wallet and change request, repo link, agreement status.

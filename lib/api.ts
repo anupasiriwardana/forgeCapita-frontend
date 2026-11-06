@@ -244,6 +244,54 @@ async function ponderQuery<T = unknown>(
   return json.data as T;
 }
 
+/** All amounts are decimal wei strings; `projectId` is the composite project id. */
+export interface InvestorPosition {
+  chainId: number;
+  projectId: string;
+  escrowAddress: string;
+  state: string;
+  tokenSymbol: string;
+  invested: string;
+  refunded: string;
+  depositTokensClaimed: string;
+  stakedBalance: string;
+  yieldClaimed: string;
+  tokensHeld: string;
+  tokensClaimed: string;
+}
+
+export interface InvestorPositionsResponse {
+  address: string;
+  positions: InvestorPosition[];
+  limit: number;
+  offset: number;
+}
+
+export async function fetchInvestorPositions(
+  address: string,
+  params: { chainId?: number; limit?: number; offset?: number } = {},
+  signal?: AbortSignal
+): Promise<InvestorPositionsResponse> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value));
+  }
+  const qs = query.toString();
+  const res = await fetch(
+    `${getPonderApi()}/investors/${encodeURIComponent(address)}/positions${qs ? `?${qs}` : ""}`,
+    { headers: { Accept: "application/json" }, cache: "no-store", signal }
+  );
+  const json: unknown = await res.json().catch(() => null);
+  if (!res.ok || !isRecord(json)) {
+    throw new Error(
+      isRecord(json) && typeof json.error === "string"
+        ? json.error
+        : `Request failed (${res.status})`
+    );
+  }
+  return json as unknown as InvestorPositionsResponse;
+}
+
 /** `projectId` is the composite project id (equals the indexer's project.id). */
 export async function fetchMilestonesByProject(
   projectId: string
