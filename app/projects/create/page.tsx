@@ -1,16 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useWriteContract, useAccount, useChainId, usePublicClient } from "wagmi";
 import { parseEther, parseEventLogs } from "viem";
 import { useRouter } from "next/navigation";
 import { chainName } from "@/config/chains";
-import { ApiError, projectIdOf, upsertProfile, type ProfileInput } from "@/lib/api";
+import {
+  ApiError,
+  describeFounderError,
+  fetchFounderMe,
+  fetchLaunchEligibility,
+  projectIdOf,
+  shortAddr,
+  upsertProfile,
+  type LaunchEligibilityDto,
+  type ProfileInput,
+  type ShadowWalletDto,
+} from "@/lib/api";
 import { ABIS, getContractConfig } from "@/lib/contracts";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { getFeeOverrides } from "@/lib/fees";
 
-const PROFILE_MAX_ATTEMPTS = 5;
-const PROFILE_RETRY_DELAY_MS = 3500;
+const PROFILE_MAX_ATTEMPTS = 8;
+const PROFILE_RETRY_DELAY_MS = 4000;
+const PROFILE_MANUAL_MAX_ATTEMPTS = 10;
+const PROFILE_MANUAL_RETRY_DELAY_MS = 5000;
 
 interface MilestoneRow {
   description: string;
@@ -44,7 +59,41 @@ export default function CreateProjectPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [saveNote, setSaveNote] = useState("");
-  const { user, signIn } = useAuth();
+  const { user, role, loading: authLoading, signIn } = useAuth();
+  const [eligibility, setEligibility] = useState<LaunchEligibilityDto | null>(null);
+  const [freeWallets, setFreeWallets] = useState<ShadowWalletDto[]>([]);
+  const [shadowWalletId, setShadowWalletId] = useState("");
+  const [gateError, setGateError] = useState("");
+  const [launchedId, setLaunchedId] = useState("");
+  const [pendingProfile, setPendingProfile] = useState<ProfileInput | null>(null);
+  const [profileError, setProfileError] = useState("");
+  const isFounder = role === "founder";
+
+  useEffect(() => {
+    if (!isFounder) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    fetchLaunchEligibility(signal)
+      .then(async (result) => {
+        const me = result.eligible ? await fetchFounderMe(signal) : null;
+        if (signal.aborted) return;
+        setEligibility(result);
+        setFreeWallets(me ? me.wallets.filter((w) => w.status === "approved" && w.projectId === null) : []);
+        setGateError("");
+      })
+      .catch((err: unknown) => {
+        if (!signal.aborted) setGateError(describeFounderError(err, "Could not check launch eligibility"));
+      });
+    return () => controller.abort();
+  }, [isFounder]);
+
+  const authPending = authLoading && !user;
+  const roleAllowed = user !== null && (isFounder || role === "staff" || role === "admin");
+  const roleBlocked = !authPending && !roleAllowed;
+  const founderBlocked =
+    authPending ||
+    roleBlocked ||
+    (isFounder && (!eligibility || !eligibility.eligible || shadowWalletId === "" || gateError !== ""));
 
   const { writeContractAsync } = useWriteContract();
 
@@ -65,7 +114,10 @@ export default function CreateProjectPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (pendingProfile) { setErrorMsg("Your project is already launched; save its profile first."); return; }
     if (!isConnected) { setErrorMsg("Please connect your wallet first."); return; }
+    if (roleBlocked) { setErrorMsg("Only approved founders can launch projects."); return; }
+    if (founderBlocked) { setErrorMsg("Complete the launch requirements and pick a shadow wallet first."); return; }
     if (totalPct !== 100) { setErrorMsg("Milestone percentages must sum to 100%."); return; }
     if (!name || !description || !fundingGoalEth) { setErrorMsg("Name, description, and funding goal are required."); return; }
 
@@ -91,6 +143,7 @@ export default function CreateProjectPage() {
           parseEther(fundingGoalEth),
           BigInt(fundingDays),
         ],
+        ...(await getFeeOverrides(publicClient)),
       });
 
       setStatus("waiting");
@@ -108,20 +161,10 @@ export default function CreateProjectPage() {
         return;
       }
       const projectId = projectIdOf(chainId, launched.args.milestoneEscrow);
+      setLaunchedId(projectId);
 
       // Step 2: off-chain metadata
-      setStatus("saving");
-      if (!user) {
-        const ok = await signIn();
-        if (!ok) {
-          setStatus("error");
-          setErrorMsg(
-            "The project is already launched on-chain, but the profile was not saved because sign-in failed. Sign in with your wallet and retry saving the profile."
-          );
-          return;
-        }
-      }
-      await saveProfileWithRetry({
+      const payload: ProfileInput = {
         projectId,
         name,
         description,
@@ -129,18 +172,66 @@ export default function CreateProjectPage() {
         pitchDeckUrl,
         founderBio,
         websiteUrl,
-      });
-
-      setStatus("done");
-      setSuccessMsg(`🎉 Project launched! Redirecting to your project page...`);
-      setTimeout(() => router.push(`/projects/${encodeURIComponent(projectId)}`), 2500);
+        ...(isFounder ? { shadowWalletId } : {}),
+      };
+      setPendingProfile(payload);
+      setStatus("saving");
+      if (!user) {
+        const ok = await signIn();
+        if (!ok) {
+          setProfileError("Sign-in failed, so the profile was not saved. Sign in with your wallet and save the profile again.");
+          setStatus("error");
+          return;
+        }
+      }
+      try {
+        await saveProfileWithRetry(payload, PROFILE_MAX_ATTEMPTS, PROFILE_RETRY_DELAY_MS);
+      } catch (err) {
+        setProfileError(err instanceof Error ? err.message : "Profile save failed.");
+        setStatus("error");
+        return;
+      }
+      finishSuccess(projectId);
     } catch (err) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "An unexpected error occurred.");
     }
   }
 
-  async function saveProfileWithRetry(input: ProfileInput): Promise<void> {
+  function finishSuccess(projectId: string) {
+    setPendingProfile(null);
+    setProfileError("");
+    setLaunchedId("");
+    setStatus("done");
+    setSuccessMsg(`🎉 Project launched! Redirecting to your project page...`);
+    setTimeout(() => router.push(`/projects/${encodeURIComponent(projectId)}`), 2500);
+  }
+
+  async function retryProfileNow() {
+    if (!pendingProfile) return;
+    if (!user) {
+      const ok = await signIn();
+      if (!ok) { setProfileError("Sign-in failed. Sign in with your wallet and try again."); return; }
+    }
+    setStatus("saving");
+    try {
+      await saveProfileWithRetry(pendingProfile, PROFILE_MANUAL_MAX_ATTEMPTS, PROFILE_MANUAL_RETRY_DELAY_MS);
+      finishSuccess(pendingProfile.projectId);
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : "Profile save failed.");
+      setStatus("error");
+    }
+  }
+
+  function startOver() {
+    setPendingProfile(null);
+    setProfileError("");
+    setLaunchedId("");
+    setSaveNote("");
+    setStatus("idle");
+  }
+
+  async function saveProfileWithRetry(input: ProfileInput, maxAttempts: number, delayMs: number): Promise<void> {
     for (let attempt = 1; ; attempt++) {
       try {
         await upsertProfile(input);
@@ -148,15 +239,13 @@ export default function CreateProjectPage() {
         return;
       } catch (err) {
         if (!(err instanceof ApiError)) throw err;
-        if (err.status === 401) throw new Error("Sign in with your wallet to save the profile");
-        if (err.status === 403) throw new Error("Only the project's developer wallet can edit this profile");
-        if (err.status !== 404) throw err;
-        if (attempt >= PROFILE_MAX_ATTEMPTS) {
+        if (err.status !== 404) throw new Error(describeFounderError(err));
+        if (attempt >= maxAttempts) {
           setSaveNote("");
           throw new Error("Project not indexed yet; try again shortly");
         }
-        setSaveNote(`Waiting for indexer (attempt ${attempt}/${PROFILE_MAX_ATTEMPTS})...`);
-        await new Promise<void>((resolve) => setTimeout(resolve, PROFILE_RETRY_DELAY_MS));
+        setSaveNote(`Waiting for indexer (${attempt}/${maxAttempts})`);
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
       }
     }
   }
@@ -246,6 +335,80 @@ export default function CreateProjectPage() {
         <div className="alert alert-warning fade-in-up" style={{ marginBottom: "24px" }}>
           <span style={{ flexShrink: 0 }}>🔌</span>
           <span>Please connect your wallet to launch a project.</span>
+        </div>
+      )}
+
+      {pendingProfile && launchedId && profileError && (
+        <div className="alert alert-warning fade-in-up" style={{ marginBottom: "24px", display: "block" }}>
+          <p style={{ margin: "0 0 8px" }}>
+            Project launched on-chain:{" "}
+            <Link href={`/projects/${encodeURIComponent(launchedId)}`} style={{ color: "var(--brand-accent)" }}>
+              {launchedId}
+            </Link>
+            . Profile not saved yet: the indexer is still catching up.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>{profileError}</p>
+          <p style={{ margin: "0 0 12px" }}>Do not launch again.</p>
+          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+            <button type="button" className="btn-primary" onClick={() => void retryProfileNow()} disabled={isLoading}>
+              {isLoading ? (saveNote || "Saving Profile...") : "Save profile now"}
+            </button>
+            <button type="button" onClick={startOver} disabled={isLoading} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", textDecoration: "underline" }}>
+              Start over
+            </button>
+          </div>
+        </div>
+      )}
+      {roleBlocked && (
+        <div className="glass-card fade-in-up" style={{ padding: "24px", marginBottom: "24px" }}>
+          <h2 style={{ fontSize: "18px", marginBottom: "12px" }}>Only approved founders can launch projects</h2>
+          {!user && (
+            <p style={{ marginBottom: "12px" }}>
+              <button type="button" className="btn-secondary" onClick={() => void signIn()}>Sign in</button>
+            </p>
+          )}
+          <Link href="/apply" style={{ color: "var(--brand-accent)" }}>Apply to become a founder</Link>
+        </div>
+      )}
+      {isFounder && (
+        <div className="glass-card fade-in-up" style={{ padding: "24px", marginBottom: "24px" }}>
+          <h2 style={{ fontSize: "18px", marginBottom: "12px" }}>Launch requirements</h2>
+          {gateError && <div role="alert" className="alert alert-error">{gateError}</div>}
+          {!gateError && !eligibility && <p style={{ color: "var(--text-secondary)" }}>Checking eligibility…</p>}
+          {eligibility && !eligibility.eligible && (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              <li>{eligibility.checks.applicationApproved ? "✓" : "✗"} Application approved{" "}
+                {!eligibility.checks.applicationApproved && <Link href="/apply" style={{ color: "var(--brand-accent)" }}>(apply)</Link>}
+              </li>
+              <li>{eligibility.checks.agreementAccepted ? "✓" : "✗"} Agreement accepted{" "}
+                {!eligibility.checks.agreementAccepted && <Link href="/founder" style={{ color: "var(--brand-accent)" }}>(sign it)</Link>}
+              </li>
+              <li>{eligibility.checks.shadowWalletAvailable ? "✓" : "✗"} Approved shadow wallet available{" "}
+                {!eligibility.checks.shadowWalletAvailable && <Link href="/founder" style={{ color: "var(--brand-accent)" }}>(request one)</Link>}
+              </li>
+            </ul>
+          )}
+          {eligibility?.eligible && freeWallets.length === 0 && (
+            <p style={{ color: "var(--text-secondary)" }}>
+              No free approved wallet: request one on <Link href="/founder" style={{ color: "var(--brand-accent)" }}>/founder</Link>
+            </p>
+          )}
+          {eligibility?.eligible && freeWallets.length > 0 && (
+            <div>
+              <label className="label" htmlFor="shadowWalletId">Shadow wallet *</label>
+              <select
+                id="shadowWalletId"
+                className="input-field"
+                value={shadowWalletId}
+                onChange={(e) => setShadowWalletId(e.target.value)}
+              >
+                <option value="">Select a wallet</option>
+                {freeWallets.map((w) => (
+                  <option key={w.id} value={w.id}>{shortAddr(w.address)}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       )}
 
@@ -406,7 +569,7 @@ export default function CreateProjectPage() {
           type="submit"
           className="btn-primary"
           style={{ width: "100%", padding: "16px", fontSize: "16px" }}
-          disabled={isLoading || !isConnected}
+          disabled={isLoading || !isConnected || founderBlocked || pendingProfile !== null}
         >
           {isLoading ? (
             <>

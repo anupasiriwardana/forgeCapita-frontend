@@ -3,7 +3,8 @@
 import { useState, Suspense } from "react";
 import { useParams } from "next/navigation";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId, usePublicClient } from "wagmi";
+import { getFeeOverrides } from "@/lib/fees";
 import { fetchMilestonesByProject, parseProjectId, type Milestone } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import Link from "next/link";
@@ -27,6 +28,7 @@ function MilestoneCard({
   const { isConnected } = useAccount();
   const walletChainId = useChainId();
   const { writeContractAsync } = useWriteContract();
+  const feeClient = usePublicClient({ chainId: parseProjectId(projectId).chainId });
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [voting, setVoting] = useState<"yes" | "no" | null>(null);
   const [voteStatus, setVoteStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
@@ -61,6 +63,7 @@ function MilestoneCard({
         abi: ABIS.escrow,
         functionName: "vote",
         args: [support],
+        ...(await getFeeOverrides(feeClient)),
       });
       setTxHash(hash);
       setVoteStatus("success");

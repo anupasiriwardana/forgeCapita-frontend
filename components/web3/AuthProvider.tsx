@@ -24,6 +24,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const SIGN_TIMEOUT_MS = 120_000;
+const RECONNECT_SETTLE_MS = 1500;
 const SIGN_TIMEOUT_MESSAGE = "Signature request timed out. Please try again.";
 
 function isUserRejection(err: unknown): boolean {
@@ -53,8 +54,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [checkedFor, setCheckedFor] = useState<string | undefined>(undefined);
   const [signingFor, setSigningFor] = useState<string | undefined>(undefined);
   const [errorState, setErrorState] = useState<{ address: string; message: string } | null>(null);
+  const [settled, setSettled] = useState(false);
   const busyRef = useRef(false);
   const addressRef = useRef<string | undefined>(address);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(true), RECONNECT_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     addressRef.current = address;
@@ -81,8 +88,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const user =
     address && session && session.address.toLowerCase() === address.toLowerCase() ? session : null;
   const reconnecting = status === "connecting" || status === "reconnecting";
+  // The first client render reports "disconnected" before wagmi starts reconnecting; hold loading briefly.
+  const awaitingReconnect = !settled && status === "disconnected";
   const signing = address !== undefined && signingFor === address;
-  const loading = reconnecting || signing || (address !== undefined && checkedFor !== address);
+  const loading = reconnecting || awaitingReconnect || signing || (address !== undefined && checkedFor !== address);
   const error = errorState && errorState.address === address ? errorState.message : null;
 
   const signIn = useCallback(async (): Promise<boolean> => {

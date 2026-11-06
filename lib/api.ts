@@ -112,6 +112,7 @@ export interface ProfileInput {
   websiteUrl?: string;
   category?: string;
   shadowWallet?: string;
+  shadowWalletId?: string;
 }
 
 export interface Milestone {
@@ -436,6 +437,114 @@ export function describeApiError(err: unknown, fallback = "Something went wrong"
     return fields || err.message;
   }
   return err.message || fallback;
+}
+
+/** Like describeApiError but keeps the server message for 400/403/409 (founder eligibility rules). */
+export function describeFounderError(err: unknown, fallback = "Something went wrong"): string {
+  if (err instanceof ApiError && (err.status === 400 || err.status === 403 || err.status === 409)) {
+    return err.message || fallback;
+  }
+  return describeApiError(err, fallback);
+}
+
+// ── Founder agreement, shadow wallets, launch eligibility ─────────────────
+
+export type ShadowWalletStatus = "pending" | "approved" | "rejected";
+
+export interface AgreementDto {
+  version: string;
+  textHash: string;
+  text: string;
+  messageTemplate: string;
+}
+
+export interface ShadowWalletDto {
+  id: string;
+  address: string;
+  status: ShadowWalletStatus;
+  reviewNote: string | null;
+  projectId: string | null;
+}
+
+export interface FounderMeDto {
+  agreement: { version: string; acceptedAt: string } | null;
+  wallets: ShadowWalletDto[];
+}
+
+export interface StaffShadowWalletDto {
+  id: string;
+  address: string;
+  status: ShadowWalletStatus;
+  reviewNote: string | null;
+  userId: string;
+  founderWallet: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+export interface LaunchEligibilityDto {
+  eligible: boolean;
+  checks: {
+    applicationApproved: boolean;
+    agreementAccepted: boolean;
+    shadowWalletAvailable: boolean;
+  };
+}
+
+export function fetchAgreement(signal?: AbortSignal): Promise<AgreementDto> {
+  return apiFetch<AgreementDto>("/agreement", { signal });
+}
+
+export function fetchFounderMe(signal?: AbortSignal): Promise<FounderMeDto> {
+  return apiFetch<FounderMeDto>("/founders/me", { signal });
+}
+
+export function fetchLaunchEligibility(signal?: AbortSignal): Promise<LaunchEligibilityDto> {
+  return apiFetch<LaunchEligibilityDto>("/founders/me/launch-eligibility", { signal });
+}
+
+export function acceptAgreement(
+  body: { typedName: string; issuedAt: string; signature: string },
+  signal?: AbortSignal,
+): Promise<{ version: string; textHash: string; acceptedAt: string }> {
+  return apiFetch("/founders/me/agreement", { method: "POST", body, signal });
+}
+
+export async function requestShadowWallet(address: string, signal?: AbortSignal): Promise<ShadowWalletDto> {
+  const data = await apiFetch<{ shadowWallet: ShadowWalletDto }>("/founders/me/shadow-wallet", {
+    method: "POST",
+    body: { address },
+    signal,
+  });
+  return data.shadowWallet;
+}
+
+export function listAdminShadowWallets(
+  status: ShadowWalletStatus | undefined,
+  limit: number,
+  offset: number,
+  signal?: AbortSignal,
+): Promise<Page<StaffShadowWalletDto>> {
+  return apiFetch<Page<StaffShadowWalletDto>>(`/admin/shadow-wallets${buildQuery({ status, limit, offset })}`, {
+    signal,
+  });
+}
+
+export async function approveShadowWallet(id: string, note?: string, signal?: AbortSignal): Promise<void> {
+  await apiFetch<unknown>(`/admin/shadow-wallets/${encodeURIComponent(id)}/approve`, {
+    method: "POST",
+    body: note ? { note } : {},
+    signal,
+  });
+}
+
+export async function rejectShadowWallet(id: string, note: string, signal?: AbortSignal): Promise<void> {
+  await apiFetch<unknown>(`/admin/shadow-wallets/${encodeURIComponent(id)}/reject`, {
+    method: "POST",
+    body: { note },
+    signal,
+  });
 }
 
 function fieldDetails(details: unknown): string {

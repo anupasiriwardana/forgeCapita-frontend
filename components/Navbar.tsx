@@ -20,6 +20,7 @@ export function Navbar() {
   const { user, role, loading, error, signIn, signOut } = useAuth();
   const links = [...NAV_LINKS];
   if (role === "investor" || role === "founder") links.push({ href: "/apply", label: "Apply" });
+  if (role === "founder") links.push({ href: "/founder", label: "Founder" });
   if (role === "staff" || role === "admin") links.push({ href: "/admin", label: "Admin" });
 
   return (

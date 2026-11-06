@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useChainId, useConfig, useReadContracts, useWriteContract } from "wagmi";
+import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { formatUnits, parseUnits } from "viem";
 import type { ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
+import { getFeeOverrides } from "@/lib/fees";
 import { phaseInputOf, refundsOpenFor } from "@/lib/projectState";
 
 type Addr = `0x${string}`;
@@ -46,6 +47,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   const config = useConfig();
   const wrongChain = walletChainId !== project.chainId;
   const { writeContractAsync } = useWriteContract();
+  const feeClient = usePublicClient({ chainId: project.chainId });
 
   const escrow = project.escrowAddress as Addr;
   const token = project.tokenAddress as Addr;
@@ -111,8 +113,8 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
     }
   }
 
-  const approve = (spender: Addr, amount: bigint) => () =>
-    writeContractAsync({ address: token, abi: ABIS.token, functionName: "approve", args: [spender, amount] });
+  const approve = (spender: Addr, amount: bigint) => async () =>
+    writeContractAsync({ address: token, abi: ABIS.token, functionName: "approve", args: [spender, amount], ...(await getFeeOverrides(feeClient)) });
 
   function handleStake(): void {
     const amount = parseAmount(stakeInput);
@@ -124,7 +126,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
     if (distAllowance < amount) calls.push({ label: "Step 1: approve tokens", run: approve(distributor, amount) });
     calls.push({
       label: calls.length ? "Step 2: stake" : "Stake",
-      run: () => writeContractAsync({ address: distributor, abi: ABIS.distributor, functionName: "stake", args: [amount] }),
+      run: async () => writeContractAsync({ address: distributor, abi: ABIS.distributor, functionName: "stake", args: [amount], ...(await getFeeOverrides(feeClient)) }),
     });
     void send("Stake", calls).then(() => setStakeInput(""));
   }
@@ -138,7 +140,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
     void send("Unstake", [
       {
         label: "Unstake",
-        run: () => writeContractAsync({ address: distributor, abi: ABIS.distributor, functionName: "withdraw", args: [amount] }),
+        run: async () => writeContractAsync({ address: distributor, abi: ABIS.distributor, functionName: "withdraw", args: [amount], ...(await getFeeOverrides(feeClient)) }),
       },
     ]).then(() => setUnstakeInput(""));
   }
@@ -147,7 +149,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
     void send("Claim yield", [
       {
         label: "Claim yield",
-        run: () => writeContractAsync({ address: distributor, abi: ABIS.distributor, functionName: "claimYield" }),
+        run: async () => writeContractAsync({ address: distributor, abi: ABIS.distributor, functionName: "claimYield", ...(await getFeeOverrides(feeClient)) }),
       },
     ]);
   }
@@ -157,7 +159,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
       void send("Refund", [
         {
           label: "Refund",
-          run: () => writeContractAsync({ address: escrow, abi: ABIS.escrow, functionName: "refundFailedCrowdfund" }),
+          run: async () => writeContractAsync({ address: escrow, abi: ABIS.escrow, functionName: "refundFailedCrowdfund", ...(await getFeeOverrides(feeClient)) }),
         },
       ]);
       return;
@@ -166,7 +168,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
     if (escrowAllowance < balance) calls.push({ label: "Step 1: approve tokens", run: approve(escrow, balance) });
     calls.push({
       label: calls.length ? "Step 2: refund" : "Refund",
-      run: () => writeContractAsync({ address: escrow, abi: ABIS.escrow, functionName: "refundDeadProject" }),
+      run: async () => writeContractAsync({ address: escrow, abi: ABIS.escrow, functionName: "refundDeadProject", ...(await getFeeOverrides(feeClient)) }),
     });
     void send("Refund", calls);
   }

@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useSendTransaction, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
+import { useSendTransaction, useWaitForTransactionReceipt, useAccount, useChainId, usePublicClient } from "wagmi";
 import { parseEther } from "viem";
+import { getFeeOverrides } from "@/lib/fees";
 import { ApiError, getProject, formatEth, fundingProgress, shortAddr, type ProjectDto } from "@/lib/api";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -53,6 +54,7 @@ function FundingPanel({ project }: { project: ProjectDto }) {
   const [txError, setTxError] = useState("");
 
   const { sendTransactionAsync } = useSendTransaction();
+  const feeClient = usePublicClient({ chainId: project.chainId });
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   useWaitForTransactionReceipt({ hash: txHash });
 
@@ -66,6 +68,7 @@ function FundingPanel({ project }: { project: ProjectDto }) {
       const hash = await sendTransactionAsync({
         to: project.escrowAddress as `0x${string}`, // Sends ETH directly to trigger the receive() fallback
         value: parseEther(ethAmount),
+        ...(await getFeeOverrides(feeClient)),
       });
       setTxHash(hash);
       setTxStatus("success");

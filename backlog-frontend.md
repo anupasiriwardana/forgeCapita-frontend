@@ -102,8 +102,12 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [x] **FE-26** `AuthProvider` / `useAuth` (`components/web3/AuthProvider.tsx`): session check on mount and address change, fresh nonce per sign-in with the message signed verbatim, address mismatch/disconnect -> signed out, double-click guard, no token or localStorage handling.
 - [x] **FE-27** Navbar session indicator: Sign in button, short address + role badge, Sign out.
 - [x] **FE-28** Create page: sign in before the profile step; profile POST retries only on 404 (5 x 3.5 s, "Waiting for indexer (n/5)"); 401/403 not retried.
-- [ ] **FE-29** Create page: separate "retry profile only" action. Today a failed sign-in or profile save shows an error, and resubmitting the form would launch a second project on-chain.
-- [ ] **FE-26a** (user-reported 2026-11-06, cosmetic) Treat the wagmi pre-reconnect `disconnected` status as loading (hydration) in `AuthProvider`/pages: a split-second "sign in" flash remains on /admin and /apply after refresh. (Not FE-34: that ID is P2P additions.)
+- [ ] **FE-66** (new, WS-07.5m) Fee buffer (`getFeeOverrides`) is applied per write site; consider a shared wrapper hook. Create page post-launch `if (!user) signIn()` is unreachable/harmless, remove when touched.
+- [ ] **CON (new, WS-07.5m)** Factory is permissionless: anyone can call `launchProject` directly and skip the website founder gate. Consider an on-chain founder allowlist/registry check (contracts backlog); the website gate only controls the normal path.
+- [ ] **API note (new, WS-07.5m)** Shadow wallet != login wallet rule is API-enforced only against the login wallet, not against other founders' personal wallets.
+- [x] **FE-29** (DONE 2026-11-06 WS-07.5n, code read + tsc/lint; runtime NOT verified; `pendingProfile` keeps the payload in page state only, lost on reload; see FE-86) Create page: separate "retry profile only" action. Today a failed sign-in or profile save shows an error, and resubmitting the form would launch a second project on-chain.
+- [x] **FE-26a** (WS-07.5l 2026-11-06, code verified, runtime NOT verified; heuristic: `AuthProvider` holds loading while wagmi is `disconnected` until a 1500 ms settle timer fires) Treat the wagmi pre-reconnect `disconnected` status as loading (hydration) in `AuthProvider`/pages: a split-second "sign in" flash remains on /admin and /apply after refresh. (Not FE-34: that ID is P2P additions.)
+- [ ] **FE-86** (added 2026-11-06) Project page 'Edit profile' form for the project's developer and staff/admin, so a profile can be saved or fixed after launch (the create-page retry state is lost on reload; stranded project 421614:0xa0891a58a00a75ed04f6a3e6ba74885348bf63d3 has no UI path yet). Optional: show 'indexer is N minutes behind' (IDX-59).
 - [ ] **FE-30** Auth error messages: dedicated 403 text. Currently any 403 shows "Request origin is not allowed by the API." although it can also be a role/ownership refusal.
 - Runtime NOT verified (needs a wallet, running api with ADMIN_WALLETS and CORS_ORIGINS including http://localhost:3000).
 - Fix WS-07.3l/4l-fix (2026-11-06, code verified, runtime not verified): AuthProvider no longer logs out on wallet change/disconnect (only explicit signOut), signing keyed per wallet, 120 s signature timeout, loading while wagmi reconnects. Note on FE-26: "address mismatch/disconnect -> signed out" now means signed out locally only; the server session is not revoked.
@@ -153,11 +157,16 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 ### Staff dashboard (`/staff`)
 - [ ] **FE-65** Applications queue (approve / request changes / reject), KYC review (secure document viewer), repo provisioning status, shadow wallet change approvals, complaints queue and thread, read-only Risk Center, takeover case preparation and signalling vote setup.
-  - Partial (2026-11-06, WS-07.4l, FIRST PART ticked per user direction): `/admin` applications queue (tabs, paging 20, detail, approve with KYC checkbox, reject with required note) and admin-only Users role management done. Remaining: request-changes, KYC document viewer, repo provisioning, shadow wallet approvals, complaints, Risk Center, takeover prep.
+  - Partial (2026-11-06, WS-07.4l, FIRST PART ticked per user direction): `/admin` applications queue (tabs, paging 20, detail, approve with KYC checkbox, reject with required note) and admin-only Users role management done. Second part done 2026-11-06 (WS-07.5l): `/admin` shadow wallet approvals queue. Remaining: request-changes, KYC document viewer, repo provisioning, complaints, Risk Center, takeover prep.
 
 - [ ] Extract duplicated `SafeLink` and `Row` helpers from `app/apply/page.tsx` and `app/admin/page.tsx` into a shared component
 - [ ] Decide whether staff may see the Users list (API allows staff to list; UI shows Users to admin only)
-- [ ] Gate `/projects/create` on approved founder status (needs WS-07.2l launch-eligibility)
+- [x] Gate `/projects/create` on approved founder status (WS-07.5l 2026-11-06: founders gated on `GET /founders/me/launch-eligibility`, checklist + disabled launch, selector of approved unbound wallets, `shadowWalletId` sent in the profile POST; code verified, runtime NOT verified; fixes in code the profile-save break left by WS-07.5a)
+- [x] `/founder` page (WS-07.5l 2026-11-06, code verified, runtime NOT verified): 3 eligibility checks, agreement text + typed name + wallet signature (message built from `messageTemplate`, checksummed wallet, trimmed name, ISO issuedAt; matches api `buildAgreementMessage`/`acceptAgreement`), shadow wallet pool list and request form (one pending at a time), Navbar Founder link for role founder. Related: FE-50 agreement and shadow wallet steps, FE-58 partial (agreement status, shadow wallet; projects/funds/etc. remain).
+- [x] `/admin` Shadow wallets queue (WS-07.5l 2026-11-06, FE-65 second part; tabs, paging 20, approve with optional note, reject with required note; code verified, runtime NOT verified)
+- [ ] `describeApiError` masks 403/404 server messages on older pages (`/apply`, `/admin`) while `describeFounderError` keeps them for 400/403/409; unify.
+- [ ] `SafeLink`/`Row` duplication still open (now also relevant to new pages).
+- [ ] FE-26a settle uses a fixed 1500 ms timer (heuristic); replace with a wagmi-based reconnect signal if it misbehaves.
 - [ ] Replace `window.confirm` role-change confirmation in `/admin` with a proper confirm modal
 
 ### Admin dashboard (`/admin`)

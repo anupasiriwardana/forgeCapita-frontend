@@ -8,6 +8,7 @@ import { isAddress, parseEther, parseUnits } from "viem";
 import { fetchActiveListings, type P2PListing } from "@/lib/api";
 import { P2PListingCard } from "@/components/P2PListingCard";
 import { ABIS, getContractConfig } from "@/lib/contracts";
+import { getFeeOverrides } from "@/lib/fees";
 
 // ── Create Listing Modal ───────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
           abi: ABIS.token,
           functionName: "approve",
           args: [p2p.address, amount],
+          ...(await getFeeOverrides(publicClient)),
         });
         const approveReceipt = await waitForTransactionReceipt(config, { hash: approveHash });
         if (approveReceipt.status !== "success") { failWith("Token approval failed (reverted)."); return; }
@@ -73,6 +75,7 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
         abi: p2p.abi,
         functionName: "createListing",
         args: [token, amount, price],
+        ...(await getFeeOverrides(publicClient)),
       });
       const receipt = await waitForTransactionReceipt(config, { hash });
       if (receipt.status !== "success") { failWith("Listing transaction failed (reverted)."); return; }
@@ -184,6 +187,7 @@ function P2PContent() {
   });
 
   const { writeContractAsync } = useWriteContract();
+  const buyClient = usePublicClient();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [buyError, setBuyError] = useState("");
   useWaitForTransactionReceipt({ hash: txHash });
@@ -204,6 +208,7 @@ function P2PContent() {
         functionName: "fillListing",
         args: [BigInt(listingNumericId)],
         value: BigInt(listing.priceInETH),
+        ...(await getFeeOverrides(buyClient)),
       });
       setTxHash(hash);
       // Optimistically remove the listing from UI
