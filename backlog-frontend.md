@@ -66,7 +66,12 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-10b** Raise `tsconfig` target from ES2017 to ES2020. `config/addresses.ts` uses `BigInt("...")` instead of bigint literals because of TS2737; the raise would also clear the pre-existing error at `lib/api.ts(219,44)`.
 - [ ] **FE-11** Chain switcher / indicator in the shell; wrong-network prompt with one-tap switch.
 - [ ] **FE-12 `[USER-ACTION]`** WalletConnect Project ID (`NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`) and dedicated RPC URLs per chain. (Reduced 2026-11-01: contract addresses moved into code at FE-10 / WS-03.5a.)
-- [ ] **FE-13** Sync v2 ABIs with `node .claude/scripts/sync-abi.js frontend <Contract>`; typed contract hooks per chain. `[BLOCKED-BY]` contracts v2.
+- [x] **FE-13** Sync v2 ABIs with `node .claude/scripts/sync-abi.js frontend <Contract>`; typed contract hooks per chain. `[BLOCKED-BY]` contracts v2.
+  - Done 2026-11-06 (WS-05.3, lean): 7 v2 ABI JSONs equal the compiled artifacts, generated `<Name>Abi.ts` (`as const`) via `npm run abis`, `lib/contracts.ts` (`ABIS`, `getContractConfig`), four v1 pages moved off `NEXT_PUBLIC_FACTORY_ADDRESS` / `NEXT_PUBLIC_P2P_ADDRESS` and JSON imports; launchProject supply scaling fixed. Not verified: build, browser or wallet behaviour.
+- [ ] **FE-13a** Create page: read the new project from the receipt with `parseEventLogs` on `ProjectLaunched` (replace the receipt hack); `createStartupProfile` must send the composite project id `<chainId>:<escrow lowercase>` to `POST /api/v1/projects/profile` (chain_id and escrow are derived server-side).
+- [ ] **FE-13b** P2P `createListing`: send the token `approve` to the exchange first.
+- [ ] **FE-13c** Status-rule helpers: `completed` first (never show a completed project as cancelled), `fundingPhase` with `CLOSE_GRACE`, show `votingEndTime`.
+- [ ] **FE-13d** Rewrite `lib/api.ts` against `/api/v1`: `GET /api/v1/projects` returns `{ items, total, limit, offset }` with camelCase fields and bigint strings; current shapes are v1. Needed before any page that lists projects works.
 - [ ] **FE-14** Transaction toast system (submitting → pending → confirmed → failed) with explorer links; sticky transaction bar on mobile.
 
 ## Phase 3: Accounts & roles

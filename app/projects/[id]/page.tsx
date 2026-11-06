@@ -6,7 +6,6 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { useSendTransaction, useWaitForTransactionReceipt, useAccount } from "wagmi";
 import { parseEther } from "viem";
 import { fetchProjectById, formatEth, fundingProgress, shortAddr } from "@/lib/api";
-import MilestoneEscrowABI from "@/config/abis/MilestoneEscrow.json";
 import Link from "next/link";
 import { Suspense } from "react";
 

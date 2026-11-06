@@ -2,13 +2,11 @@
 
 import { useState, Suspense } from "react";
 import { useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
 import { parseEther, parseUnits } from "viem";
 import { fetchActiveListings, type P2PListing, shortAddr, formatEth } from "@/lib/api";
 import { P2PListingCard } from "@/components/P2PListingCard";
-import P2PExchangeABI from "@/config/abis/P2PExchange.json";
-
-const P2P_ADDRESS = process.env.NEXT_PUBLIC_P2P_ADDRESS as `0x${string}`;
+import { getContractConfig } from "@/lib/contracts";
 
 // ── Create Listing Modal ───────────────────────────────────────────────────
 
@@ -19,18 +17,25 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
   const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [txError, setTxError] = useState("");
 
+  const chainId = useChainId();
   const { writeContractAsync } = useWriteContract();
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   useWaitForTransactionReceipt({ hash: txHash });
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    const p2p = getContractConfig(chainId, "p2pExchange");
+    if (!p2p) {
+      setTxStatus("error");
+      setTxError("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet.");
+      return;
+    }
     setTxStatus("pending");
     setTxError("");
     try {
       const hash = await writeContractAsync({
-        address: P2P_ADDRESS,
-        abi: P2PExchangeABI.abi,
+        address: p2p.address,
+        abi: p2p.abi,
         functionName: "createListing",
         args: [
           tokenAddress as `0x${string}`,
@@ -134,6 +139,7 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
 
 function P2PContent() {
   const { isConnected } = useAccount();
+  const chainId = useChainId();
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [buyingId, setBuyingId] = useState<string | null>(null);
@@ -150,12 +156,14 @@ function P2PContent() {
 
   async function handleBuy(listing: P2PListing) {
     if (!isConnected) { setBuyError("Connect your wallet to buy."); return; }
+    const p2p = getContractConfig(chainId, "p2pExchange");
+    if (!p2p) { setBuyError("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
     setBuyingId(listing.id);
     setBuyError("");
     try {
       const hash = await writeContractAsync({
-        address: P2P_ADDRESS,
-        abi: P2PExchangeABI.abi,
+        address: p2p.address,
+        abi: p2p.abi,
         functionName: "fillListing",
         args: [BigInt(listing.id)],
         value: BigInt(listing.priceInETH),

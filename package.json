@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "abis": "node scripts/generate-abis.mjs"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.11",

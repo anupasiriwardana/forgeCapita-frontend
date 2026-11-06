@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
 import { parseEther } from "viem";
 import { useRouter } from "next/navigation";
 import { createStartupProfile } from "@/lib/api";
-import FactoryABI from "@/config/abis/ForgeCapitaFactory.json";
-
-const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`;
+import { getContractConfig } from "@/lib/contracts";
 
 interface MilestoneRow {
   description: string;
@@ -17,6 +15,7 @@ interface MilestoneRow {
 export default function CreateProjectPage() {
   const router = useRouter();
   const { isConnected } = useAccount();
+  const chainId = useChainId();
 
   // Form state
   const [name, setName] = useState("");
@@ -64,6 +63,9 @@ export default function CreateProjectPage() {
     if (totalPct !== 100) { setErrorMsg("Milestone percentages must sum to 100%."); return; }
     if (!name || !description || !fundingGoalEth) { setErrorMsg("Name, description, and funding goal are required."); return; }
 
+    const factory = getContractConfig(chainId, "factory");
+    if (!factory) { setErrorMsg("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
+
     setStatus("submitting");
     setErrorMsg("");
     setSuccessMsg("");
@@ -71,13 +73,13 @@ export default function CreateProjectPage() {
     try {
       // Step 1: on-chain transaction
       const hash = await writeContractAsync({
-        address: FACTORY_ADDRESS,
-        abi: FactoryABI.abi,
+        address: factory.address,
+        abi: factory.abi,
         functionName: "launchProject",
         args: [
           name,
           symbol || name.slice(0, 4).toUpperCase(),
-          BigInt(totalSupply) * BigInt(10 ** 18),
+          BigInt(totalSupply),
           milestones.map((m) => m.description),
           milestones.map((m) => BigInt(m.percentage)),
           parseEther(fundingGoalEth),
@@ -97,7 +99,7 @@ export default function CreateProjectPage() {
         if (receipt) {
           // First topic-less address in logs is the escrow
           const deployLog = receipt.logs.find(
-            (log) => log.address.toLowerCase() !== FACTORY_ADDRESS.toLowerCase()
+            (log) => log.address.toLowerCase() !== factory.address.toLowerCase()
           );
           escrowAddress = deployLog?.address ?? receipt.logs[0]?.address;
         }

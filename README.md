@@ -39,3 +39,4 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 Supported chains: Arbitrum Sepolia (421614) and BSC Testnet (97), configured in `config/chains.ts` and `config/wagmi.ts`.
 Public contract addresses and indexer start blocks live in `config/addresses.ts` (`getAddresses(chainId)`).
 Optional env vars (see `.env.example`): `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_RPC_URL_421614`, `NEXT_PUBLIC_RPC_URL_97`.
+ABIs: from the workspace root run `node .claude/scripts/sync-abi.js frontend <Contract> ...` (after contracts are compiled), then `npm run abis` here to regenerate the typed `config/abis/*Abi.ts`.

@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
 import { fetchMilestonesByProject, type Milestone } from "@/lib/api";
-import MilestoneEscrowABI from "@/config/abis/MilestoneEscrow.json";
+import { ABIS } from "@/lib/contracts";
 import Link from "next/link";
 
 function MilestoneCard({
@@ -40,7 +40,7 @@ function MilestoneCard({
     try {
       const hash = await writeContractAsync({
         address: projectId as `0x${string}`,
-        abi: MilestoneEscrowABI.abi,
+        abi: ABIS.escrow,
         functionName: "vote",
         args: [support],
       });
