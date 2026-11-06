@@ -6,7 +6,7 @@
 **Port:** 3000  
 **Last Updated:** 2026-11-06  
 
-**Current focus:** Step: WS-06.3w | State: awaiting-review | Updated: 2026-11-06. Wallet sign-in (lib/api.ts auth client, AuthProvider/useAuth, Navbar, create page gating + 404 retry) code verified (tsc 0 errors, lint clean, matches authController); runtime NOT verified. Previous: Step WS-09.4-lean awaiting-review. Minimal `/portfolio` page (lean subset of FE-55) code verified (tsc/lint clean, route and fields match indexer); runtime NOT verified (needs a wallet with positions and a browser CORS check). Previous: Step WS-09.3 awaiting-review. InvestorPanel (stake/unstake/claim yield/refunds) and p2p approve-before-listing code verified (tsc/lint clean); runtime NOT verified (needs funded wallet: refund on P3 failed-crowdfund project, stake/claim on P1). Earlier: WS-05.3d code verified (tsc/lint clean); browser-unverified, main session to check after hot-reload. WS-05.3c also still awaiting runtime verification. Previous:  WS-05.3b reviewed and committed (user-reported); WS-03.4 / FE-12 done (user-reported); project list renders 8 live projects. Still open: FE-13b, FE-13c, FE-13e..h
+**Current focus:** Step: WS-06.3w | State: idle (runtime-verified by the user, 2026-11-06) | Updated: 2026-11-06. Wallet sign-in (lib/api.ts auth client, AuthProvider/useAuth, Navbar, create page gating + 404 retry) code verified (tsc 0 errors, lint clean, matches authController); RUNTIME USER-CONFIRMED 2026-11-06 (not verified by Claude): sign-in works, admin badge for the ADMIN_WALLETS wallet, session persists after reload, wallet switch clears it, non-admin shows 'investor', CORS fine. Previous: Step WS-09.4-lean awaiting-review. Minimal `/portfolio` page (lean subset of FE-55) code verified (tsc/lint clean, route and fields match indexer); runtime NOT verified (needs a wallet with positions and a browser CORS check). Previous: Step WS-09.3 awaiting-review. InvestorPanel (stake/unstake/claim yield/refunds) and p2p approve-before-listing code verified (tsc/lint clean); runtime NOT verified (needs funded wallet: refund on P3 failed-crowdfund project, stake/claim on P1). Earlier: WS-05.3d code verified (tsc/lint clean); browser-unverified, main session to check after hot-reload. WS-05.3c also still awaiting runtime verification. Previous:  WS-05.3b reviewed and committed (user-reported); WS-03.4 / FE-12 done (user-reported); project list renders 8 live projects. Still open: FE-13b, FE-13c, FE-13e..h
 
 ---
 
@@ -110,6 +110,8 @@ The backlog was rewritten (`backlog-frontend.md`). Changes from what this report
 Re-plan 2026-11-01: the v1 hooks, ABIs, stubs and pages are discarded and rebuilt for v2; FE-10 is WS-03.5a, FE-13 is WS-05.3, FE-12 is only the WalletConnect ID and RPC URLs.
 
 ## Change log
+
+2026-11-06  WS-06.3w  Runtime verification recorded: sign-in, admin badge, session persistence after reload, wallet switch clears session, non-admin shows 'investor', CORS fine  - verified by: USER REPORT only, not verified by Claude
 
 2026-11-06  WS-06.3w  Wallet sign-in: auth client in lib/api.ts (credentials include, 204), AuthProvider/useAuth, Providers, Navbar session controls, create page sign-in + profile 404 retry; FE-25..28 done, FE-29/30 open, FE-24 partial  - verified by: read of 5 files vs authController.ts, tsc 0 errors, lint clean, package.json/lockfile unchanged; runtime not verified
 

@@ -97,6 +97,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
   - Partial 2026-11-06 (WS-06.3w): cookie credentials done (`apiFetch` `credentials: "include"`, 204 handled). CSRF header and global 401 handling remain.
 
 ### Wallet sign-in (WS-06.3w, lean wallet-first re-plan)
+> FE-25..28 runtime-verified by the user 2026-11-06 (sign-in, admin badge, reload persistence, wallet switch, CORS; user-reported, not verified by Claude).
 - [x] **FE-25** `lib/api.ts` auth client: `requestNonce`, `verifySignature`, `fetchSession` (401 -> null), `logoutSession` against `/api/v1/auth/*` (verified vs authController: paths, bodies, envelope, 204 logout).
 - [x] **FE-26** `AuthProvider` / `useAuth` (`components/web3/AuthProvider.tsx`): session check on mount and address change, fresh nonce per sign-in with the message signed verbatim, address mismatch/disconnect -> signed out, double-click guard, no token or localStorage handling.
 - [x] **FE-27** Navbar session indicator: Sign in button, short address + role badge, Sign out.
