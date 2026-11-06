@@ -2,11 +2,12 @@
 
 import { useState, Suspense } from "react";
 import { useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from "wagmi";
-import { parseEther, parseUnits } from "viem";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId, useConfig, usePublicClient } from "wagmi";
+import { waitForTransactionReceipt } from "wagmi/actions";
+import { isAddress, parseEther, parseUnits } from "viem";
 import { fetchActiveListings, type P2PListing } from "@/lib/api";
 import { P2PListingCard } from "@/components/P2PListingCard";
-import { getContractConfig } from "@/lib/contracts";
+import { ABIS, getContractConfig } from "@/lib/contracts";
 
 // ── Create Listing Modal ───────────────────────────────────────────────────
 
@@ -18,9 +19,11 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
   const [txError, setTxError] = useState("");
 
   const chainId = useChainId();
+  const { address } = useAccount();
+  const config = useConfig();
+  const publicClient = usePublicClient();
+  const [step, setStep] = useState("");
   const { writeContractAsync } = useWriteContract();
-  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
-  useWaitForTransactionReceipt({ hash: txHash });
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -30,25 +33,56 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
       setTxError("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet.");
       return;
     }
+    const failWith = (message: string) => { setTxStatus("error"); setTxError(message); };
+    if (!address || !publicClient) { failWith("Connect your wallet to create a listing."); return; }
+    const token = tokenAddress.trim();
+    if (!isAddress(token)) { failWith("Enter a valid token contract address."); return; }
+    let amount: bigint;
+    let price: bigint;
+    try {
+      amount = parseUnits(tokenAmount, 18);
+      price = parseEther(priceEth);
+    } catch {
+      failWith("Enter a valid token amount and price.");
+      return;
+    }
+    if (amount <= BigInt(0) || price <= BigInt(0)) { failWith("Amount and price must be greater than zero."); return; }
     setTxStatus("pending");
     setTxError("");
     try {
+      const allowance = await publicClient.readContract({
+        address: token,
+        abi: ABIS.token,
+        functionName: "allowance",
+        args: [address, p2p.address],
+      });
+      if (allowance < amount) {
+        setStep("Step 1 of 2: approve tokens");
+        const approveHash = await writeContractAsync({
+          address: token,
+          abi: ABIS.token,
+          functionName: "approve",
+          args: [p2p.address, amount],
+        });
+        const approveReceipt = await waitForTransactionReceipt(config, { hash: approveHash });
+        if (approveReceipt.status !== "success") { failWith("Token approval failed (reverted)."); return; }
+      }
+      setStep(allowance < amount ? "Step 2 of 2: create listing" : "Create listing");
       const hash = await writeContractAsync({
         address: p2p.address,
         abi: p2p.abi,
         functionName: "createListing",
-        args: [
-          tokenAddress as `0x${string}`,
-          parseUnits(tokenAmount, 18),
-          parseEther(priceEth),
-        ],
+        args: [token, amount, price],
       });
-      setTxHash(hash);
+      const receipt = await waitForTransactionReceipt(config, { hash });
+      if (receipt.status !== "success") { failWith("Listing transaction failed (reverted)."); return; }
       setTxStatus("success");
       setTimeout(() => { onSuccess(); onClose(); }, 2000);
     } catch (err) {
-      setTxStatus("error");
-      setTxError(err instanceof Error ? err.message : "Transaction failed");
+      const e = err as { shortMessage?: string; message?: string };
+      failWith(e.shortMessage ?? e.message ?? "Transaction failed");
+    } finally {
+      setStep("");
     }
   }
 
@@ -123,7 +157,7 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
                 </button>
                 <button type="submit" className="btn-primary" style={{ flex: 1 }} disabled={txStatus === "pending"}>
                   {txStatus === "pending" ? (
-                    <><span className="spinner" style={{ width: "14px", height: "14px" }} /> Creating...</>
+                    <><span className="spinner" style={{ width: "14px", height: "14px" }} /> {step || "Creating..."}</>
                   ) : "Create Listing"}
                 </button>
               </div>

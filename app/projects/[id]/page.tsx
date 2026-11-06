@@ -9,6 +9,7 @@ import { ApiError, getProject, formatEth, fundingProgress, shortAddr, type Proje
 import Link from "next/link";
 import { Suspense } from "react";
 import { chainName } from "@/config/chains";
+import { InvestorPanel } from "@/components/InvestorPanel";
 import {
   displayState,
   fundingPhase,
@@ -341,6 +342,7 @@ function ProjectDetailInner({ id }: { id: string }) {
         {/* Right: Funding Panel */}
         <div style={{ position: "sticky", top: "88px" }}>
           <FundingPanel project={project} />
+          <InvestorPanel project={project} nowSeconds={nowSeconds} />
         </div>
       </div>
     </div>

@@ -6,7 +6,7 @@
 **Port:** 3000  
 **Last Updated:** 2026-11-06  
 
-**Current focus:** Step: WS-05.3d | State: awaiting-review | Updated: 2026-11-06. Code verified (tsc/lint clean); browser-unverified, main session to check after hot-reload. WS-05.3c also still awaiting runtime verification. Previous:  WS-05.3b reviewed and committed (user-reported); WS-03.4 / FE-12 done (user-reported); project list renders 8 live projects. Still open: FE-13b, FE-13c, FE-13e..h
+**Current focus:** Step: WS-09.3 | State: awaiting-review | Updated: 2026-11-06. InvestorPanel (stake/unstake/claim yield/refunds) and p2p approve-before-listing code verified (tsc/lint clean); runtime NOT verified (needs funded wallet: refund on P3 failed-crowdfund project, stake/claim on P1). Earlier: WS-05.3d code verified (tsc/lint clean); browser-unverified, main session to check after hot-reload. WS-05.3c also still awaiting runtime verification. Previous:  WS-05.3b reviewed and committed (user-reported); WS-03.4 / FE-12 done (user-reported); project list renders 8 live projects. Still open: FE-13b, FE-13c, FE-13e..h
 
 ---
 
@@ -110,6 +110,8 @@ The backlog was rewritten (`backlog-frontend.md`). Changes from what this report
 Re-plan 2026-11-01: the v1 hooks, ABIs, stubs and pages are discarded and rebuilt for v2; FE-10 is WS-03.5a, FE-13 is WS-05.3, FE-12 is only the WalletConnect ID and RPC URLs.
 
 ## Change log
+
+2026-11-06  WS-09.3 (FE-13b, FE-32 user-paid parts)  New components/InvestorPanel.tsx (position reads, stake with approve, unstake with vote-lock block, claim yield, refundFailedCrowdfund / approve + refundDeadProject, shown only when refundsOpenFor, chain guard, receipt-based success) wired into project page; p2p handleCreate now approves before createListing with allowance check and isAddress validation. Follow-ups FE-13k..m  - verified by: code reading, ABI function names confirmed in config/abis, npx tsc --noEmit 0 errors, npm run lint clean, package.json/lockfile unchanged. NOT verified: runtime/wallet behaviour
 
 2026-11-06  WS-05.3d (FE-13i, FE-13j)  ProjectCard badge now via displayState(project) with its own STATE_BADGE map (old isFundingActive badge removed) and teal chainName label beside the short address; milestones page vote totals are bigint, percentages by integer maths, `formatVotes` helper (formatUnits 18, max 4 decimals), no Number() on wei. Note: tsconfig target < ES2020, use BigInt(100) not 100n  - verified by: code reading of both files, npx tsc --noEmit 0 errors, npm run lint 0 errors 0 warnings, git diff --stat on package.json/lockfile empty. NOT verified: browser rendering
 

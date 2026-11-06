@@ -75,7 +75,10 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [x] **FE-13f** (done, code-verified) P2P card shows the composite id as "Listing #"; show only the numeric part.
 - [x] **FE-13g** (done, code-verified: walletChainId vs project chain guard in milestones page) Milestone vote has no wallet chain check against the project's chain; add a guard and switch prompt.
 - [x] **FE-13h** (done, lint 0 warnings) Remove unused imports `shortAddr`, `formatEth` in `app/p2p/page.tsx` (lint warnings).
-- [ ] **FE-13b** P2P `createListing`: send the token `approve` to the exchange first.
+- [x] **FE-13b** P2P `createListing`: send the token `approve` to the exchange first. (done 2026-11-06, code verified, tsc/lint clean, runtime NOT verified)
+- [ ] **FE-13k** FundingPanel marks success before the transaction receipt; await the receipt first.
+- [ ] **FE-13l** p2p allowance read in `handleCreate` uses the wallet's current chain; pass an explicit chainId.
+- [ ] **FE-13m** InvestorPanel `useReadContracts` uses allowFailure, so a failed read shows 0; surface read errors.
 - [x] **FE-13c** Status-rule helpers: `completed` first (never show a completed project as cancelled), `fundingPhase` with `CLOSE_GRACE`, show `votingEndTime`. (done 2026-11-06: `lib/projectState.ts` mirrors the indexer's fundingPhase/refundsOpenFor; used on project detail and milestones page; runtime NOT verified, see status)
 - [x] **FE-13i** (done 2026-11-06, code verified, browser-unverified) `components/ProjectCard.tsx` still uses the old isFundingActive LIVE/CLOSED badge; switch to `displayState` / `fundingPhase`.
 - [x] **FE-13j** (done 2026-11-06, code verified, browser-unverified) Show a chain badge on `ProjectCard` (list shows 4 projects per chain with identical names, e.g. 'Smoke Alpha' twice, indistinguishable).
@@ -97,6 +100,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-30** Marketplace filters: category, chain, status, search; sorting; pagination; skeleton loading; mobile filter sheet.
 - [ ] **FE-31** Project detail redesign: funding progress, milestones timeline, team, repo link, contract addresses (with explorer links), **Transparency panel** (approved shadow wallet shown permanently, compliance state, last reconciliation, deposits vs observed, freeze flag).
 - [ ] **FE-32** Investor actions on the project page: invest (user-paid), **claim tokens (gasless)**, stake / unstake, claim yield, refund buttons (`refundFailedCrowdfund`, `refundDeadProject`) with state checks and clear "you pay gas" / "free" labels.
+  - User-paid parts done 2026-11-06 (`components/InvestorPanel.tsx`: stake with approve, unstake with vote-lock block, claim yield, both refunds, "you pay gas" labels; code verified, runtime NOT verified). Remaining: gasless claim tokens.
 - [ ] **FE-33** Voting UI (gasless): show staked voting power (`DividendDistributor.stakedBalance`), vote-lock warning (`isUserVoteLocked`), vote progress vs quorum, time remaining, queued state.
 - [ ] **FE-34** P2P additions: token approval step before listing, cancel listing, trade history, fee display.
 - [ ] **FE-35** Complaint entry point on every project page (opens the complaint form, FE-72).
