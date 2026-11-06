@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { chainName } from "@/config/chains";
 import { InvestorPanel } from "@/components/InvestorPanel";
+import { ProfileEditor } from "@/components/ProfileEditor";
 import {
   displayState,
   fundingPhase,
@@ -290,6 +291,8 @@ function ProjectDetailInner({ id }: { id: string }) {
               </div>
             </div>
           </div>
+
+          <ProfileEditor project={project} />
 
           {/* Founder Bio */}
           {profile?.founderBio && (

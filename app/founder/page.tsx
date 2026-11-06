@@ -170,15 +170,16 @@ function WalletsSection({ me, onChanged }: { me: FounderMeDto; onChanged: () => 
           <span title={w.address}>{shortAddr(w.address)}</span>
           <span className={`badge ${badgeClass(w.status)}`}>{w.status}</span>
           {w.reviewNote && <span style={{ color: "var(--text-secondary)" }}>{w.reviewNote}</span>}
+          {w.reserved && <span className="badge badge-pending">Reserved (launch pending)</span>}
           {w.projectId ? (
             <span>
-              Bound to project{" "}
+              {w.reserved ? "Project" : "Bound to project"}{" "}
               <Link href={`/projects/${encodeURIComponent(w.projectId)}`} style={{ color: "var(--brand-accent)" }}>
                 {w.projectId}
               </Link>
             </span>
           ) : (
-            w.status === "approved" && <span style={{ color: "var(--text-secondary)" }}>Unused</span>
+            w.status === "approved" && !w.reserved && <span style={{ color: "var(--text-secondary)" }}>Unused</span>
           )}
         </div>
       ))}

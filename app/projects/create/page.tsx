@@ -8,24 +8,31 @@ import { useRouter } from "next/navigation";
 import { chainName } from "@/config/chains";
 import {
   ApiError,
+  attachLaunchDraft,
+  cancelLaunchDraft,
+  createLaunchDraft,
   describeFounderError,
   fetchFounderMe,
   fetchLaunchEligibility,
+  getProject,
   projectIdOf,
   shortAddr,
-  upsertProfile,
+  type LaunchDraftDto,
   type LaunchEligibilityDto,
-  type ProfileInput,
   type ShadowWalletDto,
 } from "@/lib/api";
 import { ABIS, getContractConfig } from "@/lib/contracts";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { getFeeOverrides } from "@/lib/fees";
 
-const PROFILE_MAX_ATTEMPTS = 8;
-const PROFILE_RETRY_DELAY_MS = 4000;
-const PROFILE_MANUAL_MAX_ATTEMPTS = 10;
-const PROFILE_MANUAL_RETRY_DELAY_MS = 5000;
+const ATTACH_MAX_ATTEMPTS = 4;
+const ATTACH_RETRY_DELAY_MS = 3000;
+const INDEX_POLL_ATTEMPTS = 10;
+const INDEX_POLL_DELAY_MS = 3000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
 
 interface MilestoneRow {
   description: string;
@@ -55,19 +62,30 @@ export default function CreateProjectPage() {
     { description: "Growth Phase", percentage: "30" },
   ]);
 
-  const [status, setStatus] = useState<"idle" | "submitting" | "waiting" | "saving" | "done" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "drafting" | "submitting" | "waiting" | "attaching" | "indexing" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-  const [saveNote, setSaveNote] = useState("");
   const { user, role, loading: authLoading, signIn } = useAuth();
   const [eligibility, setEligibility] = useState<LaunchEligibilityDto | null>(null);
   const [freeWallets, setFreeWallets] = useState<ShadowWalletDto[]>([]);
   const [shadowWalletId, setShadowWalletId] = useState("");
   const [gateError, setGateError] = useState("");
-  const [launchedId, setLaunchedId] = useState("");
-  const [pendingProfile, setPendingProfile] = useState<ProfileInput | null>(null);
-  const [profileError, setProfileError] = useState("");
+  const [slowIndexId, setSlowIndexId] = useState("");
   const isFounder = role === "founder";
+
+  function freeWalletsOf(wallets: ShadowWalletDto[]): ShadowWalletDto[] {
+    return wallets.filter((w) => w.status === "approved" && w.projectId === null && !w.reserved);
+  }
+
+  async function refreshWallets(): Promise<void> {
+    if (!isFounder) return;
+    try {
+      const me = await fetchFounderMe();
+      setFreeWallets(freeWalletsOf(me.wallets));
+    } catch (err) {
+      setGateError(describeFounderError(err, "Could not refresh shadow wallets"));
+    }
+  }
 
   useEffect(() => {
     if (!isFounder) return;
@@ -78,7 +96,7 @@ export default function CreateProjectPage() {
         const me = result.eligible ? await fetchFounderMe(signal) : null;
         if (signal.aborted) return;
         setEligibility(result);
-        setFreeWallets(me ? me.wallets.filter((w) => w.status === "approved" && w.projectId === null) : []);
+        setFreeWallets(me ? freeWalletsOf(me.wallets) : []);
         setGateError("");
       })
       .catch((err: unknown) => {
@@ -112,9 +130,44 @@ export default function CreateProjectPage() {
     setMilestones((prev) => prev.map((m, idx) => idx === i ? { ...m, [field]: value } : m));
   }
 
+  async function cancelDraftQuietly(draft: LaunchDraftDto): Promise<void> {
+    try {
+      await cancelLaunchDraft(draft.id);
+    } catch {
+      // Best effort: an unattached draft expires on its own after 2 hours.
+    }
+  }
+
+  async function attachWithRetry(draftId: string, escrow: string): Promise<void> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await attachLaunchDraft(draftId, escrow);
+        return;
+      } catch (err) {
+        const retryable = err instanceof ApiError && (err.status === 0 || err.status >= 500);
+        if (!retryable || attempt >= ATTACH_MAX_ATTEMPTS) throw err;
+        await sleep(ATTACH_RETRY_DELAY_MS);
+      }
+    }
+  }
+
+  async function waitForIndexing(projectId: string): Promise<boolean> {
+    for (let attempt = 0; attempt < INDEX_POLL_ATTEMPTS; attempt++) {
+      try {
+        await getProject(projectId);
+        return true;
+      } catch (err) {
+        const transient = err instanceof ApiError && (err.status === 404 || err.status === 0 || err.status >= 500);
+        if (!transient) return false;
+      }
+      await sleep(INDEX_POLL_DELAY_MS);
+    }
+    return false;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (pendingProfile) { setErrorMsg("Your project is already launched; save its profile first."); return; }
+    if (isBusy) return;
     if (!isConnected) { setErrorMsg("Please connect your wallet first."); return; }
     if (roleBlocked) { setErrorMsg("Only approved founders can launch projects."); return; }
     if (founderBlocked) { setErrorMsg("Complete the launch requirements and pick a shadow wallet first."); return; }
@@ -123,14 +176,37 @@ export default function CreateProjectPage() {
 
     const factory = getContractConfig(chainId, "factory");
     if (!factory) { setErrorMsg("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
+    if (!publicClient) { setErrorMsg("No RPC client available for this network."); return; }
 
-    setStatus("submitting");
+    setStatus("drafting");
     setErrorMsg("");
     setSuccessMsg("");
+    setSlowIndexId("");
 
+    // Step 1: save the profile and reserve the shadow wallet before any transaction.
+    let draft: LaunchDraftDto;
     try {
-      // Step 1: on-chain transaction
-      const hash = await writeContractAsync({
+      draft = await createLaunchDraft({
+        chainId,
+        name,
+        description,
+        founderBio,
+        logoUrl,
+        websiteUrl,
+        pitchDeckUrl,
+        ...(isFounder ? { shadowWalletId } : {}),
+      });
+    } catch (err) {
+      setStatus("error");
+      setErrorMsg(describeFounderError(err, "Could not save the launch draft"));
+      return;
+    }
+
+    // Step 2: on-chain transaction.
+    setStatus("submitting");
+    let hash: `0x${string}`;
+    try {
+      hash = await writeContractAsync({
         address: factory.address,
         abi: factory.abi,
         functionName: "launchProject",
@@ -145,112 +221,81 @@ export default function CreateProjectPage() {
         ],
         ...(await getFeeOverrides(publicClient)),
       });
-
-      setStatus("waiting");
-
-      if (!publicClient) throw new Error("No RPC client available for this network.");
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      const [launched] = parseEventLogs({
-        abi: ABIS.factory,
-        eventName: "ProjectLaunched",
-        logs: receipt.logs,
-      });
-      if (!launched) {
-        setErrorMsg("Transaction succeeded but could not extract project address. Please save your tx hash and contact support.");
-        setStatus("error");
-        return;
-      }
-      const projectId = projectIdOf(chainId, launched.args.milestoneEscrow);
-      setLaunchedId(projectId);
-
-      // Step 2: off-chain metadata
-      const payload: ProfileInput = {
-        projectId,
-        name,
-        description,
-        logoUrl,
-        pitchDeckUrl,
-        founderBio,
-        websiteUrl,
-        ...(isFounder ? { shadowWalletId } : {}),
-      };
-      setPendingProfile(payload);
-      setStatus("saving");
-      if (!user) {
-        const ok = await signIn();
-        if (!ok) {
-          setProfileError("Sign-in failed, so the profile was not saved. Sign in with your wallet and save the profile again.");
-          setStatus("error");
-          return;
-        }
-      }
-      try {
-        await saveProfileWithRetry(payload, PROFILE_MAX_ATTEMPTS, PROFILE_RETRY_DELAY_MS);
-      } catch (err) {
-        setProfileError(err instanceof Error ? err.message : "Profile save failed.");
-        setStatus("error");
-        return;
-      }
-      finishSuccess(projectId);
     } catch (err) {
+      await cancelDraftQuietly(draft);
+      await refreshWallets();
       setStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "An unexpected error occurred.");
+      setErrorMsg(err instanceof Error ? err.message : "The transaction was not sent.");
+      return;
     }
-  }
 
-  function finishSuccess(projectId: string) {
-    setPendingProfile(null);
-    setProfileError("");
-    setLaunchedId("");
-    setStatus("done");
-    setSuccessMsg(`🎉 Project launched! Redirecting to your project page...`);
-    setTimeout(() => router.push(`/projects/${encodeURIComponent(projectId)}`), 2500);
-  }
-
-  async function retryProfileNow() {
-    if (!pendingProfile) return;
-    if (!user) {
-      const ok = await signIn();
-      if (!ok) { setProfileError("Sign-in failed. Sign in with your wallet and try again."); return; }
-    }
-    setStatus("saving");
+    setStatus("waiting");
+    let receipt: Awaited<ReturnType<typeof publicClient.waitForTransactionReceipt>>;
     try {
-      await saveProfileWithRetry(pendingProfile, PROFILE_MANUAL_MAX_ATTEMPTS, PROFILE_MANUAL_RETRY_DELAY_MS);
-      finishSuccess(pendingProfile.projectId);
-    } catch (err) {
-      setProfileError(err instanceof Error ? err.message : "Profile save failed.");
+      receipt = await publicClient.waitForTransactionReceipt({ hash });
+    } catch {
       setStatus("error");
+      setErrorMsg(
+        `Transaction submitted: ${hash}. Check the explorer; if it succeeds the project appears shortly; if you reloaded, open /founder to see reserved wallets.`,
+      );
+      return;
     }
-  }
+    if (receipt.status !== "success") {
+      await cancelDraftQuietly(draft);
+      await refreshWallets();
+      setStatus("error");
+      setErrorMsg("The transaction reverted on-chain. No project was created.");
+      return;
+    }
 
-  function startOver() {
-    setPendingProfile(null);
-    setProfileError("");
-    setLaunchedId("");
-    setSaveNote("");
+    const [launched] = parseEventLogs({
+      abi: ABIS.factory,
+      eventName: "ProjectLaunched",
+      logs: receipt.logs,
+    });
+    if (!launched) {
+      setStatus("error");
+      setErrorMsg(`Transaction ${hash} succeeded but the project address could not be read. Please save the hash and contact support.`);
+      return;
+    }
+    const escrow = launched.args.milestoneEscrow;
+    const projectId = projectIdOf(chainId, escrow);
+
+    // Step 3: link the draft to the new escrow; the API applies the profile automatically.
+    setStatus("attaching");
+    try {
+      await attachWithRetry(draft.id, escrow);
+    } catch (err) {
+      setStatus("error");
+      setErrorMsg(
+        `Project ${projectId} is on-chain (tx ${hash}) but linking your saved profile failed: ${describeFounderError(err, "network error")}. Do not launch again; open the project page to add the profile.`,
+      );
+      return;
+    }
+
+    // Step 4: wait briefly for the indexer.
+    setStatus("indexing");
+    const indexed = await waitForIndexing(projectId);
+    if (indexed) {
+      setStatus("done");
+      setSuccessMsg("Project launched! Redirecting to your project page...");
+      setTimeout(() => router.push(`/projects/${encodeURIComponent(projectId)}`), 2500);
+      return;
+    }
+    setSlowIndexId(projectId);
     setStatus("idle");
+    await refreshWallets();
   }
 
-  async function saveProfileWithRetry(input: ProfileInput, maxAttempts: number, delayMs: number): Promise<void> {
-    for (let attempt = 1; ; attempt++) {
-      try {
-        await upsertProfile(input);
-        setSaveNote("");
-        return;
-      } catch (err) {
-        if (!(err instanceof ApiError)) throw err;
-        if (err.status !== 404) throw new Error(describeFounderError(err));
-        if (attempt >= maxAttempts) {
-          setSaveNote("");
-          throw new Error("Project not indexed yet; try again shortly");
-        }
-        setSaveNote(`Waiting for indexer (${attempt}/${maxAttempts})`);
-        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
+  function launchAnother() {
+    setSlowIndexId("");
+    setShadowWalletId("");
+    setStatus("idle");
+    void refreshWallets();
   }
 
-  const isLoading = status === "submitting" || status === "waiting" || status === "saving";
+  const isLoading = status !== "idle" && status !== "done" && status !== "error";
+  const isBusy = isLoading || status === "done";
 
   return (
     <div style={{ maxWidth: "760px", margin: "0 auto", padding: "48px 24px" }}>
@@ -277,9 +322,9 @@ export default function CreateProjectPage() {
         }}
       >
         {[
-          { step: 1, label: "Off-Chain Metadata", done: status !== "idle" },
-          { step: 2, label: "On-Chain Deploy", done: status === "waiting" || status === "saving" || status === "done" },
-          { step: 3, label: "Profile Save", done: status === "done" },
+          { step: 1, label: "Save Profile", done: ["submitting", "waiting", "attaching", "indexing", "done"].includes(status) || slowIndexId !== "" },
+          { step: 2, label: "On-Chain Deploy", done: ["attaching", "indexing", "done"].includes(status) || slowIndexId !== "" },
+          { step: 3, label: "Indexing", done: status === "done" },
         ].map(({ step, label, done }, i) => (
           <div
             key={step}
@@ -338,24 +383,20 @@ export default function CreateProjectPage() {
         </div>
       )}
 
-      {pendingProfile && launchedId && profileError && (
+      {slowIndexId && (
         <div className="alert alert-warning fade-in-up" style={{ marginBottom: "24px", display: "block" }}>
           <p style={{ margin: "0 0 8px" }}>
-            Project launched on-chain:{" "}
-            <Link href={`/projects/${encodeURIComponent(launchedId)}`} style={{ color: "var(--brand-accent)" }}>
-              {launchedId}
-            </Link>
-            . Profile not saved yet: the indexer is still catching up.
+            Your project is on-chain and will appear shortly (the indexer is catching up). Your profile and shadow wallet are already saved and will be applied automatically.
           </p>
-          <p style={{ margin: "0 0 8px" }}>{profileError}</p>
-          <p style={{ margin: "0 0 12px" }}>Do not launch again.</p>
-          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-            <button type="button" className="btn-primary" onClick={() => void retryProfileNow()} disabled={isLoading}>
-              {isLoading ? (saveNote || "Saving Profile...") : "Save profile now"}
-            </button>
-            <button type="button" onClick={startOver} disabled={isLoading} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", textDecoration: "underline" }}>
-              Start over
-            </button>
+          <p style={{ margin: "0 0 12px" }}>
+            Project id:{" "}
+            <Link href={`/projects/${encodeURIComponent(slowIndexId)}`} style={{ color: "var(--brand-accent)" }}>
+              {slowIndexId}
+            </Link>
+          </p>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <Link href="/launches" className="btn-primary" style={{ textDecoration: "none" }}>View my launches</Link>
+            <button type="button" className="btn-secondary" onClick={launchAnother}>Launch another project</button>
           </div>
         </div>
       )}
@@ -569,14 +610,16 @@ export default function CreateProjectPage() {
           type="submit"
           className="btn-primary"
           style={{ width: "100%", padding: "16px", fontSize: "16px" }}
-          disabled={isLoading || !isConnected || founderBlocked || pendingProfile !== null}
+          disabled={isBusy || !isConnected || founderBlocked}
         >
           {isLoading ? (
             <>
               <span className="spinner" />
-              {status === "submitting" && "Submitting Transaction..."}
+              {status === "drafting" && "Saving Profile..."}
+              {status === "submitting" && "Confirm in Wallet..."}
               {status === "waiting" && "Waiting for Confirmation..."}
-              {status === "saving" && (saveNote || "Saving Profile...")}
+              {status === "attaching" && "Linking Profile..."}
+              {status === "indexing" && "Waiting for Indexer..."}
             </>
           ) : (
             "🚀 Deploy & Launch Project"

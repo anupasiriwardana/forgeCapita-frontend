@@ -21,6 +21,7 @@ export function Navbar() {
   const links = [...NAV_LINKS];
   if (role === "investor" || role === "founder") links.push({ href: "/apply", label: "Apply" });
   if (role === "founder") links.push({ href: "/founder", label: "Founder" });
+  if (role === "founder" || role === "staff" || role === "admin") links.push({ href: "/launches", label: "My launches" });
   if (role === "staff" || role === "admin") links.push({ href: "/admin", label: "Admin" });
 
   return (

@@ -237,6 +237,82 @@ export function upsertProfile(body: ProfileInput, signal?: AbortSignal): Promise
   return apiFetch<ProfileDto>("/projects/profile", { method: "POST", body: clean, signal });
 }
 
+// ── Launch drafts (profile saved before the on-chain launch) ──────────────
+
+export type LaunchDraftStatus = "pending" | "attached" | "applied" | "conflict" | "cancelled" | "expired";
+
+export interface LaunchDraftInput {
+  chainId: number;
+  name: string;
+  description: string;
+  founderBio?: string;
+  logoUrl?: string;
+  websiteUrl?: string;
+  pitchDeckUrl?: string;
+  category?: string;
+  shadowWalletId?: string;
+}
+
+export interface LaunchDraftDto {
+  id: string;
+  status: LaunchDraftStatus;
+  chainId: number;
+  shadowWalletId: string | null;
+  createdAt: string;
+}
+
+export async function createLaunchDraft(body: LaunchDraftInput, signal?: AbortSignal): Promise<LaunchDraftDto> {
+  const clean: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (typeof value === "number" || (typeof value === "string" && value !== "")) clean[key] = value;
+  }
+  const data = await apiFetch<{ draft: LaunchDraftDto }>("/launch-drafts", { method: "POST", body: clean, signal });
+  return data.draft;
+}
+
+export async function attachLaunchDraft(id: string, escrowAddress: string, signal?: AbortSignal): Promise<void> {
+  await apiFetch<unknown>(`/launch-drafts/${encodeURIComponent(id)}/attach`, {
+    method: "POST",
+    body: { escrowAddress },
+    signal,
+  });
+}
+
+export async function cancelLaunchDraft(id: string, signal?: AbortSignal): Promise<void> {
+  await apiFetch<unknown>(`/launch-drafts/${encodeURIComponent(id)}/cancel`, {
+    method: "POST",
+    body: {},
+    signal,
+  });
+}
+
+export interface MyLaunchDraftDto {
+  id: string;
+  status: LaunchDraftStatus;
+  chainId: number;
+  projectId: string | null;
+  escrowAddress: string | null;
+  name: string;
+  createdAt: string;
+  appliedAt: string | null;
+}
+
+export async function listMyLaunchDrafts(signal?: AbortSignal): Promise<MyLaunchDraftDto[]> {
+  const data = await apiFetch<{ items: MyLaunchDraftDto[] }>("/launch-drafts/mine", { signal });
+  return data.items;
+}
+
+export interface IndexerChainStatus {
+  id: number;
+  block: { number: number; timestamp: number };
+}
+
+export async function fetchIndexerStatus(signal?: AbortSignal): Promise<Record<string, IndexerChainStatus>> {
+  const res = await fetch(`${getPonderApi()}/status`, { signal });
+  if (!res.ok) throw new Error(`Indexer status failed (${res.status})`);
+  return (await res.json()) as Record<string, IndexerChainStatus>;
+}
+
 // ── Auth (cookie session; no tokens in JS) ────────────────────────────────
 
 export interface AuthUser {
@@ -464,6 +540,7 @@ export interface ShadowWalletDto {
   status: ShadowWalletStatus;
   reviewNote: string | null;
   projectId: string | null;
+  reserved: boolean;
 }
 
 export interface FounderMeDto {
