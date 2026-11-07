@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
 
 type Addr = `0x${string}`;
@@ -34,6 +35,7 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
   const feeClient = usePublicClient({ chainId: project.chainId });
   const { writeContractAsync } = useWriteContract();
   const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   const escrow = project.escrowAddress as Addr;
@@ -84,10 +86,6 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
   const feeText = typeof feePercent === "bigint" ? `${feePercent.toString()}%` : "a platform fee";
 
   async function handleClose(): Promise<void> {
-    const ok = window.confirm(
-      `This ends the funding phase, sends ${feeText} of the raised funds to the platform treasury as the platform fee, and unlocks token claims for investors. This cannot be undone. Continue?`,
-    );
-    if (!ok) return;
     setBusy(true);
     setResult(null);
     try {
@@ -111,6 +109,7 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
       setResult({ ok: false, text: errMessage(err) });
     } finally {
       setBusy(false);
+      setConfirmOpen(false);
       await queryClient.invalidateQueries({
         predicate: (q) => q.queryKey[0] === "readContracts" || q.queryKey[0] === "balance" || (q.queryKey[0] === "project" && q.queryKey[1] === project.id),
       });
@@ -123,10 +122,20 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
       {reason ? (
         <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>{reason}</p>
       ) : (
-        <button type="button" className="btn-primary" style={{ width: "100%" }} disabled={busy || !isConnected} onClick={() => void handleClose()}>
+        <button type="button" className="btn-primary" style={{ width: "100%" }} disabled={busy || !isConnected} onClick={() => setConfirmOpen(true)}>
           {busy ? "Waiting for confirmation..." : "Close funding & start project"}
         </button>
       )}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Close funding & start project?"
+        confirmLabel="Close funding & start project"
+        busy={busy}
+        onConfirm={() => void handleClose()}
+        onCancel={() => setConfirmOpen(false)}
+      >
+        This ends the funding phase, sends {feeText} of the raised funds to the platform treasury as the platform fee, and unlocks token claims for investors. This cannot be undone.
+      </ConfirmDialog>
       {result && (
         <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
           <span>{result.ok ? "✅" : "⚠️"}</span>

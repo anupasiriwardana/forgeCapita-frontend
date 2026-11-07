@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { chainName } from "@/config/chains";
 import {
@@ -113,6 +114,7 @@ function LaunchList() {
   const [lag, setLag] = useState<Record<number, number> | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [cancelId, setCancelId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
@@ -149,7 +151,6 @@ function LaunchList() {
   }, [active, reload]);
 
   async function cancel(id: string): Promise<void> {
-    if (!window.confirm("Cancel this launch draft? Only do this if the launch transaction was not sent.")) return;
     setBusyId(id);
     setError("");
     try {
@@ -160,6 +161,7 @@ function LaunchList() {
       }
     } finally {
       setBusyId(null);
+      setCancelId(null);
       reload();
     }
   }
@@ -182,9 +184,21 @@ function LaunchList() {
           <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "0 0 8px" }}>
             {chainName(draft.chainId)} · {new Date(draft.createdAt).toLocaleString()}
           </p>
-          <Explanation draft={draft} lag={lag} busy={busyId === draft.id} onCancel={() => void cancel(draft.id)} />
+          <Explanation draft={draft} lag={lag} busy={busyId === draft.id} onCancel={() => setCancelId(draft.id)} />
         </section>
       ))}
+      <ConfirmDialog
+        open={cancelId !== null}
+        title="Cancel this launch?"
+        confirmLabel="Cancel launch"
+        cancelLabel="Keep launch"
+        tone="danger"
+        busy={busyId !== null}
+        onConfirm={() => cancelId && void cancel(cancelId)}
+        onCancel={() => setCancelId(null)}
+      >
+        Cancel this launch and free the shadow wallet? Only do this if the launch transaction was not sent.
+      </ConfirmDialog>
     </>
   );
 }

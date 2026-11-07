@@ -187,7 +187,11 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] `describeApiError` masks 403/404 server messages on older pages (`/apply`, `/admin`) while `describeFounderError` keeps them for 400/403/409; unify.
 - [ ] `SafeLink`/`Row` duplication still open (now also relevant to new pages).
 - [ ] FE-26a settle uses a fixed 1500 ms timer (heuristic); replace with a wagmi-based reconnect signal if it misbehaves.
-- [ ] Replace `window.confirm` role-change confirmation in `/admin` with a proper confirm modal
+- [x] Replace `window.confirm` role-change confirmation in `/admin` with a proper confirm modal (WS-08.3n 2026-11-07: `components/ConfirmDialog.tsx`, also used for close funding in DeveloperPanel and cancel launch in /launches; no `confirm(` left; code verified, runtime NOT verified)
+- [x] Fund card gating on the project page (WS-08.3n 2026-11-07): `FundingGate` hides the card for the developer, shows 'Funding is closed for this project.' when state is not FUNDING / fundingClosedAt set / on-chain isFundingActive false, and 'The funding window has ended.' after the on-chain deadline; matches MilestoneEscrow.receive() (code verified, runtime NOT verified)
+- [ ] ConfirmDialog is untested at runtime (focus return, Escape, Tab trap)
+- [ ] ConfirmDialog focus return fails silently if the trigger is disabled or unmounted when the dialog closes (e.g. after a successful close funding)
+- [ ] Shadow wallet approve/reject in /admin has no confirm dialog (none existed before); decide if one is wanted
 
 ### Admin dashboard (`/admin`)
 - [ ] **FE-68** Everything in staff plus: compliance cases (WARNED / ESCALATED) with evidence, **freeze / unfreeze milestones** and **emergency shutdown** (signed by the admin's connected treasury wallet; confirmation dialog that states the consequences), takeover execution (`proposeNewDeveloper`) and repo lockout, relayer health (balance, spend, queue, circuit breaker), project gas ledgers, staff management, system settings (tolerance, token allow-list, relayer limits), audit log viewer, analytics.

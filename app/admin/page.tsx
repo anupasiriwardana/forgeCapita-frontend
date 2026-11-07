@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
 import {
   ApiError,
@@ -432,18 +433,25 @@ function UsersSection() {
     return () => controller.abort();
   }, [roleFilter, q, qValid, offset, reloadKey]);
 
-  const changeRole = async (user: AdminUserDto, role: ManagedRole) => {
+  const [pending, setPending] = useState<{ user: AdminUserDto; role: ManagedRole } | null>(null);
+
+  const requestRoleChange = (user: AdminUserDto, role: ManagedRole) => {
     if (busy || role === user.role) return;
-    if (!window.confirm(`Change ${user.address} from ${user.role} to ${role}?`)) return;
+    setPending({ user, role });
+  };
+
+  const changeRole = async () => {
+    if (!pending || busy) return;
     setBusy(true);
     setError("");
     try {
-      await setUserRole(user.address, role);
+      await setUserRole(pending.user.address, pending.role);
       setReloadKey((k) => k + 1);
     } catch (err) {
       setError(describeApiError(err, "Role change failed"));
     } finally {
       setBusy(false);
+      setPending(null);
     }
   };
 
@@ -508,7 +516,7 @@ function UsersSection() {
                 value={u.role}
                 disabled={busy}
                 aria-label={`Role for ${u.address}`}
-                onChange={(e) => void changeRole(u, e.target.value as ManagedRole)}
+                onChange={(e) => requestRoleChange(u, e.target.value as ManagedRole)}
               >
                 {MANAGED_ROLES.map((r) => (
                   <option key={r} value={r}>{r}</option>
@@ -519,6 +527,16 @@ function UsersSection() {
         ))}
       </div>
       <Pager offset={offset} total={total} onChange={setOffset} />
+      <ConfirmDialog
+        open={pending !== null}
+        title="Change user role?"
+        confirmLabel="Change role"
+        busy={busy}
+        onConfirm={() => void changeRole()}
+        onCancel={() => setPending(null)}
+      >
+        Change {pending?.user.address} from {pending?.user.role} to {pending?.role}?
+      </ConfirmDialog>
     </section>
   );
 }

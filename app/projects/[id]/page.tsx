@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useSendTransaction, useWaitForTransactionReceipt, useAccount, useBalance, useChainId, useConfig, usePublicClient } from "wagmi";
+import { useSendTransaction, useWaitForTransactionReceipt, useAccount, useBalance, useChainId, useConfig, usePublicClient, useReadContracts } from "wagmi";
+import { ABIS } from "@/lib/contracts";
+import { useAuth } from "@/components/web3/AuthProvider";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { parseEther } from "viem";
 import { getFeeOverrides } from "@/lib/fees";
@@ -170,6 +172,34 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
       )}
     </div>
   );
+}
+
+function FundingGate({ project, nowSeconds, onFunded }: { project: ProjectDto; nowSeconds: number; onFunded: () => void }) {
+  const { address } = useAccount();
+  const { user } = useAuth();
+  const escrow = project.escrowAddress as `0x${string}`;
+  const { data } = useReadContracts({
+    allowFailure: true,
+    contracts: [
+      { address: escrow, abi: ABIS.escrow, functionName: "isFundingActive", chainId: project.chainId },
+      { address: escrow, abi: ABIS.escrow, functionName: "fundingDeadline", chainId: project.chainId },
+    ],
+  });
+
+  const developer = project.developer.toLowerCase();
+  if (developer === address?.toLowerCase() || developer === user?.address.toLowerCase()) return null;
+
+  const chainActive = data?.[0]?.result;
+  const chainDeadline = data?.[1]?.result;
+  const indexerClosed = project.state !== "FUNDING" || project.fundingClosedAt != null;
+  if (indexerClosed || chainActive === false) {
+    return <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "24px" }}>Funding is closed for this project.</p>;
+  }
+  const deadline = typeof chainDeadline === "bigint" ? chainDeadline : BigInt(project.fundingDeadline);
+  if (BigInt(nowSeconds) > deadline) {
+    return <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "24px" }}>The funding window has ended.</p>;
+  }
+  return <FundingPanel project={project} onFunded={onFunded} />;
 }
 
 function ProjectDetailInner({ id }: { id: string }) {
@@ -375,7 +405,7 @@ function ProjectDetailInner({ id }: { id: string }) {
         {/* Right: Funding Panel */}
         <div style={{ position: "sticky", top: "88px" }}>
           <DeveloperPanel project={project} nowSeconds={nowSeconds} />
-          <FundingPanel project={project} onFunded={() => void refetchBalance()} />
+          <FundingGate project={project} nowSeconds={nowSeconds} onFunded={() => void refetchBalance()} />
           <InvestorPanel project={project} nowSeconds={nowSeconds} />
         </div>
       </div>
