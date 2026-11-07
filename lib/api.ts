@@ -157,13 +157,16 @@ export class ApiError extends Error {
   readonly status: number;
   readonly requestId: string | undefined;
   readonly details: unknown;
+  /** Stable machine code for errors that carry one (relay routes). */
+  readonly code: string | undefined;
 
-  constructor(status: number, message: string, requestId?: string, details?: unknown) {
+  constructor(status: number, message: string, requestId?: string, details?: unknown, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.requestId = requestId;
     this.details = details;
+    this.code = code;
   }
 }
 
@@ -177,7 +180,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { method = "GET", body, signal } = options;
   const headers: Record<string, string> = { Accept: "application/json" };
   if (method === "POST" || method === "PATCH") headers["Content-Type"] = "application/json";
@@ -210,6 +213,7 @@ async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise
       typeof err.error === "string" ? err.error : `Request failed (${res.status})`,
       typeof err.requestId === "string" ? err.requestId : undefined,
       err.details,
+      typeof err.code === "string" ? err.code : undefined,
     );
   }
   return json.data as T;

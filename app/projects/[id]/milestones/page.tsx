@@ -1,12 +1,22 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useParams } from "next/navigation";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId, usePublicClient } from "wagmi";
+import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId, usePublicClient, useSignTypedData } from "wagmi";
 import { getFeeOverrides } from "@/lib/fees";
 import { fetchMilestonesByProject, parseProjectId, type Milestone } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
+import { GaslessNotice, RelayStatus } from "@/components/RelayStatus";
+import { useAuth } from "@/components/web3/AuthProvider";
+import {
+  describeRelayError,
+  isTerminalStatus,
+  newSignatureDeadline,
+  relayVote,
+  useRelayRequest,
+  type RelayFailure,
+} from "@/lib/relay";
 import Link from "next/link";
 import { formatUnits } from "viem";
 
@@ -25,7 +35,14 @@ function MilestoneCard({
   projectId: string;
   index: number;
 }) {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
+  const { user } = useAuth();
+  const { signTypedDataAsync } = useSignTypedData();
+  const queryClient = useQueryClient();
+  const relay = useRelayRequest();
+  const [relayBusy, setRelayBusy] = useState(false);
+  const [relayFailure, setRelayFailure] = useState<RelayFailure | null>(null);
+  const [lastSupport, setLastSupport] = useState(true);
   const walletChainId = useChainId();
   const { writeContractAsync } = useWriteContract();
   const feeClient = usePublicClient({ chainId: parseProjectId(projectId).chainId });
@@ -35,6 +52,54 @@ function MilestoneCard({
   const [voteError, setVoteError] = useState("");
 
   const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash });
+  const relayStatus = relay.status;
+  const relayActive = relayBusy || (relayStatus !== null && !isTerminalStatus(relayStatus));
+  const relayConfirmed = relayStatus === "CONFIRMED";
+
+  useEffect(() => {
+    if (relayConfirmed) void queryClient.invalidateQueries({ queryKey: ["milestones", projectId] });
+  }, [relayConfirmed, queryClient, projectId]);
+
+  async function handleGaslessVote(support: boolean) {
+    const { chainId, escrow } = parseProjectId(projectId);
+    if (!isConnected || !address || !user) return;
+    setLastSupport(support);
+    setRelayFailure(null);
+    relay.reset();
+    if (walletChainId !== chainId) {
+      setRelayFailure({ code: null, message: "Switch your wallet to this project's network" });
+      return;
+    }
+    setRelayBusy(true);
+    try {
+      if (!feeClient) throw new Error("No RPC client for this chain");
+      const milestoneIndex = await feeClient.readContract({
+        address: escrow,
+        abi: ABIS.escrow,
+        functionName: "currentMilestoneIndex",
+      });
+      const deadline = newSignatureDeadline();
+      const signature = await signTypedDataAsync({
+        domain: { name: "ForgeCapita MilestoneEscrow", version: "1", chainId, verifyingContract: escrow },
+        types: {
+          Vote: [
+            { name: "voter", type: "address" },
+            { name: "milestoneIndex", type: "uint256" },
+            { name: "support", type: "bool" },
+            { name: "deadline", type: "uint256" },
+          ],
+        },
+        primaryType: "Vote",
+        message: { voter: address, milestoneIndex: BigInt(milestoneIndex), support, deadline: BigInt(deadline) },
+      });
+      const intake = await relayVote({ projectId, support, deadline, signature });
+      relay.track(intake.id);
+    } catch (err) {
+      setRelayFailure(describeRelayError(err));
+    } finally {
+      setRelayBusy(false);
+    }
+  }
 
   const votingEnd =
     milestone.isVotingOpen && milestone.votingEndTime && BigInt(milestone.votingEndTime) > BigInt(0)
@@ -151,34 +216,64 @@ function MilestoneCard({
             <div className="alert alert-warning" style={{ fontSize: "13px" }}>
               <span>🔌</span> Connect wallet to vote
             </div>
-          ) : voteStatus === "success" ? (
+          ) : voteStatus === "success" || relayConfirmed ? (
             <div className="alert alert-success" style={{ fontSize: "13px" }}>
               <span>✅</span> Vote submitted successfully!
             </div>
           ) : (
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                className="btn-success"
-                style={{ flex: 1 }}
-                onClick={() => handleVote(true)}
-                disabled={voteStatus === "pending" || isConfirming}
-              >
-                {voting === "yes" && voteStatus === "pending" ? (
-                  <><span className="spinner" style={{ width: "14px", height: "14px" }} /> Voting...</>
-                ) : "👍 Vote Yes"}
-              </button>
-              <button
-                className="btn-danger"
-                style={{ flex: 1 }}
-                onClick={() => handleVote(false)}
-                disabled={voteStatus === "pending" || isConfirming}
-              >
-                {voting === "no" && voteStatus === "pending" ? (
-                  <><span className="spinner" style={{ width: "14px", height: "14px" }} /> Voting...</>
-                ) : "👎 Vote No"}
-              </button>
-            </div>
+            <>
+              <GaslessNotice />
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  className="btn-success"
+                  style={{ flex: 1 }}
+                  onClick={() => void handleGaslessVote(true)}
+                  disabled={!user || relayActive || voteStatus === "pending" || isConfirming}
+                >
+                  {relayBusy && lastSupport ? "Preparing..." : "👍 Vote Yes (gasless)"}
+                </button>
+                <button
+                  className="btn-danger"
+                  style={{ flex: 1 }}
+                  onClick={() => void handleGaslessVote(false)}
+                  disabled={!user || relayActive || voteStatus === "pending" || isConfirming}
+                >
+                  {relayBusy && !lastSupport ? "Preparing..." : "👎 Vote No (gasless)"}
+                </button>
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", margin: "12px 0 6px" }}>Pay gas yourself</div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  className="btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => handleVote(true)}
+                  disabled={relayActive || voteStatus === "pending" || isConfirming}
+                >
+                  {voting === "yes" && voteStatus === "pending" ? (
+                    <><span className="spinner" style={{ width: "14px", height: "14px" }} /> Voting...</>
+                  ) : "Vote Yes (pay gas)"}
+                </button>
+                <button
+                  className="btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => handleVote(false)}
+                  disabled={relayActive || voteStatus === "pending" || isConfirming}
+                >
+                  {voting === "no" && voteStatus === "pending" ? (
+                    <><span className="spinner" style={{ width: "14px", height: "14px" }} /> Voting...</>
+                  ) : "Vote No (pay gas)"}
+                </button>
+              </div>
+            </>
           )}
+          <RelayStatus
+            chainId={parseProjectId(projectId).chainId}
+            status={relayStatus}
+            request={relay.request}
+            pollError={relay.pollError}
+            failure={relayFailure}
+            onSelfPay={() => void handleVote(lastSupport)}
+          />
           {voteStatus === "error" && (
             <div className="alert alert-error" style={{ marginTop: "8px", fontSize: "13px" }}>
               <span>⚠️</span> {voteError}

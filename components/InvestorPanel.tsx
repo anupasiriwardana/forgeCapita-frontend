@@ -1,12 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
+import { useEffect, useState } from "react";
+import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useSignTypedData, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { formatUnits, parseUnits } from "viem";
 import type { ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
+import { GaslessNotice, RelayStatus } from "@/components/RelayStatus";
+import { useAuth } from "@/components/web3/AuthProvider";
+import {
+  describeRelayError,
+  isTerminalStatus,
+  newSignatureDeadline,
+  relayClaim,
+  relayStake,
+  useRelayRequest,
+  type RelayFailure,
+} from "@/lib/relay";
 import { phaseInputOf, refundsOpenFor } from "@/lib/projectState";
 
 type Addr = `0x${string}`;
@@ -48,6 +59,12 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   const wrongChain = walletChainId !== project.chainId;
   const { writeContractAsync } = useWriteContract();
   const feeClient = usePublicClient({ chainId: project.chainId });
+  const { user } = useAuth();
+  const { signTypedDataAsync } = useSignTypedData();
+  const relay = useRelayRequest();
+  const [relayBusy, setRelayBusy] = useState(false);
+  const [relayFailure, setRelayFailure] = useState<RelayFailure | null>(null);
+  const [relayKind, setRelayKind] = useState<"stake" | "claim">("stake");
 
   const escrow = project.escrowAddress as Addr;
   const token = project.tokenAddress as Addr;
@@ -64,6 +81,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
       { address: escrow, abi: ABIS.escrow, functionName: "isUserVoteLocked", args: [owner], chainId: project.chainId },
       { address: token, abi: ABIS.token, functionName: "allowance", args: [owner, distributor], chainId: project.chainId },
       { address: token, abi: ABIS.token, functionName: "allowance", args: [owner, escrow], chainId: project.chainId },
+      { address: escrow, abi: ABIS.escrow, functionName: "hasClaimedTokens", args: [owner], chainId: project.chainId },
     ],
     query: { enabled: isConnected && !wrongChain },
   });
@@ -75,6 +93,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   const voteLocked = data?.[4]?.result === true;
   const distAllowance = asBig(data?.[5]?.result);
   const escrowAllowance = asBig(data?.[6]?.result);
+  const tokensClaimed = data?.[7]?.result === true;
 
   const [stakeInput, setStakeInput] = useState("");
   const [unstakeInput, setUnstakeInput] = useState("");
@@ -85,7 +104,11 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   const refundOpen = refundsOpenFor(BigInt(nowSeconds), phaseInputOf(project));
   const crowdfundFailed = project.fundingClosedAt == null;
   const needUnstake = !crowdfundFailed && balance === ZERO && staked > ZERO;
-  const disabled = busy || wrongChain || !isConnected;
+  const relayStatus = relay.status;
+  const relayActive = relayBusy || (relayStatus !== null && !isTerminalStatus(relayStatus));
+  const relayConfirmed = relayStatus === "CONFIRMED";
+  const canClaimTokens = (project.state === "ACTIVE" || project.state === "COMPLETED") && deposit > ZERO && !tokensClaimed;
+  const disabled = busy || relayActive || wrongChain || !isConnected;
 
   async function send(
     label: string,
@@ -111,6 +134,74 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
       setBusy(false);
       await refetch();
     }
+  }
+
+  useEffect(() => {
+    if (relayConfirmed) void refetch();
+  }, [relayConfirmed, refetch]);
+
+  async function runRelay(kind: "stake" | "claim", submit: () => Promise<{ id: string }>): Promise<void> {
+    setRelayKind(kind);
+    setRelayFailure(null);
+    setResult(null);
+    relay.reset();
+    setRelayBusy(true);
+    try {
+      const intake = await submit();
+      relay.track(intake.id);
+    } catch (err) {
+      setRelayFailure(describeRelayError(err));
+    } finally {
+      setRelayBusy(false);
+    }
+  }
+
+  function handleGaslessStake(): void {
+    const amount = parseAmount(stakeInput);
+    if (amount === null || amount > balance) {
+      setResult({ ok: false, text: "Enter a valid amount up to your token balance." });
+      return;
+    }
+    if (!address || !user) return;
+    void runRelay("stake", async () => {
+      if (!feeClient) throw new Error("No RPC client for this chain");
+      const [name, nonce] = await Promise.all([
+        feeClient.readContract({ address: token, abi: ABIS.token, functionName: "name" }),
+        feeClient.readContract({ address: token, abi: ABIS.token, functionName: "nonces", args: [address] }),
+      ]);
+      const deadline = newSignatureDeadline();
+      const signature = await signTypedDataAsync({
+        domain: { name, version: "1", chainId: project.chainId, verifyingContract: token },
+        types: {
+          Permit: [
+            { name: "owner", type: "address" },
+            { name: "spender", type: "address" },
+            { name: "value", type: "uint256" },
+            { name: "nonce", type: "uint256" },
+            { name: "deadline", type: "uint256" },
+          ],
+        },
+        primaryType: "Permit",
+        message: { owner: address, spender: distributor, value: amount, nonce: BigInt(nonce), deadline: BigInt(deadline) },
+      });
+      const intake = await relayStake({ projectId: project.id, amount: amount.toString(), deadline, signature });
+      setStakeInput("");
+      return intake;
+    });
+  }
+
+  function handleGaslessClaimTokens(): void {
+    if (!user) return;
+    void runRelay("claim", () => relayClaim(project.id));
+  }
+
+  function handleClaimTokens(): void {
+    void send("Claim tokens", [
+      {
+        label: "Claim tokens",
+        run: async () => writeContractAsync({ address: escrow, abi: ABIS.escrow, functionName: "claimTokens", ...(await getFeeOverrides(feeClient)) }),
+      },
+    ]);
   }
 
   const approve = (spender: Addr, amount: bigint) => async () =>
@@ -180,7 +271,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   return (
     <div className="glass-card" style={{ padding: "28px", marginTop: "24px" }}>
       <h2 style={{ fontSize: "20px", marginBottom: "4px" }}>👛 Your Position</h2>
-      <p style={{ fontSize: "12px", ...muted, marginTop: 0 }}>You pay gas for every action below.</p>
+      <p style={{ fontSize: "12px", ...muted, marginTop: 0 }}>Staking and claiming tokens can be gasless; the other actions need your own gas.</p>
 
       {!isConnected ? (
         <div className="alert alert-warning">
@@ -204,13 +295,42 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
           </div>
 
           <div style={section}>
-            <label className="label">Stake (you pay gas)</label>
+            <label className="label">Stake</label>
+            <GaslessNotice />
             <div style={{ display: "flex", gap: "8px" }}>
               <input className="input-field" value={stakeInput} onChange={e => setStakeInput(e.target.value)} placeholder="0.0" disabled={disabled} />
               <button type="button" className="btn-secondary" disabled={disabled} onClick={() => setStakeInput(formatUnits(balance, 18))}>Max</button>
-              <button type="button" className="btn-primary" disabled={disabled || !stakeInput} onClick={handleStake}>Stake</button>
             </div>
+            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+              <button type="button" className="btn-primary" style={{ flex: 1 }} disabled={disabled || !user || !stakeInput} onClick={handleGaslessStake}>
+                Stake (gasless)
+              </button>
+              <button type="button" className="btn-secondary" style={{ flex: 1 }} disabled={disabled || !stakeInput} onClick={handleStake}>
+                Stake (pay gas)
+              </button>
+            </div>
+            {relayKind === "stake" && (
+              <RelayStatus chainId={project.chainId} status={relayStatus} request={relay.request} pollError={relay.pollError} failure={relayFailure} onSelfPay={handleStake} />
+            )}
           </div>
+
+          {canClaimTokens && (
+            <div style={section}>
+              <label className="label">Claim my tokens</label>
+              <GaslessNotice />
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button type="button" className="btn-primary" style={{ flex: 1 }} disabled={disabled || !user} onClick={handleGaslessClaimTokens}>
+                  Claim tokens (gasless)
+                </button>
+                <button type="button" className="btn-secondary" style={{ flex: 1 }} disabled={disabled} onClick={handleClaimTokens}>
+                  Claim tokens (pay gas)
+                </button>
+              </div>
+              {relayKind === "claim" && (
+                <RelayStatus chainId={project.chainId} status={relayStatus} request={relay.request} pollError={relay.pollError} failure={relayFailure} onSelfPay={handleClaimTokens} />
+              )}
+            </div>
+          )}
 
           <div style={section}>
             <label className="label">Unstake (you pay gas)</label>

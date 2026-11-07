@@ -126,9 +126,10 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 - [ ] **FE-30** Marketplace filters: category, chain, status, search; sorting; pagination; skeleton loading; mobile filter sheet.
 - [ ] **FE-31** Project detail redesign: funding progress, milestones timeline, team, repo link, contract addresses (with explorer links), **Transparency panel** (approved shadow wallet shown permanently, compliance state, last reconciliation, deposits vs observed, freeze flag).
-- [ ] **FE-32** Investor actions on the project page: invest (user-paid), **claim tokens (gasless)**, stake / unstake, claim yield, refund buttons (`refundFailedCrowdfund`, `refundDeadProject`) with state checks and clear "you pay gas" / "free" labels.
-  - User-paid parts done 2026-11-06 (`components/InvestorPanel.tsx`: stake with approve, unstake with vote-lock block, claim yield, both refunds, "you pay gas" labels; code verified, runtime NOT verified). Remaining: gasless claim tokens.
+- [x] **FE-32** Investor actions on the project page: invest (user-paid), **claim tokens (gasless)**, stake / unstake, claim yield, refund buttons (`refundFailedCrowdfund`, `refundDeadProject`) with state checks and clear "you pay gas" / "free" labels.
+  - User-paid parts done 2026-11-06 (`components/InvestorPanel.tsx`: stake with approve, unstake with vote-lock block, claim yield, both refunds, "you pay gas" labels; code verified, runtime NOT verified). Gasless claim tokens + gasless stake (Permit) + pay-gas fallbacks done 2026-11-07 (WS-08.3L; code verified against the api and contracts, runtime NOT verified).
 - [ ] **FE-33** Voting UI (gasless): show staked voting power (`DividendDistributor.stakedBalance`), vote-lock warning (`isUserVoteLocked`), vote progress vs quorum, time remaining, queued state.
+  - Gasless vote button + request status done 2026-11-07 (WS-08.3L). Remaining: confirm staked voting power / vote-lock warning / quorum progress display exists (not re-checked in this step).
 - [ ] **FE-34** P2P additions: token approval step before listing, cancel listing, trade history, fee display.
 - [ ] **FE-35** Complaint entry point on every project page (opens the complaint form, FE-72).
 
@@ -136,10 +137,15 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 `[BLOCKED-BY]` contracts v2 (EIP-712 types) and the API relayer (API-72).
 
-- [ ] **FE-40** Typed-data signing helpers (viem `signTypedData`) for the two actions that need a signature: `Vote` (EIP-712) and the ERC-2612 `Permit` used for staking: chain id, verifying contract, token nonce read from the chain, deadline; show a human-readable summary before the wallet popup. Claim tokens and execute milestone need no signature (one click, no wallet popup).
+- [x] **FE-40** (2026-11-07, WS-08.3L; Vote and Permit domains/types/spender verified field by field against api relayService and the Solidity; no human-readable pre-popup summary beyond the wallet's own typed-data view; runtime NOT verified) Typed-data signing helpers (viem `signTypedData`) for the two actions that need a signature: `Vote` (EIP-712) and the ERC-2612 `Permit` used for staking: chain id, verifying contract, token nonce read from the chain, deadline; show a human-readable summary before the wallet popup. Claim tokens and execute milestone need no signature (one click, no wallet popup).
 - [ ] **FE-41** Gas tracker widget (header and in action dialogs): current gas vs 24-hour average for the active chain from `GET /api/v1/gas/:chainId`, status chip (Normal / Busy).
 - [ ] **FE-42** Busy-network handling: when status is Busy, warn that the action will be queued and sent when fees drop (maximum wait 6 hours, shorter when a vote closes soon); show the expected send-by time; allow "send now" only when the API marks it urgent.
 - [ ] **FE-43** Request tracker: queue states (Queued → Sending → Confirmed / Failed / Expired) with polling, toast on completion, retry from a failed or expired state, history on the investor dashboard.
+  - Partial 2026-11-07 (WS-08.3L): `useRelayRequest` polling (3 s, 3 min cap) + `RelayStatus` steps with tx link and 'Pay gas yourself' on failure. Remaining: toast, history page (`listRelayRequests` unused), retry button.
+- [ ] **FE-93** (WS-08.3L follow-up) EXPIRED relay status is not a self-pay trigger (only RELAY_DISABLED, SELF_PAY, GAS_TOO_HIGH, RELAY_UNAVAILABLE, NETWORK_ERROR are); also add server codes RELAYER_LOW_BALANCE (503; should offer self-pay), USER_DAILY_LIMIT, CHAIN_DAILY_LIMIT, DEADLINE_TOO_FAR, INVALID_SIGNATURE, SIGNATURE_MISMATCH, INSUFFICIENT_BALANCE to `RELAY_ERROR_MESSAGES` (they currently show the server's own message) and treat RELAYER_LOW_BALANCE / daily limits as self-pay triggers.
+- [ ] **FE-94** Relay history page using `listRelayRequests` (currently unused).
+- [ ] **FE-95** Block-explorer links for contract addresses and relay tx per chain (relay tx link exists only inside RelayStatus).
+- [ ] **FE-96** ERC-1271 smart-contract wallets are unsupported by the gasless stake (Permit is EOA-only in the token) and the api verifies signatures with `verifyTypedData` (EOA); show a clear 'use pay gas' hint for such wallets.
 - [ ] **FE-44** Clear gas labelling on every button ("Free — ForgeCapita pays gas" vs "You pay network fee ~$x") using the gas tracker estimate.
 - [ ] **FE-45** Stake in one signature (permit) with clear copy; unstake remains a normal transaction.
 
