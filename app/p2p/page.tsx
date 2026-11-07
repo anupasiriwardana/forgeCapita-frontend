@@ -9,6 +9,7 @@ import { fetchActiveListings, type P2PListing } from "@/lib/api";
 import { P2PListingCard } from "@/components/P2PListingCard";
 import { ABIS, getContractConfig } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
+import { chainCurrency } from "@/config/chains";
 
 // ── Create Listing Modal ───────────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
                 />
               </div>
               <div>
-                <label className="label">Price in ETH</label>
+                <label className="label">Price in {chainCurrency(chainId)}</label>
                 <input
                   className="input-field"
                   type="number"
@@ -220,7 +221,16 @@ function P2PContent() {
     }
   }
 
-  const totalVolume = listings.reduce((sum, l) => sum + Number(BigInt(l.priceInETH)), 0) / 1e18;
+  const volumeByChain = new Map<number, number>();
+  for (const l of listings) {
+    volumeByChain.set(l.chainId, (volumeByChain.get(l.chainId) ?? 0) + Number(BigInt(l.priceInETH)) / 1e18);
+  }
+  const totalVolume =
+    volumeByChain.size === 0
+      ? `${(0).toFixed(4)} ${chainCurrency(chainId)}`
+      : Array.from(volumeByChain.entries())
+          .map(([id, v]) => `${v.toFixed(4)} ${chainCurrency(id)}`)
+          .join(" + ");
 
   return (
     <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 24px" }}>
@@ -269,7 +279,7 @@ function P2PContent() {
         <div style={{ width: "1px", background: "var(--border)" }} />
         <div>
           <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Listed Value</div>
-          <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--teal)" }}>{totalVolume.toFixed(4)} ETH</div>
+          <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--teal)" }}>{totalVolume}</div>
         </div>
         <div style={{ width: "1px", background: "var(--border)" }} />
         <div>

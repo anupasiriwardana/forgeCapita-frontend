@@ -3,14 +3,16 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { useSendTransaction, useWaitForTransactionReceipt, useAccount, useChainId, usePublicClient } from "wagmi";
+import { useSendTransaction, useWaitForTransactionReceipt, useAccount, useBalance, useChainId, useConfig, usePublicClient } from "wagmi";
+import { waitForTransactionReceipt } from "wagmi/actions";
 import { parseEther } from "viem";
 import { getFeeOverrides } from "@/lib/fees";
 import { ApiError, getProject, formatEth, fundingProgress, shortAddr, type ProjectDto } from "@/lib/api";
 import Link from "next/link";
 import { Suspense } from "react";
-import { chainName } from "@/config/chains";
+import { chainCurrency, chainName } from "@/config/chains";
 import { InvestorPanel } from "@/components/InvestorPanel";
+import { DeveloperPanel } from "@/components/DeveloperPanel";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import {
   displayState,
@@ -46,7 +48,9 @@ function phaseLabel(phase: FundingPhase, input: FundingPhaseInput): string | nul
   }
 }
 
-function FundingPanel({ project }: { project: ProjectDto }) {
+function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: () => void }) {
+  const config = useConfig();
+  const currency = chainCurrency(project.chainId);
   const { isConnected, address } = useAccount();
   const walletChainId = useChainId();
   const wrongChain = walletChainId !== project.chainId;
@@ -67,13 +71,20 @@ function FundingPanel({ project }: { project: ProjectDto }) {
     setTxError("");
     try {
       const hash = await sendTransactionAsync({
-        to: project.escrowAddress as `0x${string}`, // Sends ETH directly to trigger the receive() fallback
+        to: project.escrowAddress as `0x${string}`, // Sends native currency directly to trigger the receive() fallback
         value: parseEther(ethAmount),
         ...(await getFeeOverrides(feeClient)),
       });
       setTxHash(hash);
+      const receipt = await waitForTransactionReceipt(config, { hash, chainId: project.chainId });
+      if (receipt.status !== "success") {
+        setTxStatus("error");
+        setTxError("Funding transaction reverted.");
+        return;
+      }
       setTxStatus("success");
       setEthAmount("");
+      onFunded();
     } catch (err) {
       setTxStatus("error");
       setTxError(err instanceof Error ? err.message : "Transaction failed");
@@ -99,7 +110,7 @@ function FundingPanel({ project }: { project: ProjectDto }) {
               <span>Switch your wallet to this project&apos;s network (chain {project.chainId}) to fund it.</span>
             </div>
           )}
-          <label className="label">Amount (ETH)</label>
+          <label className="label">Amount ({currency})</label>
           <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
             <input
               className="input-field"
@@ -131,7 +142,7 @@ function FundingPanel({ project }: { project: ProjectDto }) {
                 style={{ padding: "6px 12px", fontSize: "12px" }}
                 onClick={() => setEthAmount(amt)}
               >
-                {amt} ETH
+                {amt} {currency}
               </button>
             ))}
           </div>
@@ -175,6 +186,13 @@ function ProjectDetailInner({ id }: { id: string }) {
     },
   });
 
+  const funding = project?.state === "FUNDING";
+  const { data: liveBalance, refetch: refetchBalance } = useBalance({
+    address: project ? (project.escrowAddress as `0x${string}`) : undefined,
+    chainId: project?.chainId,
+    query: { enabled: funding, refetchInterval: 10_000 },
+  });
+
   if (!project) {
     return (
       <div style={{ textAlign: "center", padding: "80px 24px" }}>
@@ -190,9 +208,15 @@ function ProjectDetailInner({ id }: { id: string }) {
     );
   }
 
-  const progress = fundingProgress(project.totalRaised, project.fundingGoal);
-  const ethRaised = formatEth(project.totalRaised, 4);
+  // While funding is open the escrow balance equals the funds raised (the fee is taken at close).
+  // Never shown below the indexer value: after close the balance drops by the fee while state may still read FUNDING.
+  const indexedWei = BigInt(project.totalRaised);
+  const raisedWei = (funding && liveBalance && liveBalance.value > indexedWei ? liveBalance.value : indexedWei).toString();
+  const progress = fundingProgress(raisedWei, project.fundingGoal);
+  const currency = chainCurrency(project.chainId);
+  const ethRaised = formatEth(raisedWei, 4);
   const ethGoal = formatEth(project.fundingGoal, 4);
+  const aheadOfIndexer = funding && liveBalance !== undefined && liveBalance.value > BigInt(project.totalRaised);
   const profile = project.profile;
   const name = profile?.name ?? project.tokenName;
   const shownState = displayState(project);
@@ -279,11 +303,14 @@ function ProjectDetailInner({ id }: { id: string }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
               <div className="stat-card">
                 <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>RAISED</div>
-                <div style={{ fontSize: "20px", fontWeight: 800, color: "var(--emerald)" }}>{ethRaised} ETH</div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: "var(--emerald)" }}>{ethRaised} {currency}</div>
+                {aheadOfIndexer && (
+                  <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>Updating from the chain; the indexer is catching up</div>
+                )}
               </div>
               <div className="stat-card">
                 <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>GOAL</div>
-                <div style={{ fontSize: "20px", fontWeight: 800, color: "var(--text-primary)" }}>{ethGoal} ETH</div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: "var(--text-primary)" }}>{ethGoal} {currency}</div>
               </div>
               <div className="stat-card">
                 <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>DEVELOPER</div>
@@ -347,7 +374,8 @@ function ProjectDetailInner({ id }: { id: string }) {
 
         {/* Right: Funding Panel */}
         <div style={{ position: "sticky", top: "88px" }}>
-          <FundingPanel project={project} />
+          <DeveloperPanel project={project} nowSeconds={nowSeconds} />
+          <FundingPanel project={project} onFunded={() => void refetchBalance()} />
           <InvestorPanel project={project} nowSeconds={nowSeconds} />
         </div>
       </div>

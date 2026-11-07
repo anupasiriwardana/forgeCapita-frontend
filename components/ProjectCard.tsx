@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ProjectDto } from "@/lib/api";
 import { formatEth, fundingProgress, shortAddr } from "@/lib/api";
-import { chainName } from "@/config/chains";
+import { chainCurrency, chainName } from "@/config/chains";
 import { displayState } from "@/lib/projectState";
 
 const STATE_BADGE: Record<ProjectDto["state"], { label: string; className: string }> = {
@@ -132,11 +132,11 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
       <div style={{ display: "flex", gap: "12px" }}>
         <div className="stat-card" style={{ flex: 1 }}>
           <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Raised</div>
-          <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--emerald)" }}>{ethRaised} ETH</div>
+          <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--emerald)" }}>{ethRaised} {chainCurrency(project.chainId)}</div>
         </div>
         <div className="stat-card" style={{ flex: 1 }}>
           <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Goal</div>
-          <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>{ethGoal} ETH</div>
+          <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>{ethGoal} {chainCurrency(project.chainId)}</div>
         </div>
       </div>
 

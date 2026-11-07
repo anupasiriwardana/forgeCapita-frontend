@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useWriteContract, useAccount, useChainId, usePublicClient } from "wagmi";
 import { parseEther, parseEventLogs } from "viem";
 import { useRouter } from "next/navigation";
-import { chainName } from "@/config/chains";
+import { chainCurrency, chainName } from "@/config/chains";
 import {
   ApiError,
   attachLaunchDraft,
@@ -500,7 +500,7 @@ export default function CreateProjectPage() {
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
             <div>
-              <label className="label">Funding Goal (ETH) *</label>
+              <label className="label">Funding Goal ({chainCurrency(chainId)}) *</label>
               <input className="input-field" value={fundingGoalEth} onChange={e => setFundingGoalEth(e.target.value)} placeholder="10" type="number" step="0.001" min="0.001" required />
             </div>
             <div>

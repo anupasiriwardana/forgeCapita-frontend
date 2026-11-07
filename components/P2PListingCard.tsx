@@ -2,6 +2,7 @@
 
 import type { P2PListing } from "@/lib/api";
 import { formatEth, shortAddr } from "@/lib/api";
+import { chainCurrency } from "@/config/chains";
 
 interface P2PListingCardProps {
   listing: P2PListing;
@@ -11,7 +12,7 @@ interface P2PListingCardProps {
 }
 
 export function P2PListingCard({ listing, onBuy, isPending, index = 0 }: P2PListingCardProps) {
-  const priceEth = formatEth(listing.priceInETH, 4);
+  const priceEth = `${formatEth(listing.priceInETH, 4)} ${chainCurrency(listing.chainId)}`;
   const tokenAmount = Number(listing.tokenAmount).toLocaleString();
 
   return (
@@ -44,7 +45,7 @@ export function P2PListingCard({ listing, onBuy, isPending, index = 0 }: P2PList
         </div>
         <div className="stat-card">
           <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Price</div>
-          <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--teal)" }}>{priceEth} ETH</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--teal)" }}>{priceEth}</div>
         </div>
       </div>
 
@@ -74,7 +75,7 @@ export function P2PListingCard({ listing, onBuy, isPending, index = 0 }: P2PList
           </>
         ) : (
           <>
-            🛒 Buy for {priceEth} ETH
+            🛒 Buy for {priceEth}
           </>
         )}
       </button>

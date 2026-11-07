@@ -7,6 +7,7 @@ import { formatUnits, parseUnits } from "viem";
 import type { ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
+import { chainCurrency } from "@/config/chains";
 import { GaslessNotice, RelayStatus } from "@/components/RelayStatus";
 import { useAuth } from "@/components/web3/AuthProvider";
 import {
@@ -82,6 +83,8 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
       { address: token, abi: ABIS.token, functionName: "allowance", args: [owner, distributor], chainId: project.chainId },
       { address: token, abi: ABIS.token, functionName: "allowance", args: [owner, escrow], chainId: project.chainId },
       { address: escrow, abi: ABIS.escrow, functionName: "hasClaimedTokens", args: [owner], chainId: project.chainId },
+      { address: escrow, abi: ABIS.escrow, functionName: "isFundingActive", chainId: project.chainId },
+      { address: escrow, abi: ABIS.escrow, functionName: "projectCancelled", chainId: project.chainId },
     ],
     query: { enabled: isConnected && !wrongChain },
   });
@@ -94,6 +97,8 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   const distAllowance = asBig(data?.[5]?.result);
   const escrowAllowance = asBig(data?.[6]?.result);
   const tokensClaimed = data?.[7]?.result === true;
+  const fundingClosedOnChain = data?.[8]?.result === false;
+  const cancelledOnChain = data?.[9]?.result === true;
 
   const [stakeInput, setStakeInput] = useState("");
   const [unstakeInput, setUnstakeInput] = useState("");
@@ -107,7 +112,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   const relayStatus = relay.status;
   const relayActive = relayBusy || (relayStatus !== null && !isTerminalStatus(relayStatus));
   const relayConfirmed = relayStatus === "CONFIRMED";
-  const canClaimTokens = (project.state === "ACTIVE" || project.state === "COMPLETED") && deposit > ZERO && !tokensClaimed;
+  const canClaimTokens = fundingClosedOnChain && !cancelledOnChain && deposit > ZERO && !tokensClaimed;
   const disabled = busy || relayActive || wrongChain || !isConnected;
 
   async function send(
@@ -288,10 +293,10 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
           )}
 
           <div>
-            <div style={row}><span style={muted}>Deposited</span><span>{fmt(deposit)} ETH</span></div>
+            <div style={row}><span style={muted}>Deposited</span><span>{fmt(deposit)} {chainCurrency(project.chainId)}</span></div>
             <div style={row}><span style={muted}>Token balance</span><span>{fmt(balance)}</span></div>
             <div style={row}><span style={muted}>Staked</span><span>{fmt(staked)}</span></div>
-            <div style={row}><span style={muted}>Claimable yield</span><span>{fmt(claimable)} ETH</span></div>
+            <div style={row}><span style={muted}>Claimable yield</span><span>{fmt(claimable)} {chainCurrency(project.chainId)}</span></div>
           </div>
 
           <div style={section}>

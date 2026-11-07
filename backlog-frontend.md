@@ -168,6 +168,13 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-59** Revenue report: on-chain deposits vs observed shadow-wallet inflow, tolerance, history; guidance for converting stablecoin revenue to ETH/BNB before depositing.
 - [ ] **FE-60** Milestone panel: status, who can execute, frozen warning, gasless execute request status (founders may also trigger it).
 
+- [x] Per-chain currency labels (WS-08.3m 2026-11-07): `chainCurrency` (97 -> BNB, else ETH) used on cards, detail page, p2p, portfolio, create form (code verified, runtime NOT verified)
+- [x] Developer 'Close funding & start' (minimal, WS-08.3m 2026-11-07): `components/DeveloperPanel.tsx`, on-chain preconditions, confirm dialog with 5% fee. First slice of the founder dashboard (WS-12); developer FE for startMilestone / vote open, execute, claim funds still open (see FE-58, FE-60).
+- [ ] Developer-only view for `startMilestone(index)` (exists in contract, developer only, needs funding closed, not cancelled, previous milestone executed), execute and claim creator funds: not implemented (FE-60/FE-58)
+- [ ] Stake section does not hide when the user has no tokens
+- [ ] Project list cards are still indexer-based (lag); consider a lag banner like /launches
+- [ ] On-chain freshness for state after close: the detail page may show FUNDING until the indexer catches up (only RAISED is live; 'Updating from the chain' note)
+
 ### Staff dashboard (`/staff`)
 - [ ] **FE-65** Applications queue (approve / request changes / reject), KYC review (secure document viewer), repo provisioning status, shadow wallet change approvals, complaints queue and thread, read-only Risk Center, takeover case preparation and signalling vote setup.
   - Partial (2026-11-06, WS-07.4l, FIRST PART ticked per user direction): `/admin` applications queue (tabs, paging 20, detail, approve with KYC checkbox, reject with required note) and admin-only Users role management done. Second part done 2026-11-06 (WS-07.5l): `/admin` shadow wallet approvals queue. Remaining: request-changes, KYC document viewer, repo provisioning, complaints, Risk Center, takeover prep.

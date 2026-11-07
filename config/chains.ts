@@ -18,6 +18,12 @@ export function chainName(chainId: number): string {
   return `Chain ${chainId}`;
 }
 
+/** Native currency symbol shown in the UI (tBNB on BSC Testnet is labelled BNB). */
+export function chainCurrency(chainId: number): string {
+  if (chainId === 97) return "BNB";
+  return "ETH";
+}
+
 export const EXPLORER_URLS: Record<SupportedChainId, string> = {
   421614: "https://sepolia.arbiscan.io",
   97: "https://testnet.bscscan.com",

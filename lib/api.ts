@@ -2,6 +2,8 @@
    lib/api.ts  –  Typed client for the Express REST API (/api/v1) + Ponder GraphQL
    ───────────────────────────────────────────────────────────────────────── */
 
+import { chainCurrency } from "@/config/chains";
+
 const ZERO = BigInt(0);
 const DEFAULT_EXPRESS_ORIGIN = "http://localhost:3001";
 const COMPOSITE_ID_REGEX = /^\d+:0x[a-fA-F0-9]{40}$/;
@@ -768,6 +770,11 @@ export function formatEth(wei?: string | null, decimals = 4): string {
   if (!wei) return "0";
   const eth = Number(BigInt(wei)) / 1e18;
   return eth.toFixed(decimals);
+}
+
+/** Same as formatEth, suffixed with the native currency of the given chain. */
+export function formatNative(wei: string | null | undefined, chainId: number, decimals = 4): string {
+  return `${formatEth(wei, decimals)} ${chainCurrency(chainId)}`;
 }
 
 /** Shorten an Ethereum address like 0x1234...abcd */

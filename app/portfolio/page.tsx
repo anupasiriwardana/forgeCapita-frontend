@@ -11,7 +11,7 @@ import {
   shortAddr,
   type InvestorPosition,
 } from "@/lib/api";
-import { chainName } from "@/config/chains";
+import { chainCurrency, chainName } from "@/config/chains";
 
 const ZERO = BigInt(0);
 
@@ -117,13 +117,13 @@ export default function PortfolioPage() {
                   </span>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
-                  <Stat label="Invested" value={`${formatEth(net.toString())} ETH`} />
+                  <Stat label="Invested" value={`${formatEth(net.toString())} ${chainCurrency(p.chainId)}`} />
                   {BigInt(p.refunded) !== ZERO && (
-                    <Stat label="Refunded" value={`${formatEth(p.refunded)} ETH`} />
+                    <Stat label="Refunded" value={`${formatEth(p.refunded)} ${chainCurrency(p.chainId)}`} />
                   )}
                   <Stat label="Staked" value={`${formatToken(p.stakedBalance)} ${p.tokenSymbol}`} />
                   <Stat label="Token balance" value={`${formatToken(p.tokensHeld)} ${p.tokenSymbol}`} />
-                  <Stat label="Yield claimed" value={`${formatEth(p.yieldClaimed)} ETH`} />
+                  <Stat label="Yield claimed" value={`${formatEth(p.yieldClaimed)} ${chainCurrency(p.chainId)}`} />
                 </div>
                 <div style={{ marginTop: "12px", fontSize: "13px", color: "var(--text-muted)" }}>
                   Claimable yield: open project
