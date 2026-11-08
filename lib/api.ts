@@ -707,6 +707,72 @@ export async function fetchInvestorPositions(
   return json as unknown as InvestorPositionsResponse;
 }
 
+/** Indexer GET /projects/:chainId/:address/gas-ledger. All amounts are decimal wei strings. */
+export interface GasSponsoredRow {
+  id: string;
+  chainId: number;
+  /** Registry action kind: 0 claim, 1 stake, 2 vote, 3 execute. */
+  action: number;
+  account: string;
+  relayer: string;
+  cost: string;
+  gasSpent: string;
+  blockNumber: string;
+  timestamp: string;
+  txHash: string;
+}
+
+export interface GasDebtRow {
+  id: string;
+  chainId: number;
+  kind: string;
+  milestoneIndex: number | null;
+  amount: string;
+  outstanding: string | null;
+  blockNumber: string;
+  timestamp: string;
+  txHash: string;
+}
+
+export interface GasLedgerResponse {
+  chainId: number;
+  projectId: string;
+  summary: {
+    actionCount: number;
+    totalCost: string;
+    /** Newest row's cumulative value, not a sum. */
+    gasSpent: string;
+    debtRecovered: string;
+    debtWrittenOff: string;
+    outstanding: string | null;
+  };
+  sponsored: GasSponsoredRow[];
+  debt: GasDebtRow[];
+}
+
+/** Returns null when the indexer does not know the project yet (404). */
+export async function fetchGasLedger(
+  chainId: number,
+  escrowAddress: string,
+  params: { limit?: number; offset?: number; action?: number },
+  signal?: AbortSignal
+): Promise<GasLedgerResponse | null> {
+  const qs = buildQuery(params);
+  const res = await fetch(
+    `${getPonderApi()}/projects/${chainId}/${encodeURIComponent(escrowAddress.toLowerCase())}/gas-ledger${qs}`,
+    { headers: { Accept: "application/json" }, cache: "no-store", credentials: "omit", signal }
+  );
+  if (res.status === 404) return null;
+  const json: unknown = await res.json().catch(() => null);
+  if (!res.ok || !isRecord(json)) {
+    throw new ApiError(
+      res.status,
+      isRecord(json) && typeof json.error === "string" ? json.error : `Request failed (${res.status})`
+    );
+  }
+  return json as unknown as GasLedgerResponse;
+}
+
 /** `projectId` is the composite project id (equals the indexer's project.id). */
 export async function fetchMilestonesByProject(
   projectId: string

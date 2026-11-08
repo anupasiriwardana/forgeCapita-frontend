@@ -146,6 +146,11 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-94** Relay history page using `listRelayRequests` (currently unused).
 - [ ] **FE-95** Block-explorer links for contract addresses and relay tx per chain (relay tx link exists only inside RelayStatus).
 - [ ] **FE-96** ERC-1271 smart-contract wallets are unsupported by the gasless stake (Permit is EOA-only in the token) and the api verifies signatures with `verifyTypedData` (EOA); show a clear 'use pay gas' hint for such wallets.
+- [x] **FE-99** (2026-11-08, WS-08.5L; verified by code read vs indexer stats.ts gas-ledger route and MilestoneEscrow._bookGas ceiling; tsc 0, lint clean; runtime NOT verified) Gas ledger card on the project page (`components/GasLedger.tsx`): total sponsored, on-chain gasBudget/ceiling, 'Used X of ceiling Y' bar, sponsored actions table with action filter, Show more and explorer tx links, debt section. FE-58 (founder dashboard gas overflow) and FE-68 (admin ledgers) stay open.
+- [ ] **FE-100** (WS-08.5L follow-up) Relayer balance indicator on the UI: needs a small public API endpoint first (API-123).
+- [ ] **FE-101** (WS-08.5L follow-up) GasLedger: 'Show more' can show one extra empty page when the row count is an exact multiple of 20; use `limit+1` or the summary actionCount.
+- [ ] **FE-102** (WS-08.5L follow-up) GasLedger: invalidate/refetch right after a relay request is confirmed (today only the 30 s poll refreshes it).
+- [ ] **FE-103** (WS-08.5L follow-up) GasLedger: chain-read failures (gasBudget/netFunds/MAX_DEBT_BPS) hide the budget and ceiling silently; surface a small note.
 - [ ] **FE-44** Clear gas labelling on every button ("Free — ForgeCapita pays gas" vs "You pay network fee ~$x") using the gas tracker estimate.
 - [ ] **FE-45** Stake in one signature (permit) with clear copy; unstake remains a normal transaction.
 

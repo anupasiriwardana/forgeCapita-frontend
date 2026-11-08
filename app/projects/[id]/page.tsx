@@ -16,6 +16,7 @@ import { chainCurrency, chainName } from "@/config/chains";
 import { InvestorPanel } from "@/components/InvestorPanel";
 import { DeveloperPanel } from "@/components/DeveloperPanel";
 import { MilestonePanel } from "@/components/MilestonePanel";
+import { GasLedger } from "@/components/GasLedger";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import {
   displayState,
@@ -407,6 +408,7 @@ function ProjectDetailInner({ id }: { id: string }) {
         <div style={{ position: "sticky", top: "88px" }}>
           <DeveloperPanel project={project} nowSeconds={nowSeconds} />
           <MilestonePanel project={project} nowSeconds={nowSeconds} />
+          <GasLedger project={project} />
           <FundingGate project={project} nowSeconds={nowSeconds} onFunded={() => void refetchBalance()} />
           <InvestorPanel project={project} nowSeconds={nowSeconds} />
         </div>
