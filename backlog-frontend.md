@@ -167,10 +167,17 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-58** My projects: round status, funds, milestone progress, gas ledger overflow, pending creator funds (`creatorPendingFunds` → `claimCreatorFunds()`), compliance state with plain-language explanation, shadow wallet and change request, repo link, agreement status.
 - [ ] **FE-59** Revenue report: on-chain deposits vs observed shadow-wallet inflow, tolerance, history; guidance for converting stablecoin revenue to ETH/BNB before depositing.
 - [ ] **FE-60** Milestone panel: status, who can execute, frozen warning, gasless execute request status (founders may also trigger it).
+  - PARTIAL (WS-12.0m 2026-11-07): `MilestonePanel` (visible to everyone) shows status, thresholds, frozen warning, execute rules. Remaining: gasless execute request status, 'of N'.
 
 - [x] Per-chain currency labels (WS-08.3m 2026-11-07): `chainCurrency` (97 -> BNB, else ETH) used on cards, detail page, p2p, portfolio, create form (code verified, runtime NOT verified)
 - [x] Developer 'Close funding & start' (minimal, WS-08.3m 2026-11-07): `components/DeveloperPanel.tsx`, on-chain preconditions, confirm dialog with 5% fee. First slice of the founder dashboard (WS-12); developer FE for startMilestone / vote open, execute, claim funds still open (see FE-58, FE-60).
 - [ ] Developer-only view for `startMilestone(index)` (exists in contract, developer only, needs funding closed, not cancelled, previous milestone executed), execute and claim creator funds: not implemented (FE-60/FE-58)
+  - PARTIAL (WS-12.0m 2026-11-07): start milestone vote (developer) and execute milestone (anyone) done in `components/MilestonePanel.tsx`, code verified vs MilestoneEscrow.sol, runtime NOT verified. Remaining: claim creator funds (WS-12.1 / API-82).
+- [ ] Milestone panel shows 'Milestone N of M' (needs milestone count in ProjectDto or a milestones list)
+- [ ] Developer `cancelProject` action in the panel
+- [ ] Guardian freeze UI (not planned)
+- [ ] Gasless / automatic milestone execute request (WS-08.4L)
+- [ ] Confirm on testnet that a failed-vote finalisation is only possible after 28 days (VOTING_PERIOD constant; smoke tests used >50% staked yes fast-track)
 - [ ] Stake section does not hide when the user has no tokens
 - [ ] Project list cards are still indexer-based (lag); consider a lag banner like /launches
 - [ ] On-chain freshness for state after close: the detail page may show FUNDING until the indexer catches up (only RAISED is live; 'Updating from the chain' note)

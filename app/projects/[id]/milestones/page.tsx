@@ -18,13 +18,7 @@ import {
   type RelayFailure,
 } from "@/lib/relay";
 import Link from "next/link";
-import { formatUnits } from "viem";
-
-function formatVotes(wei: bigint): string {
-  const [whole, frac = ""] = formatUnits(wei, 18).split(".");
-  const trimmed = frac.slice(0, 4).replace(/0+$/, "");
-  return trimmed ? `${whole}.${trimmed}` : whole;
-}
+import { formatVotes } from "@/lib/format";
 
 function MilestoneCard({
   milestone,
