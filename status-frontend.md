@@ -111,6 +111,7 @@ Re-plan 2026-11-01: the v1 hooks, ABIs, stubs and pages are discarded and rebuil
 
 ## Change log
 
+2026-11-08  WS-13.1  CI first run failed at `npm ci` (stale package-lock.json); lock regenerated with `npm install --package-lock-only` (package.json untouched, top-level versions unchanged); FE-104 noted, FE-105..108 added  - verified by: main session (npm ci --dry-run exit 0; clean-copy npm ci 886 packages, tsc, lint, build OK); not re-run by tracker; GitHub Actions run not confirmed
 2026-11-08  WS-13.1  GitHub Actions CI workflow added (.github/workflows/ci.yml); FE-85 ticked (file written), FE-104 added  - verified by: file read; workflow NOT run
 
 2026-11-08  WS-08.5L  New 'Gas sponsorship' card on the project page (components/GasLedger.tsx, lib/api.ts types and fetchGasLedger, mounted after MilestonePanel): total sponsored, on-chain budget and ceiling bar, sponsored actions table with filter, Show more and tx links, debt section; hidden for FUNDING projects without activity. Known gaps: FE-100..103  - verified by: files read vs indexer stats.ts gas-ledger route and MilestoneEscrow._bookGas/_settleGasDebt, ABI names present, tsc 0, lint clean, grep clean; runtime NOT verified
