@@ -17,7 +17,16 @@ type Action = "start" | "execute";
 
 const SECONDS_PER_DAY = BigInt(86400);
 const TX_HASH_REGEX = /^0x[a-fA-F0-9]{64}$/;
-const MUTED = { fontSize: "13px", color: "var(--text-muted)", margin: 0 } as const;
+// Longhand margins only: spreading this object and overriding marginTop/marginBottom must not mix
+// with a `margin` shorthand (React warns and can leave stale styles on re-render).
+const MUTED = {
+  fontSize: "13px",
+  color: "var(--text-muted)",
+  marginTop: 0,
+  marginRight: 0,
+  marginBottom: 0,
+  marginLeft: 0,
+} as const;
 
 function errMessage(err: unknown): string {
   if (typeof err === "object" && err !== null) {

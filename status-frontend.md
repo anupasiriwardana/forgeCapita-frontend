@@ -111,6 +111,7 @@ Re-plan 2026-11-01: the v1 hooks, ABIs, stubs and pages are discarded and rebuil
 
 ## Change log
 
+2026-11-08  WS-12.0p  Fixed React dev warning 'Removing a style property during rerender (marginBottom) ... conflicting (margin)' in MilestonePanel: MUTED now uses longhand margins; user reported WS-12.0p works  - verified by: MilestonePanel.tsx lines 20-29 read, tsc --noEmit re-run by tracker (clean), runtime not verified
 2026-11-08  WS-12.0p  Vote display now relative to the public supply (milestones page card and MilestonePanel): Yes/No % of supply, bar with 20% quorum and 50% fast-track ticks, turnout, 'N more Yes needed'; fixes the misleading 100% with one staked voter; lib/format.ts pctOfSupply/barWidthPct  - verified by: files read vs MilestoneEscrow.executeMilestone, tsc 0, lint clean, runtime NOT verified
 
 2026-11-08  WS-12.0n  Milestones page reads milestones/votingEndTime/hasVoted/projectCancelled/developer from chain (10 s refetch, indexer fallback), vote gate mirrors MilestoneEscrow._vote; MilestonePanel: Execute only for the developer, others see 'waiting for the developer', 'Finalise failed vote' for any wallet  - verified by: files read fully vs MilestoneEscrow.sol, tsc 0, lint clean, runtime NOT verified

@@ -225,4 +225,6 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-82** Playwright end-to-end tests: sign up → link wallet → apply → (staff approves via test fixtures) → deploy; invest → claim → stake → vote on a local or testnet fixture; gasless request lifecycle with mocked relayer.
 - [ ] **FE-83** Lighthouse / bundle size budget; image optimisation; lazy load heavy widgets.
 - [ ] **FE-84** Refresh `frontend-instructions.md` (it still references Sepolia and old function names).
+- [x] **FE-97** Fix React style warning (shorthand `margin` mixed with longhand `marginBottom`) in `components/MilestonePanel.tsx`: `MUTED` now uses longhand margins (2026-11-08).
+- [ ] **FE-98** Audit other components for margin/padding shorthand + longhand mixes (a grep of app/ and components/ found no other occurrence on 2026-11-08); optional lint rule.
 - [ ] **FE-85 `[USER-ACTION]`** GitHub Actions CI (lint, typecheck, build, tests).
