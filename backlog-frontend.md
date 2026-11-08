@@ -232,4 +232,5 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-84** Refresh `frontend-instructions.md` (it still references Sepolia and old function names).
 - [x] **FE-97** Fix React style warning (shorthand `margin` mixed with longhand `marginBottom`) in `components/MilestonePanel.tsx`: `MUTED` now uses longhand margins (2026-11-08).
 - [ ] **FE-98** Audit other components for margin/padding shorthand + longhand mixes (a grep of app/ and components/ found no other occurrence on 2026-11-08); optional lint rule.
-- [ ] **FE-85 `[USER-ACTION]`** GitHub Actions CI (lint, typecheck, build, tests).
+- [x] **FE-85 `[USER-ACTION]`** GitHub Actions CI (lint, typecheck, build, tests). (workflow file `.github/workflows/ci.yml` written 2026-11-08 WS-13.1: npm ci, tsc, lint, build with placeholder NEXT_PUBLIC_*; no tests step; read by tracker, NOT run; user must commit and push to enable)
+- [ ] **FE-104** (added 2026-11-08) Run the frontend CI once on GitHub and adjust the NEXT_PUBLIC_* placeholders if the build fails.

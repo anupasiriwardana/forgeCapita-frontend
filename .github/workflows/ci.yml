@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Placeholders only: NEXT_PUBLIC_* values are inlined into the browser bundle, so they are
+      # never secrets. These just let the build run; they do not point at any real service.
+      NEXT_PUBLIC_EXPRESS_API: http://localhost:3001/api
+      NEXT_PUBLIC_PONDER_API: http://localhost:42069
+      NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ci-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm run build
