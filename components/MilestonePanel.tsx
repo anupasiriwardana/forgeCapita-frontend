@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { formatNative, type ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
-import { formatVotes } from "@/lib/format";
+import { formatVotes, pctOfSupply } from "@/lib/format";
 import { EXPLORER_URLS } from "@/config/chains";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
@@ -40,7 +40,8 @@ function daysLeft(end: bigint, now: bigint): string {
 
 /**
  * Milestone actions. Mirrors MilestoneEscrow.startMilestone() (developer only) and
- * executeMilestone() (permissionless, acts on currentMilestoneIndex). All state is read from the chain.
+ * executeMilestone() (acts on currentMilestoneIndex). The UI offers normal execution to the developer only;
+ * finalising a failed vote is offered to any wallet. All state is read from the chain.
  */
 export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; nowSeconds: number }) {
   const { address, isConnected } = useAccount();
@@ -188,6 +189,9 @@ export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; n
     executeBlocked = `Voting is open until ${voteReady ? formatDate(votingEnd) : "the end of the voting period"}. Early execution is possible only if more than 50% of the public supply votes yes.`;
   }
 
+  const showExecuteButton = failedVote || (isDeveloper && !(approved && frozen));
+  const waitingForDeveloper = approved && !frozen && !isDeveloper;
+
   async function send(functionName: "startMilestone" | "executeMilestone"): Promise<void> {
     setBusy(true);
     setResult(null);
@@ -239,9 +243,10 @@ export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; n
           <span>Unlocks {unlockPct.toString()}% of net funds (about {releaseText})</span>
           {voteReady && (
             <>
-              <span>Yes: {formatVotes(yes)} / No: {formatVotes(no)}</span>
-              <span>Fast-track threshold: more than {formatVotes(publicSupply / BigInt(2))} yes votes</span>
-              <span>Quorum: {formatVotes((publicSupply * BigInt(20)) / BigInt(100))} total votes</span>
+              <span>Yes: {formatVotes(yes)} ({pctOfSupply(yes, publicSupply)}% of public supply, needs more than 50% to execute early)</span>
+              <span>No: {formatVotes(no)} ({pctOfSupply(no, publicSupply)}% of public supply)</span>
+              <span>Fast track: more than {formatVotes(publicSupply / BigInt(2))} Yes (50% of the public supply)</span>
+              <span>Quorum: {formatVotes((publicSupply * BigInt(20)) / BigInt(100))} total votes (20% of the public supply), turnout {pctOfSupply(yes + no, publicSupply)}%</span>
               <span>Voting ends {formatDate(votingEnd)} ({daysLeft(votingEnd, nowBig)})</span>
             </>
           )}
@@ -269,18 +274,23 @@ export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; n
 
       {showExecute && (
         <div>
-          <p style={{ ...MUTED, marginBottom: "8px" }}>You pay the network fee.</p>
+          {showExecuteButton && <p style={{ ...MUTED, marginBottom: "8px" }}>You pay the network fee.</p>}
           {executeBlocked && <p style={{ ...MUTED, marginBottom: "8px" }}>{executeBlocked}</p>}
-          <button
-            type="button"
-            className={failedVote ? "btn-danger" : "btn-primary"}
-            style={{ width: "100%" }}
-            disabled={busy || !isConnected || wrongChain || !voteReady || executeBlocked !== null}
-            onClick={() => setConfirm("execute")}
-          >
-            {busy ? "Waiting for confirmation..." : executeLabel}
-          </button>
-          {isConnected && wrongChain && <p style={{ ...MUTED, marginTop: "8px" }}>Switch your wallet to this project&apos;s network.</p>}
+          {waitingForDeveloper && <p style={MUTED}>Approved: waiting for the developer to execute this milestone.</p>}
+          {showExecuteButton && (
+            <button
+              type="button"
+              className={failedVote ? "btn-danger" : "btn-primary"}
+              style={{ width: "100%" }}
+              disabled={busy || !isConnected || wrongChain || !voteReady || executeBlocked !== null}
+              onClick={() => setConfirm("execute")}
+            >
+              {busy ? "Waiting for confirmation..." : executeLabel}
+            </button>
+          )}
+          {showExecuteButton && isConnected && wrongChain && (
+            <p style={{ ...MUTED, marginTop: "8px" }}>Switch your wallet to this project&apos;s network.</p>
+          )}
         </div>
       )}
 

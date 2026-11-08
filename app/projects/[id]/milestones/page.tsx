@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useParams } from "next/navigation";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId, usePublicClient, useSignTypedData } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId, usePublicClient, useSignTypedData, useReadContracts } from "wagmi";
 import { getFeeOverrides } from "@/lib/fees";
 import { fetchMilestonesByProject, parseProjectId, type Milestone } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
@@ -18,16 +18,26 @@ import {
   type RelayFailure,
 } from "@/lib/relay";
 import Link from "next/link";
-import { formatVotes } from "@/lib/format";
+import { barWidthPct, formatVotes, pctOfSupply } from "@/lib/format";
 
 function MilestoneCard({
   milestone,
   projectId,
   index,
+  now,
+  cancelled,
+  isDeveloperWallet,
+  hasVoted,
+  publicSupply,
 }: {
+  publicSupply: bigint | null;
   milestone: Milestone;
   projectId: string;
   index: number;
+  now: number;
+  cancelled: boolean;
+  isDeveloperWallet: boolean;
+  hasVoted: boolean;
 }) {
   const { isConnected, address } = useAccount();
   const { user } = useAuth();
@@ -45,14 +55,17 @@ function MilestoneCard({
   const [voteStatus, setVoteStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [voteError, setVoteError] = useState("");
 
-  const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash });
+  const { isLoading: isConfirming, isSuccess: receiptSuccess } = useWaitForTransactionReceipt({ hash: txHash });
   const relayStatus = relay.status;
   const relayActive = relayBusy || (relayStatus !== null && !isTerminalStatus(relayStatus));
   const relayConfirmed = relayStatus === "CONFIRMED";
 
   useEffect(() => {
-    if (relayConfirmed) void queryClient.invalidateQueries({ queryKey: ["milestones", projectId] });
-  }, [relayConfirmed, queryClient, projectId]);
+    if (!relayConfirmed && !receiptSuccess) return;
+    void queryClient.invalidateQueries({
+      predicate: (q) => q.queryKey[0] === "readContracts" || (q.queryKey[0] === "milestones" && q.queryKey[1] === projectId),
+    });
+  }, [relayConfirmed, receiptSuccess, queryClient, projectId]);
 
   async function handleGaslessVote(support: boolean) {
     const { chainId, escrow } = parseProjectId(projectId);
@@ -99,12 +112,18 @@ function MilestoneCard({
     milestone.isVotingOpen && milestone.votingEndTime && BigInt(milestone.votingEndTime) > BigInt(0)
       ? milestone.votingEndTime
       : null;
+  const voteWindowOpen = votingEnd === null || BigInt(now) < BigInt(votingEnd);
+  const canVote =
+    milestone.isVotingOpen && !milestone.isExecuted && !hasVoted && !cancelled && !isDeveloperWallet && voteWindowOpen;
   const yesVotes = BigInt(milestone.yesVotes);
   const noVotes = BigInt(milestone.noVotes);
   const totalVotes = yesVotes + noVotes;
   const hasVotes = totalVotes > BigInt(0);
   const yesPct = hasVotes ? Number((yesVotes * BigInt(100)) / totalVotes) : 0;
   const noPct = hasVotes ? 100 - yesPct : 0;
+  const supplyKnown = publicSupply !== null && publicSupply > BigInt(0);
+  const fastTrackReached = supplyKnown && yesVotes > publicSupply / BigInt(2);
+  const fastTrackNeeded = supplyKnown && !fastTrackReached ? publicSupply / BigInt(2) + BigInt(1) - yesVotes : BigInt(0);
 
   async function handleVote(support: boolean) {
     if (!isConnected) return;
@@ -193,15 +212,51 @@ function MilestoneCard({
       </div>
 
       {/* Vote counts */}
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-          <span style={{ fontSize: "12px", color: "var(--emerald)", fontWeight: 600 }}>Yes: {formatVotes(yesVotes)} ({yesPct}%)</span>
-          <span style={{ fontSize: "12px", color: "var(--rose)", fontWeight: 600 }}>No: {formatVotes(noVotes)} ({noPct}%)</span>
+      {supplyKnown ? (
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ fontSize: "12px", color: "var(--emerald)", fontWeight: 600 }}>
+              Yes: {formatVotes(yesVotes)} ({pctOfSupply(yesVotes, publicSupply)}% of public supply)
+            </span>
+            <span style={{ fontSize: "12px", color: "var(--rose)", fontWeight: 600 }}>
+              No: {formatVotes(noVotes)} ({pctOfSupply(noVotes, publicSupply)}% of public supply)
+            </span>
+          </div>
+          <div style={{ position: "relative", height: "6px", borderRadius: "999px", background: "rgba(255,255,255,0.06)", overflow: "hidden", display: "flex" }}>
+            <div style={{ height: "100%", width: `${barWidthPct(yesVotes, publicSupply)}%`, background: "linear-gradient(90deg, var(--emerald), var(--teal))", transition: "width 0.8s" }} />
+            <div style={{ height: "100%", width: `${barWidthPct(noVotes, publicSupply)}%`, background: "var(--rose)", transition: "width 0.8s" }} />
+          </div>
+          <div style={{ position: "relative", height: "26px" }}>
+            <div style={{ position: "absolute", left: "20%", top: 0, height: "8px", width: "2px", background: "var(--amber)" }} />
+            <span style={{ position: "absolute", left: "20%", top: "9px", transform: "translateX(-50%)", fontSize: "10px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Quorum 20%</span>
+            <div style={{ position: "absolute", left: "50%", top: 0, height: "8px", width: "2px", background: "var(--amber)" }} />
+            <span style={{ position: "absolute", left: "50%", top: "9px", transform: "translateX(-50%)", fontSize: "10px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Fast track 50%</span>
+          </div>
+          <div style={{ fontSize: "12px", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "4px" }}>
+            <span>Turnout: {pctOfSupply(totalVotes, publicSupply)}% (quorum needs 20%)</span>
+            {milestone.isVotingOpen && !milestone.isExecuted && (
+              <span>
+                {fastTrackReached
+                  ? "Fast track reached: execution is possible now"
+                  : `Fast track: ${formatVotes(fastTrackNeeded)} more Yes needed (more than 50% of the public supply)`}
+              </span>
+            )}
+            {hasVotes && (
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Of votes cast: {yesPct}% Yes</span>
+            )}
+          </div>
         </div>
-        <div style={{ height: "6px", borderRadius: "999px", background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${yesPct}%`, background: "linear-gradient(90deg, var(--emerald), var(--teal))", transition: "width 0.8s" }} />
+      ) : (
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ fontSize: "12px", color: "var(--emerald)", fontWeight: 600 }}>Yes: {formatVotes(yesVotes)} ({yesPct}%)</span>
+            <span style={{ fontSize: "12px", color: "var(--rose)", fontWeight: 600 }}>No: {formatVotes(noVotes)} ({noPct}%)</span>
+          </div>
+          <div style={{ height: "6px", borderRadius: "999px", background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${yesPct}%`, background: "linear-gradient(90deg, var(--emerald), var(--teal))", transition: "width 0.8s" }} />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Voting Actions */}
       {milestone.isVotingOpen && !milestone.isExecuted && (
@@ -210,9 +265,18 @@ function MilestoneCard({
             <div className="alert alert-warning" style={{ fontSize: "13px" }}>
               <span>🔌</span> Connect wallet to vote
             </div>
-          ) : voteStatus === "success" || relayConfirmed ? (
+          ) : voteStatus === "success" || relayConfirmed || hasVoted ? (
             <div className="alert alert-success" style={{ fontSize: "13px" }}>
               <span>✅</span> Vote submitted successfully!
+            </div>
+          ) : !canVote ? (
+            <div className="alert alert-info" style={{ fontSize: "13px" }}>
+              <span>ℹ️</span>{" "}
+              {cancelled
+                ? "This project is cancelled."
+                : isDeveloperWallet
+                ? "The developer wallet cannot vote."
+                : "The voting period for this milestone has ended."}
             </div>
           ) : (
             <>
@@ -291,11 +355,101 @@ function MilestoneCard({
   );
 }
 
+const MAX_MILESTONES = 5;
+
 function MilestonesContent({ id }: { id: string }) {
-  const { data: milestones } = useSuspenseQuery({
+  const { data: indexed } = useSuspenseQuery({
     queryKey: ["milestones", id],
     queryFn: () => fetchMilestonesByProject(id),
   });
+  const { address } = useAccount();
+  const { chainId, escrow } = parseProjectId(id);
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 10_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const { data: headData } = useReadContracts({
+    allowFailure: true,
+    contracts: [
+      { address: escrow, abi: ABIS.escrow, functionName: "projectCancelled", chainId },
+      { address: escrow, abi: ABIS.escrow, functionName: "developer", chainId },
+      { address: escrow, abi: ABIS.escrow, functionName: "publicSupply", chainId },
+    ],
+    query: { refetchInterval: 10_000 },
+  });
+
+  const { data: chainData } = useReadContracts({
+    allowFailure: true,
+    contracts: [
+      ...Array.from({ length: MAX_MILESTONES }, (_, i) => ({
+        address: escrow,
+        abi: ABIS.escrow,
+        functionName: "milestones" as const,
+        args: [BigInt(i)] as const,
+        chainId,
+      })),
+    ],
+    query: { refetchInterval: 10_000 },
+  });
+
+  // A failed read means no such milestone: stop at the first failure.
+  const chainMilestones: Milestone[] = [];
+  if (chainData) {
+    for (let i = 0; i < MAX_MILESTONES; i++) {
+      const ms = chainData[i]?.result;
+      if (!ms) break;
+      chainMilestones.push({
+        id: `${id}:${i}`,
+        projectId: id,
+        milestoneIndex: i,
+        isVotingOpen: ms[2],
+        isExecuted: ms[3],
+        votingEndTime: null,
+        yesVotes: ms[4].toString(),
+        noVotes: ms[5].toString(),
+      });
+    }
+  }
+  const onChain = chainMilestones.length > 0;
+  const openIndex = chainMilestones.find((m) => m.isVotingOpen && !m.isExecuted)?.milestoneIndex;
+
+  const { data: endData } = useReadContracts({
+    allowFailure: true,
+    contracts: [{ address: escrow, abi: ABIS.escrow, functionName: "votingEndTime", args: [BigInt(openIndex ?? 0)], chainId }],
+    query: { enabled: openIndex !== undefined, refetchInterval: 10_000 },
+  });
+  const { data: votedData } = useReadContracts({
+    allowFailure: true,
+    contracts: [
+      {
+        address: escrow,
+        abi: ABIS.escrow,
+        functionName: "hasVoted",
+        args: [BigInt(openIndex ?? 0), address ?? "0x0000000000000000000000000000000000000000"],
+        chainId,
+      },
+    ],
+    query: { enabled: openIndex !== undefined && !!address, refetchInterval: 10_000 },
+  });
+  const chainEnd = endData?.[0]?.result;
+  const chainHasVoted = votedData?.[0]?.result;
+
+  const milestones: Milestone[] = onChain
+    ? chainMilestones.map((m) => {
+        const fallbackEnd = indexed.find((x) => x.milestoneIndex === m.milestoneIndex)?.votingEndTime ?? null;
+        const end = m.milestoneIndex === openIndex && typeof chainEnd === "bigint" ? chainEnd.toString() : fallbackEnd;
+        return { ...m, votingEndTime: end };
+      })
+    : indexed;
+  const cancelled = headData?.[0]?.result === true;
+  const chainDeveloper = headData?.[1]?.result;
+  const chainSupply = headData?.[2]?.result;
+  const publicSupply = typeof chainSupply === "bigint" ? chainSupply : null;
+  const isDeveloperWallet =
+    typeof chainDeveloper === "string" && !!address && chainDeveloper.toLowerCase() === address.toLowerCase();
 
   return (
     <div style={{ maxWidth: "760px", margin: "0 auto", padding: "48px 24px" }}>
@@ -337,7 +491,17 @@ function MilestonesContent({ id }: { id: string }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           {milestones.map((m, i) => (
-            <MilestoneCard key={m.id} milestone={m} projectId={id} index={i} />
+            <MilestoneCard
+              key={m.id}
+              milestone={m}
+              projectId={id}
+              index={i}
+              now={now}
+              cancelled={cancelled}
+              publicSupply={publicSupply}
+              isDeveloperWallet={isDeveloperWallet}
+              hasVoted={m.milestoneIndex === openIndex && chainHasVoted === true}
+            />
           ))}
         </div>
       )}

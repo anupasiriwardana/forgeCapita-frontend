@@ -173,6 +173,15 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [x] Developer 'Close funding & start' (minimal, WS-08.3m 2026-11-07): `components/DeveloperPanel.tsx`, on-chain preconditions, confirm dialog with 5% fee. First slice of the founder dashboard (WS-12); developer FE for startMilestone / vote open, execute, claim funds still open (see FE-58, FE-60).
 - [ ] Developer-only view for `startMilestone(index)` (exists in contract, developer only, needs funding closed, not cancelled, previous milestone executed), execute and claim creator funds: not implemented (FE-60/FE-58)
   - PARTIAL (WS-12.0m 2026-11-07): start milestone vote (developer) and execute milestone (anyone) done in `components/MilestonePanel.tsx`, code verified vs MilestoneEscrow.sol, runtime NOT verified. Remaining: claim creator funds (WS-12.1 / API-82).
+- [x] Milestones page reads chain state (WS-12.0n 2026-11-08): milestones, votingEndTime, hasVoted, projectCancelled, developer via `useReadContracts` (10 s refetch); indexer only as loading fallback; invalidates after vote (code verified vs MilestoneEscrow._vote, runtime NOT verified)
+- [x] Execute milestone is developer-only in `MilestonePanel` (WS-12.0n 2026-11-08); investors see 'Approved: waiting for the developer to execute this milestone.'; exception: 'Finalise failed vote' stays available to any wallet (investors need it to cancel and open refunds)
+- [x] Vote display scaled to the public supply (WS-12.0p 2026-11-08): Yes/No as % of public supply, stacked bar with Quorum 20% and Fast track 50% markers, turnout, 'Fast track: N more Yes needed' / 'Fast track reached'; same numbers in `MilestonePanel`; `pctOfSupply`/`barWidthPct` in `lib/format.ts` (code verified vs MilestoneEscrow.executeMilestone, runtime NOT verified)
+- [ ] Stacked vote bar clips No if yes+no > public supply (cannot happen on chain; cosmetic)
+- [ ] Show the connected wallet's voting weight (staked balance): 'Your voting weight: X, Y% of public supply'
+- [ ] Hint for investors who have not staked: 'Stake your tokens to vote' (weight = staked balance)
+- [ ] Milestones page empty-state text still says 'indexed by Ponder'; reword (chain reads are the source now)
+- [ ] Developer who never executes an approved milestone blocks payout/progress: WS-08.4L auto-execute worker (relayer) will cover; consider letting anyone execute after N days of approval
+- [ ] Failed-vote finalisation by investors is possible only after the 28-day voting period ends
 - [ ] Milestone panel shows 'Milestone N of M' (needs milestone count in ProjectDto or a milestones list)
 - [ ] Developer `cancelProject` action in the panel
 - [ ] Guardian freeze UI (not planned)
