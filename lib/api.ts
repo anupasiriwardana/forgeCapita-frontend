@@ -747,6 +747,26 @@ export function getProjectTransparency(projectId: string, signal?: AbortSignal):
   return apiFetch<TransparencyDto>(`/projects/${encodeURIComponent(projectId)}/transparency`, { signal });
 }
 
+async function closeComplianceCase(
+  kind: "resolve" | "shutdown",
+  projectId: string,
+  note: string,
+): Promise<ComplianceCaseDto> {
+  const data = await apiFetch<{ case: ComplianceCaseDto }>(
+    `/admin/compliance/${encodeURIComponent(projectId)}/${kind}`,
+    { method: "POST", body: { note } },
+  );
+  return data.case;
+}
+
+export function resolveComplianceCase(projectId: string, note: string): Promise<ComplianceCaseDto> {
+  return closeComplianceCase("resolve", projectId, note);
+}
+
+export function shutdownComplianceCase(projectId: string, note: string): Promise<ComplianceCaseDto> {
+  return closeComplianceCase("shutdown", projectId, note);
+}
+
 export function listAdminCompliance(
   params: { limit?: number; offset?: number; state?: ComplianceState; chainId?: number },
   signal?: AbortSignal,

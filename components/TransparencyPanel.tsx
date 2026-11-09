@@ -24,6 +24,7 @@ const STATE_LINES: Record<ComplianceState | "not_checked", string> = {
 
 export function complianceBadge(state: ComplianceState | "not_checked" | null): string {
   if (state === "OK" || state === "RESOLVED") return "badge-active";
+  if (state === "SHUTDOWN") return "badge-danger";
   if (state === "WARNED" || state === "not_checked") return "badge-pending";
   return "badge-inactive";
 }

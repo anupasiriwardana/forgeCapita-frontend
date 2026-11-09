@@ -12,6 +12,7 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   busy?: boolean;
+  confirmDisabled?: boolean;
   tone?: "default" | "danger";
 }
 
@@ -30,6 +31,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   busy = false,
+  confirmDisabled = false,
   tone = "default",
 }: ConfirmDialogProps) {
   const mounted = useSyncExternalStore(subscribe, () => true, () => false);
@@ -108,7 +110,7 @@ export function ConfirmDialog({
           <button ref={cancelRef} type="button" className="btn-secondary" disabled={busy} onClick={onCancel}>
             {cancelLabel}
           </button>
-          <button type="button" className={tone === "danger" ? "btn-danger" : "btn-primary"} disabled={busy} onClick={onConfirm}>
+          <button type="button" className={tone === "danger" ? "btn-danger" : "btn-primary"} disabled={busy || confirmDisabled} onClick={onConfirm}>
             {busy && <span className="spinner" style={{ width: "14px", height: "14px" }} />}
             {busy ? "Working..." : confirmLabel}
           </button>
