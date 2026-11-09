@@ -869,6 +869,54 @@ export async function fetchGasLedger(
   return json as unknown as GasLedgerResponse;
 }
 
+export interface CreatorClaimRow {
+  amount: string;
+  claimant: string;
+  txHash: string;
+  timestamp: string;
+}
+
+export interface ProjectRevenueDto {
+  chainId: number;
+  projectId: string;
+  escrowAddress: string;
+  routerAddress: string | null;
+  claims: CreatorClaimRow[];
+  totals: {
+    paymentCount: number;
+    totalGross: string;
+    totalCreatorCut: string;
+    totalInvestorCut: string;
+    totalToStakers: string;
+    totalRedirectedToCreator: string;
+    totalPlatformFee: string;
+    totalCreatorClaimed: string;
+    totalTreasuryClaimed: string;
+    lastPaymentAt: string | null;
+  };
+}
+
+/** Returns null when the indexer does not know the project yet (404): no revenue yet. */
+export async function fetchProjectRevenue(
+  chainId: number,
+  escrowAddress: string,
+  signal?: AbortSignal
+): Promise<ProjectRevenueDto | null> {
+  const res = await fetch(
+    `${getPonderApi()}/projects/${chainId}/${encodeURIComponent(escrowAddress.toLowerCase())}/revenue`,
+    { headers: { Accept: "application/json" }, cache: "no-store", credentials: "omit", signal }
+  );
+  if (res.status === 404) return null;
+  const json: unknown = await res.json().catch(() => null);
+  if (!res.ok || !isRecord(json)) {
+    throw new ApiError(
+      res.status,
+      isRecord(json) && typeof json.error === "string" ? json.error : `Request failed (${res.status})`
+    );
+  }
+  return json as unknown as ProjectRevenueDto;
+}
+
 /** `projectId` is the composite project id (equals the indexer's project.id). */
 export async function fetchMilestonesByProject(
   projectId: string

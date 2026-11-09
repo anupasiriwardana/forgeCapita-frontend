@@ -15,6 +15,7 @@ import { Suspense } from "react";
 import { chainCurrency, chainName } from "@/config/chains";
 import { InvestorPanel } from "@/components/InvestorPanel";
 import { DeveloperPanel } from "@/components/DeveloperPanel";
+import { CreatorFunds } from "@/components/CreatorFunds";
 import { MilestonePanel } from "@/components/MilestonePanel";
 import { GasLedger } from "@/components/GasLedger";
 import { ProfileEditor } from "@/components/ProfileEditor";
@@ -407,6 +408,7 @@ function ProjectDetailInner({ id }: { id: string }) {
         {/* Right: Funding Panel */}
         <div style={{ position: "sticky", top: "88px" }}>
           <DeveloperPanel project={project} nowSeconds={nowSeconds} />
+          <CreatorFunds project={project} />
           <MilestonePanel project={project} nowSeconds={nowSeconds} />
           <GasLedger project={project} />
           <FundingGate project={project} nowSeconds={nowSeconds} onFunded={() => void refetchBalance()} />
