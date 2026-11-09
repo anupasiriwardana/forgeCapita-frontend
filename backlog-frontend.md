@@ -111,7 +111,10 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [x] **FE-86** (DONE 2026-11-06 WS-07.5o, code read + tsc/lint; runtime NOT verified) Project page 'Project profile' form (`components/ProfileEditor.tsx`, rendered in `app/projects/[id]/page.tsx`) for the project's developer and staff/admin, so a profile can be saved or fixed after launch (the create-page retry state is lost on reload; stranded project 421614:0xa0891a58a00a75ed04f6a3e6ba74885348bf63d3 has no UI path yet). Founder with no profile picks an approved free shadow wallet (sends only `shadowWalletId`); save retries 404 8x4 s.
   - [x] Indexer lag line done on /launches only (FE-91, shown when lag >= 2 min); not on the project page.
 - [x] **FE-91** (DONE 2026-11-07 WS-07.7, code read + tsc 0/lint clean; package files unchanged; runtime NOT verified) `/launches` 'My launches' page (`app/launches/page.tsx`, Navbar link for founder/staff/admin, 'View my launches' link on the create page panel): drafts newest first with status badge and explanation, Cancel for pending (confirm, 409 refetch), Refresh, 15 s auto-refresh while pending/attached, Ponder `/status` lag line (`fetchIndexerStatus`) when lag >= 2 min. Resolves the FE-90 'listMyLaunchDrafts unused' gap.
-- [ ] **FE-92** (added 2026-11-07) Staff view of all launch drafts (cross-ref API-104).
+- [x] **FE-92** (added 2026-11-07; read part done 2026-11-08, WS-11.2b; code verified vs adminSchemas/adminController, tsc 0, lint clean, runtime NOT verified) Staff view of all launch drafts (cross-ref API-104). `/admin` Launch drafts tab (`components/admin/LaunchDraftsTab.tsx`), read-only.
+  - Remaining (new items below): staff cancel of stuck drafts UI (needs API-130).
+- [ ] **FE-109** (added 2026-11-08) Staff cancel/release of stuck launch drafts UI (WS-11.2c; needs API-130 write endpoint).
+- [ ] **FE-110** (added 2026-11-08) Admin tabs extras: Relay tab projectId filter input; date-range filters (API-133); link audit targets to /founder or user pages; export CSV.
 - [ ] **FE-87** (added 2026-11-06) ProfileEditor cannot clear optional fields back to empty (`upsertProfile` drops empty strings).
 - [ ] **FE-88** (added 2026-11-06) A founder-developer whose profile exists but has no wallet bound (e.g. staff-created) cannot bind from the ProfileEditor (public DTO hides the binding, API would 400); staff must bind. Needs a design decision.
 - [ ] **FE-89** (added 2026-11-06) The 404 retry helper was duplicated in `ProfileEditor.tsx` and `app/projects/create/page.tsx`; after WS-07.6b the create page no longer saves a profile, so the retry helper now lives only in `ProfileEditor.tsx` (dedupe no longer needed; the create page has its own attach/index polling).
@@ -147,7 +150,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-95** Block-explorer links for contract addresses and relay tx per chain (relay tx link exists only inside RelayStatus).
 - [ ] **FE-96** ERC-1271 smart-contract wallets are unsupported by the gasless stake (Permit is EOA-only in the token) and the api verifies signatures with `verifyTypedData` (EOA); show a clear 'use pay gas' hint for such wallets.
 - [x] **FE-99** (2026-11-08, WS-08.5L; verified by code read vs indexer stats.ts gas-ledger route and MilestoneEscrow._bookGas ceiling; tsc 0, lint clean; runtime NOT verified) Gas ledger card on the project page (`components/GasLedger.tsx`): total sponsored, on-chain gasBudget/ceiling, 'Used X of ceiling Y' bar, sponsored actions table with action filter, Show more and explorer tx links, debt section. FE-58 (founder dashboard gas overflow) and FE-68 (admin ledgers) stay open.
-- [ ] **FE-100** (WS-08.5L follow-up) Relayer balance indicator on the UI: needs a small public API endpoint first (API-123).
+- [x] **FE-100** (WS-08.5L follow-up; done 2026-11-08, WS-11.2b; code verified vs relayStatus.ts, runtime NOT verified) Relayer balance indicator on the UI: needs a small public API endpoint first (API-123). Shown as a status strip on the `/admin` Relay tab (per chain enabled, address, ok/low/empty badge, 30 s poll).
 - [ ] **FE-101** (WS-08.5L follow-up) GasLedger: 'Show more' can show one extra empty page when the row count is an exact multiple of 20; use `limit+1` or the summary actionCount.
 - [ ] **FE-102** (WS-08.5L follow-up) GasLedger: invalidate/refetch right after a relay request is confirmed (today only the 30 s poll refreshes it).
 - [ ] **FE-103** (WS-08.5L follow-up) GasLedger: chain-read failures (gasBudget/netFunds/MAX_DEBT_BPS) hide the budget and ceiling silently; surface a small note.
@@ -197,7 +200,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] On-chain freshness for state after close: the detail page may show FUNDING until the indexer catches up (only RAISED is live; 'Updating from the chain' note)
 
 ### Staff dashboard (`/staff`)
-- [ ] **FE-65** Applications queue (approve / request changes / reject), KYC review (secure document viewer), repo provisioning status, shadow wallet change approvals, complaints queue and thread, read-only Risk Center, takeover case preparation and signalling vote setup.
+- [ ] **FE-65** (partial; 2026-11-08 WS-11.2b added read-only Audit log, Launch drafts and Relay tabs; Risk Center, complaints, takeover prep remain) Applications queue (approve / request changes / reject), KYC review (secure document viewer), repo provisioning status, shadow wallet change approvals, complaints queue and thread, read-only Risk Center, takeover case preparation and signalling vote setup.
   - Partial (2026-11-06, WS-07.4l, FIRST PART ticked per user direction): `/admin` applications queue (tabs, paging 20, detail, approve with KYC checkbox, reject with required note) and admin-only Users role management done. Second part done 2026-11-06 (WS-07.5l): `/admin` shadow wallet approvals queue. Remaining: request-changes, KYC document viewer, repo provisioning, complaints, Risk Center, takeover prep.
 
 - [ ] Extract duplicated `SafeLink` and `Row` helpers from `app/apply/page.tsx` and `app/admin/page.tsx` into a shared component
@@ -215,7 +218,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] Shadow wallet approve/reject in /admin has no confirm dialog (none existed before); decide if one is wanted
 
 ### Admin dashboard (`/admin`)
-- [ ] **FE-68** Everything in staff plus: compliance cases (WARNED / ESCALATED) with evidence, **freeze / unfreeze milestones** and **emergency shutdown** (signed by the admin's connected treasury wallet; confirmation dialog that states the consequences), takeover execution (`proposeNewDeveloper`) and repo lockout, relayer health (balance, spend, queue, circuit breaker), project gas ledgers, staff management, system settings (tolerance, token allow-list, relayer limits), audit log viewer, analytics.
+- [ ] **FE-68** (partial; 2026-11-08 WS-11.2b read-only audit log viewer, drafts and relay ledgers tabs done; rest open) Everything in staff plus: compliance cases (WARNED / ESCALATED) with evidence, **freeze / unfreeze milestones** and **emergency shutdown** (signed by the admin's connected treasury wallet; confirmation dialog that states the consequences), takeover execution (`proposeNewDeveloper`) and repo lockout, relayer health (balance, spend, queue, circuit breaker), project gas ledgers, staff management, system settings (tolerance, token allow-list, relayer limits), audit log viewer, analytics.
 - [ ] **FE-69** Rogue contract alerts (launches without approved applications) with one-click case creation.
 
 ### Investor protection features
@@ -233,7 +236,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [x] **FE-97** Fix React style warning (shorthand `margin` mixed with longhand `marginBottom`) in `components/MilestonePanel.tsx`: `MUTED` now uses longhand margins (2026-11-08).
 - [ ] **FE-98** Audit other components for margin/padding shorthand + longhand mixes (a grep of app/ and components/ found no other occurrence on 2026-11-08); optional lint rule.
 - [x] **FE-85 `[USER-ACTION]`** GitHub Actions CI (lint, typecheck, build, tests). (workflow file `.github/workflows/ci.yml` written 2026-11-08 WS-13.1: npm ci, tsc, lint, build with placeholder NEXT_PUBLIC_*; no tests step; read by tracker, NOT run; user must commit and push to enable)
-- [ ] **FE-104** (added 2026-11-08) Run the frontend CI once on GitHub and adjust the NEXT_PUBLIC_* placeholders if the build fails.
+- [x] **FE-104** (added 2026-11-08; user-reported GREEN 2026-11-08 after the lockfile regeneration, not verified by Claude) Run the frontend CI once on GitHub and adjust the NEXT_PUBLIC_* placeholders if the build fails.
   - 2026-11-08: first run failed at `npm ci` (package.json and package-lock.json not in sync: stale lockfile, missing transitive @x402/*, @solana/kit 8.x vs 5.5.1, siwe, etc.). Fixed locally by regenerating package-lock.json (package.json untouched); `npm ci --dry-run`, tsc, lint and build verified in a clean temp copy per main session (not re-run by tracker). Still to do: user commits the lock, pushes and confirms the Actions run is green.
 - [ ] **FE-105** (added 2026-11-08) Add a CI guard so the lockfile cannot drift (e.g. pre-commit `npm ci --dry-run`, or an early CI step that fails with a clear message).
 - [ ] **FE-106** (added 2026-11-08) Pin the npm version in the Docker image (container npm 10.9.9 vs CI Node 22) so local and CI lockfile resolution match.

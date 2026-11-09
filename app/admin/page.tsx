@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AuditLogTab } from "@/components/admin/AuditLogTab";
+import { LaunchDraftsTab } from "@/components/admin/LaunchDraftsTab";
+import { RelayTab } from "@/components/admin/RelayTab";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
 import {
@@ -541,6 +544,44 @@ function UsersSection() {
   );
 }
 
+type SectionKey = "applications" | "wallets" | "users" | "audit" | "drafts" | "relay";
+
+function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: string }) {
+  const [section, setSection] = useState<SectionKey>("applications");
+  const sections: { key: SectionKey; label: string }[] = [
+    { key: "applications", label: "Applications" },
+    { key: "wallets", label: "Shadow wallets" },
+    ...(role === "admin" ? [{ key: "users" as const, label: "Users" }] : []),
+    { key: "audit", label: "Audit log" },
+    { key: "drafts", label: "Launch drafts" },
+    { key: "relay", label: "Relay" },
+  ];
+  return (
+    <>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "24px", flexWrap: "wrap" }} role="tablist">
+        {sections.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            role="tab"
+            aria-selected={section === s.key}
+            className={section === s.key ? "btn-primary" : "btn-secondary"}
+            onClick={() => setSection(s.key)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+      {section === "applications" && <ApplicationsSection selfAddress={selfAddress} />}
+      {section === "wallets" && <ShadowWalletsSection />}
+      {section === "users" && role === "admin" && <UsersSection />}
+      {section === "audit" && <AuditLogTab />}
+      {section === "drafts" && <LaunchDraftsTab />}
+      {section === "relay" && <RelayTab />}
+    </>
+  );
+}
+
 export default function AdminPage() {
   const { user, role, loading, signIn } = useAuth();
   let content: React.ReactNode;
@@ -558,13 +599,7 @@ export default function AdminPage() {
   } else if (role !== "staff" && role !== "admin") {
     content = <div className="alert alert-warning">Staff access only</div>;
   } else {
-    content = (
-      <>
-        <ApplicationsSection selfAddress={user.address} />
-        <ShadowWalletsSection />
-        {role === "admin" && <UsersSection />}
-      </>
-    );
+    content = <AdminSections role={role} selfAddress={user.address} />;
   }
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "40px 24px" }}>

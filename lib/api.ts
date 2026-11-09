@@ -630,6 +630,102 @@ export async function rejectShadowWallet(id: string, note: string, signal?: Abor
   });
 }
 
+// ── Staff: audit log, launch drafts, relay requests, relayer status ───────
+
+export interface AuditLogEntryDto {
+  id: string;
+  actorUserId: string | null;
+  action: string;
+  target: string | null;
+  before: string | null;
+  after: string | null;
+  ip: string | null;
+  createdAt: string;
+}
+
+export interface AdminLaunchDraftDto {
+  id: string;
+  userId: string;
+  walletAddress: string;
+  status: LaunchDraftStatus;
+  chainId: number;
+  founderWalletId: string | null;
+  escrowAddress: string | null;
+  projectId: string | null;
+  name: string;
+  createdAt: string;
+  appliedAt: string | null;
+}
+
+export type RelayKind = "claim" | "stake" | "vote" | "execute";
+export type RelayRequestStatus = "QUEUED" | "SENDING" | "SENT" | "CONFIRMED" | "FAILED" | "EXPIRED";
+
+export interface AdminRelayRequestDto {
+  id: string;
+  kind: RelayKind;
+  chainId: number;
+  projectId: string;
+  userId: string | null;
+  account: string;
+  status: RelayRequestStatus;
+  errorCode: string | null;
+  errorMessage: string | null;
+  txHash: string | null;
+  gasUsed: string | null;
+  effectiveGasPrice: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  confirmedAt: string | null;
+  expiresAt: string;
+}
+
+export type RelayBalanceBucket = "ok" | "low" | "empty" | "unknown";
+
+export interface RelayChainStatus {
+  chainId: number;
+  enabled: boolean;
+  relayerAddress?: string;
+  balance?: RelayBalanceBucket;
+}
+
+export interface RelayStatusDto {
+  enabled: boolean;
+  chains: RelayChainStatus[];
+}
+
+export function listAuditLog(
+  params: { limit?: number; offset?: number; action?: string; target?: string; actor?: string },
+  signal?: AbortSignal,
+): Promise<Page<AuditLogEntryDto>> {
+  return apiFetch<Page<AuditLogEntryDto>>(`/admin/audit-log${buildQuery(params)}`, { signal });
+}
+
+export function listAdminLaunchDrafts(
+  params: { limit?: number; offset?: number; status?: LaunchDraftStatus; userId?: string; chainId?: number },
+  signal?: AbortSignal,
+): Promise<Page<AdminLaunchDraftDto>> {
+  return apiFetch<Page<AdminLaunchDraftDto>>(`/admin/launch-drafts${buildQuery(params)}`, { signal });
+}
+
+export function listAdminRelayRequests(
+  params: {
+    limit?: number;
+    offset?: number;
+    kind?: RelayKind;
+    status?: RelayRequestStatus;
+    chainId?: number;
+    system?: "true";
+    projectId?: string;
+  },
+  signal?: AbortSignal,
+): Promise<Page<AdminRelayRequestDto>> {
+  return apiFetch<Page<AdminRelayRequestDto>>(`/admin/relay-requests${buildQuery(params)}`, { signal });
+}
+
+export function fetchRelayStatus(signal?: AbortSignal): Promise<RelayStatusDto> {
+  return apiFetch<RelayStatusDto>("/relay/status", { signal });
+}
+
 function fieldDetails(details: unknown): string {
   if (!Array.isArray(details)) return "";
   const parts: string[] = [];
