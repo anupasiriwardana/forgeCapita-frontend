@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
+import { useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId, useConfig, usePublicClient } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { isAddress, parseEther, parseUnits } from "viem";
-import { fetchActiveListings, type P2PListing } from "@/lib/api";
-import { P2PListingCard } from "@/components/P2PListingCard";
+import { fetchActiveListings, fetchRecentTrades, formatEth, shortAddr, type P2PListing } from "@/lib/api";
+import { P2PListingCard, PROTOCOL_FEE_BPS, splitPrice } from "@/components/P2PListingCard";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { IndexerLagNote } from "@/components/IndexerLagNote";
+import { explorerTxUrl } from "@/components/admin/shared";
 import { ABIS, getContractConfig } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
 import { chainCurrency } from "@/config/chains";
@@ -26,6 +29,14 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
   const publicClient = usePublicClient();
   const [step, setStep] = useState("");
   const { writeContractAsync } = useWriteContract();
+
+  let receiveText = "";
+  try {
+    const typed = parseEther(priceEth);
+    if (typed > BigInt(0)) receiveText = `${formatEth(splitPrice(typed).proceeds.toString(), 6)} ${chainCurrency(chainId)}`;
+  } catch {
+    receiveText = "";
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -146,6 +157,11 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
                   placeholder="0.05"
                   required
                 />
+                {receiveText && (
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "6px" }}>
+                    You receive about {receiveText} (price minus {PROTOCOL_FEE_BPS / 100}% fee)
+                  </div>
+                )}
               </div>
 
               {txStatus === "error" && (
@@ -173,14 +189,76 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
   );
 }
 
+// ── Recent trades ──────────────────────────────────────────────────────────
+
+function RecentTrades({ chainId }: { chainId: number }) {
+  const { data: trades, isLoading } = useQuery({
+    queryKey: ["p2p-trades"],
+    queryFn: () => fetchRecentTrades(20),
+  });
+
+  return (
+    <section style={{ marginTop: "56px" }}>
+      <h2 style={{ fontSize: "22px", marginBottom: "12px" }}>Recent trades</h2>
+      <IndexerLagNote chainId={chainId} />
+      {isLoading ? (
+        <p style={{ color: "var(--text-muted)" }}>Loading trades...</p>
+      ) : !trades || trades.length === 0 ? (
+        <p style={{ color: "var(--text-muted)" }}>No trades yet</p>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--text-muted)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <th style={{ padding: "8px" }}>Date</th>
+                <th style={{ padding: "8px" }}>Token</th>
+                <th style={{ padding: "8px" }}>Amount</th>
+                <th style={{ padding: "8px" }}>Price</th>
+                <th style={{ padding: "8px" }}>Seller</th>
+                <th style={{ padding: "8px" }}>Buyer</th>
+                <th style={{ padding: "8px" }}>Tx</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trades.map((t) => {
+                const txUrl = explorerTxUrl(t.chainId, t.txHash);
+                return (
+                  <tr key={t.id} style={{ borderTop: "1px solid var(--border)" }}>
+                    <td style={{ padding: "8px" }}>{new Date(Number(t.timestamp) * 1000).toLocaleString()}</td>
+                    <td style={{ padding: "8px", fontFamily: "monospace" }}>{shortAddr(t.tokenAddress)}</td>
+                    <td style={{ padding: "8px" }}>{formatEth(t.tokenAmount, 2)}</td>
+                    <td style={{ padding: "8px" }}>{formatEth(t.pricePaid, 4)} {chainCurrency(t.chainId)}</td>
+                    <td style={{ padding: "8px", fontFamily: "monospace" }}>{shortAddr(t.seller)}</td>
+                    <td style={{ padding: "8px", fontFamily: "monospace" }}>{shortAddr(t.buyer)}</td>
+                    <td style={{ padding: "8px" }}>
+                      {txUrl ? (
+                        <a href={txUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)" }}>View</a>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── P2P Main Content ───────────────────────────────────────────────────────
 
 function P2PContent() {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const chainId = useChainId();
+  const config = useConfig();
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [buyingId, setBuyingId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<P2PListing | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const { data: listings } = useSuspenseQuery({
     queryKey: ["p2p-listings"],
@@ -218,6 +296,39 @@ function P2PContent() {
       setBuyError(err instanceof Error ? err.message : "Purchase failed");
     } finally {
       setBuyingId(null);
+    }
+  }
+
+  async function handleCancelConfirmed() {
+    const listing = cancelTarget;
+    if (!listing) return;
+    setCancelTarget(null);
+    if (!isConnected || !address || address.toLowerCase() !== listing.seller.toLowerCase()) {
+      setBuyError("Only the seller can cancel this listing.");
+      return;
+    }
+    if (chainId !== listing.chainId) { setBuyError("Switch your wallet to this listing's network to cancel."); return; }
+    const p2p = getContractConfig(listing.chainId, "p2pExchange");
+    if (!p2p) { setBuyError("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
+    setCancellingId(listing.id);
+    setBuyError("");
+    try {
+      const listingNumericId = listing.id.split(":")[1] ?? "";
+      const hash = await writeContractAsync({
+        address: p2p.address,
+        abi: p2p.abi,
+        functionName: "cancelListing",
+        args: [BigInt(listingNumericId)],
+        ...(await getFeeOverrides(buyClient)),
+      });
+      const receipt = await waitForTransactionReceipt(config, { hash });
+      if (receipt.status !== "success") { setBuyError("Cancel transaction failed (reverted)."); return; }
+      queryClient.invalidateQueries({ queryKey: ["p2p-listings"] });
+    } catch (err) {
+      const e = err as { shortMessage?: string; message?: string };
+      setBuyError(e.shortMessage ?? e.message ?? "Cancel failed");
+    } finally {
+      setCancellingId(null);
     }
   }
 
@@ -319,12 +430,29 @@ function P2PContent() {
               key={listing.id}
               listing={listing}
               onBuy={handleBuy}
-              isPending={buyingId === listing.id}
+              onCancel={(l) => setCancelTarget(l)}
+              viewer={address}
+              isPending={buyingId === listing.id || cancellingId === listing.id}
               index={i}
             />
           ))}
         </div>
       )}
+
+      <RecentTrades chainId={chainId} />
+
+      <ConfirmDialog
+        open={cancelTarget !== null}
+        title="Cancel this listing?"
+        confirmLabel="Cancel listing"
+        cancelLabel="Keep listing"
+        tone="danger"
+        busy={cancellingId !== null}
+        onConfirm={handleCancelConfirmed}
+        onCancel={() => setCancelTarget(null)}
+      >
+        The tokens in this listing return to your wallet. You pay the network gas for this transaction.
+      </ConfirmDialog>
 
       {/* Modal */}
       {showModal && (

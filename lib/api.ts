@@ -141,6 +141,23 @@ export interface P2PListing {
   projectId?: string | null;
 }
 
+export interface P2PTrade {
+  id: string;
+  chainId: number;
+  listingId: string;
+  projectId?: string | null;
+  tokenAddress: string;
+  seller: string;
+  buyer: string;
+  tokenAmount: string;
+  pricePaid: string;
+  protocolFee: string;
+  sellerProceeds: string;
+  txHash: string;
+  /** Unix seconds as a bigint string. */
+  timestamp: string;
+}
+
 // ── Project id helpers ────────────────────────────────────────────────────
 
 export function projectIdOf(chainId: number, escrow: string): string {
@@ -1035,6 +1052,37 @@ export async function fetchActiveListings(): Promise<P2PListing[]> {
   try {
     const data = await ponderQuery<{ p2pListings: { items: P2PListing[] } }>(query);
     return data.p2pListings?.items ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchRecentTrades(limit = 20): Promise<P2PTrade[]> {
+  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 100));
+  const query = `
+    query RecentTrades {
+      p2pTrades(orderBy: "timestamp", orderDirection: "desc", limit: ${safeLimit}) {
+        items {
+          id
+          chainId
+          listingId
+          projectId
+          tokenAddress
+          seller
+          buyer
+          tokenAmount
+          pricePaid
+          protocolFee
+          sellerProceeds
+          txHash
+          timestamp
+        }
+      }
+    }
+  `;
+  try {
+    const data = await ponderQuery<{ p2pTrades: { items: P2PTrade[] } }>(query);
+    return data.p2pTrades?.items ?? [];
   } catch {
     return [];
   }

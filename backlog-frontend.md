@@ -134,7 +134,9 @@ Typography: Inter or Geist, monospace for addresses and hashes.
   - User-paid parts done 2026-11-06 (`components/InvestorPanel.tsx`: stake with approve, unstake with vote-lock block, claim yield, both refunds, "you pay gas" labels; code verified, runtime NOT verified). Gasless claim tokens + gasless stake (Permit) + pay-gas fallbacks done 2026-11-07 (WS-08.3L; code verified against the api and contracts, runtime NOT verified).
 - [ ] **FE-33** Voting UI (gasless): show staked voting power (`DividendDistributor.stakedBalance`), vote-lock warning (`isUserVoteLocked`), vote progress vs quorum, time remaining, queued state.
   - Gasless vote button + request status done 2026-11-07 (WS-08.3L). Remaining: confirm staked voting power / vote-lock warning / quorum progress display exists (not re-checked in this step).
-- [ ] **FE-34** P2P additions: token approval step before listing, cancel listing, trade history, fee display.
+- [x] **FE-34** (WS-09.4 2026-11-09, code verified, runtime NOT verified; approval step was already FE-13b, untouched) P2P additions: token approval step before listing, cancel listing, trade history, fee display.
+  - Done: cancel own listing (ConfirmDialog, seller/chain checks, cancelListing, receipt check); fee display (1% fee and seller proceeds on card, live 'You receive about' in Create Listing, bigint math); Recent trades table from indexer `p2pTrades` (explorer link validated, 'No trades yet', lag note).
+  - Remaining: none for FE-34; per-project trade history on the project page may be added with WS-09.2.
 - [ ] **FE-35** Complaint entry point on every project page (opens the complaint form, FE-72).
 
 ## Phase 5: Gasless action UX
