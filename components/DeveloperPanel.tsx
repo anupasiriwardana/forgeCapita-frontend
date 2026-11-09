@@ -103,7 +103,7 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
       }
       setResult({
         ok: true,
-        text: "Funding closed and project started. The indexer may take a few minutes to show the new state.",
+        text: "Funding closed and project started. The indexer may take a little while to show the new state.",
       });
     } catch (err) {
       setResult({ ok: false, text: errMessage(err) });

@@ -221,7 +221,7 @@ export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; n
       }
       setResult({
         ok: true,
-        text: "Transaction confirmed. This panel is updated now; the indexer and milestones page may take a few minutes to catch up.",
+        text: "Transaction confirmed. This panel is updated now; the indexer and milestones page may take a little while to catch up.",
         hash,
       });
     } catch (err) {

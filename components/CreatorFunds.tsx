@@ -10,6 +10,7 @@ import { ABIS } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
 import { chainCurrency, EXPLORER_URLS } from "@/config/chains";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { IndexerLagNote } from "@/components/IndexerLagNote";
 import { useAuth } from "@/components/web3/AuthProvider";
 
 type Addr = `0x${string}`;
@@ -123,7 +124,7 @@ export function CreatorFunds({ project }: { project: ProjectDto }) {
       }
       setResult({
         ok: true,
-        text: "Creator funds claimed. The indexer may take a few minutes to show the new history.",
+        text: "Creator funds claimed. The indexer may take a little while to show the new history.",
       });
     } catch (err) {
       setResult({ ok: false, text: errMessage(err) });
@@ -144,6 +145,7 @@ export function CreatorFunds({ project }: { project: ProjectDto }) {
   return (
     <div className="glass-card" style={{ padding: "28px", marginBottom: "24px" }}>
       <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>Creator funds</h2>
+      <IndexerLagNote chainId={chainId} />
       {revenueLoading ? (
         <p style={MUTED}>Loading revenue...</p>
       ) : !router ? (

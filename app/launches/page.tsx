@@ -3,46 +3,24 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { IndexerLagNote } from "@/components/IndexerLagNote";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { chainName } from "@/config/chains";
 import {
   ApiError,
   cancelLaunchDraft,
   describeFounderError,
-  fetchIndexerStatus,
   listMyLaunchDrafts,
   shortAddr,
-  type IndexerChainStatus,
   type MyLaunchDraftDto,
 } from "@/lib/api";
 
 const REFRESH_MS = 15_000;
-const LAG_MIN_MINUTES = 2;
-
-type IndexerStatus = Record<string, IndexerChainStatus>;
 
 function badgeClass(status: string): string {
   if (status === "applied") return "badge-active";
   if (status === "pending" || status === "attached") return "badge-pending";
   return "badge-inactive";
-}
-
-function lagByChain(status: IndexerStatus, nowSeconds: number): Record<number, number> {
-  const out: Record<number, number> = {};
-  for (const c of Object.values(status)) {
-    out[c.id] = Math.max(0, Math.floor((nowSeconds - c.block.timestamp) / 60));
-  }
-  return out;
-}
-
-function IndexerLag({ chainId, lag }: { chainId: number; lag: Record<number, number> | null }) {
-  const minutes = lag?.[chainId];
-  if (minutes === undefined || minutes < LAG_MIN_MINUTES) return null;
-  return (
-    <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "4px 0 0" }}>
-      Indexer is about {minutes} min behind on {chainName(chainId)}
-    </p>
-  );
 }
 
 function ProjectLink({ projectId, label }: { projectId: string | null; label: string }) {
@@ -56,12 +34,10 @@ function ProjectLink({ projectId, label }: { projectId: string | null; label: st
 
 function Explanation({
   draft,
-  lag,
   busy,
   onCancel,
 }: {
   draft: MyLaunchDraftDto;
-  lag: Record<number, number> | null;
   busy: boolean;
   onCancel: () => void;
 }) {
@@ -86,7 +62,9 @@ function Explanation({
               Project id: {shortAddr(draft.projectId)}
             </p>
           )}
-          <IndexerLag chainId={draft.chainId} lag={lag} />
+          <div style={{ marginTop: "4px" }}>
+            <IndexerLagNote chainId={draft.chainId} />
+          </div>
         </>
       );
     case "applied":
@@ -111,7 +89,6 @@ function Explanation({
 
 function LaunchList() {
   const [items, setItems] = useState<MyLaunchDraftDto[] | null>(null);
-  const [lag, setLag] = useState<Record<number, number> | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
@@ -127,15 +104,6 @@ function LaunchList() {
         if (signal.aborted) return;
         setItems([...list].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)));
         setError("");
-        if (list.some((d) => d.status === "attached")) {
-          fetchIndexerStatus(signal)
-            .then((s) => {
-              if (!signal.aborted) setLag(lagByChain(s, Math.floor(Date.now() / 1000)));
-            })
-            .catch(() => {
-              if (!signal.aborted) setLag(null);
-            });
-        }
       })
       .catch((err: unknown) => {
         if (!signal.aborted) setError(describeFounderError(err, "Failed to load your launches"));
@@ -184,7 +152,7 @@ function LaunchList() {
           <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "0 0 8px" }}>
             {chainName(draft.chainId)} · {new Date(draft.createdAt).toLocaleString()}
           </p>
-          <Explanation draft={draft} lag={lag} busy={busyId === draft.id} onCancel={() => setCancelId(draft.id)} />
+          <Explanation draft={draft} busy={busyId === draft.id} onCancel={() => setCancelId(draft.id)} />
         </section>
       ))}
       <ConfirmDialog

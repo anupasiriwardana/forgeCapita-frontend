@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { EXPLORER_URLS } from "@/config/chains";
+import { IndexerLagNote } from "@/components/IndexerLagNote";
 
 const PAGE_SIZE = 20;
 const MAX_LIMIT = 200;
@@ -140,6 +141,7 @@ export function GasLedger({ project }: { project: ProjectDto }) {
   return (
     <div className="glass-card" style={{ padding: "20px", marginBottom: "24px" }}>
       <h2 style={{ fontSize: "16px", marginBottom: "8px" }}>Gas sponsorship</h2>
+      <IndexerLagNote chainId={chainId} />
       <p style={{ ...MUTED, marginTop: 0, marginBottom: "12px" }}>
         The platform pays the network fee for your gasless claim, vote and stake (relayed actions). The cost is
         booked against this project&apos;s gas budget (taken from the 5% platform fee at funding close).

@@ -173,6 +173,11 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 ### Founder dashboard (`/founder`)
 - [x] **FE-111** (2026-11-09, WS-12.1a; code verified vs RevenueRouter.sol, tsc 0, lint clean, runtime NOT verified) Developer-only 'Creator funds' card (`components/CreatorFunds.tsx`, project page): on-chain pending `creatorPendingFunds` (10 s), totals and claim history from the indexer, 'Claim creator funds' with ConfirmDialog (user pays gas). Note (user decision 2026-11-09): routePayment UI intentionally not exposed; revenue routing is the founder's payment process + WS-10 reconciliation.
+- [x] **FE-116** (2026-11-09, WS-12.1b; code verified, tsc 0, lint clean, runtime NOT verified) Indexer lag note without minutes: `lib/useIndexerLag.ts` (polls indexer /status every 60 s, behind when newest block older than 120 s) and `components/IndexerLagNote.tsx`, used in CreatorFunds, GasLedger and /launches; post-tx messages say 'a little while'. Trigger: 'Total claimed' did not rise after a claim because the indexer was ~9 min behind.
+- [ ] **FE-117** One shared query for indexer /status instead of per-instance polling (each IndexerLagNote polls separately).
+- [ ] **FE-118** Use IndexerLagNote on other indexer-based screens (dashboard cards, portfolio, p2p lists).
+- [ ] **FE-119** Optimistic update of 'Total claimed' from the on-chain claim receipt (show the claimed amount immediately until the indexer catches up).
+- [ ] **IDX-59** (watch item, recurring indexer lag, now ~9 min; lives in the indexer repo, noted here for the user-facing note)
 - [ ] **FE-112** Shared bigint-safe formatter replacing `formatEth`/`formatNative` (they use `Number()`, losing precision on large wei); CreatorFunds uses its own `fmtWei` meanwhile.
 - [ ] **FE-113** Public revenue page (WS-10.6): totals and history for investors.
 - [ ] **FE-114** Decide whether CreatorFunds should also show for former developers (history only); claim history pagination (currently latest 20).
