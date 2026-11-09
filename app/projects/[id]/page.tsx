@@ -18,6 +18,7 @@ import { DeveloperPanel } from "@/components/DeveloperPanel";
 import { CreatorFunds } from "@/components/CreatorFunds";
 import { MilestonePanel } from "@/components/MilestonePanel";
 import { GasLedger } from "@/components/GasLedger";
+import { TransparencyPanel } from "@/components/TransparencyPanel";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import {
   displayState,
@@ -410,6 +411,7 @@ function ProjectDetailInner({ id }: { id: string }) {
           <DeveloperPanel project={project} nowSeconds={nowSeconds} />
           <CreatorFunds project={project} />
           <MilestonePanel project={project} nowSeconds={nowSeconds} />
+          <TransparencyPanel project={project} />
           <GasLedger project={project} />
           <FundingGate project={project} nowSeconds={nowSeconds} onFunded={() => void refetchBalance()} />
           <InvestorPanel project={project} nowSeconds={nowSeconds} />

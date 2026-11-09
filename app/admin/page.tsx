@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AuditLogTab } from "@/components/admin/AuditLogTab";
+import { ComplianceTab } from "@/components/admin/ComplianceTab";
 import { LaunchDraftsTab } from "@/components/admin/LaunchDraftsTab";
 import { RelayTab } from "@/components/admin/RelayTab";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -544,7 +545,7 @@ function UsersSection() {
   );
 }
 
-type SectionKey = "applications" | "wallets" | "users" | "audit" | "drafts" | "relay";
+type SectionKey = "applications" | "wallets" | "users" | "audit" | "drafts" | "relay" | "compliance";
 
 function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: string }) {
   const [section, setSection] = useState<SectionKey>("applications");
@@ -555,6 +556,7 @@ function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: str
     { key: "audit", label: "Audit log" },
     { key: "drafts", label: "Launch drafts" },
     { key: "relay", label: "Relay" },
+    { key: "compliance", label: "Compliance" },
   ];
   return (
     <>
@@ -578,6 +580,7 @@ function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: str
       {section === "audit" && <AuditLogTab />}
       {section === "drafts" && <LaunchDraftsTab />}
       {section === "relay" && <RelayTab />}
+      {section === "compliance" && <ComplianceTab />}
     </>
   );
 }

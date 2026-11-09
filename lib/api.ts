@@ -707,6 +707,53 @@ export function listAdminLaunchDrafts(
   return apiFetch<Page<AdminLaunchDraftDto>>(`/admin/launch-drafts${buildQuery(params)}`, { signal });
 }
 
+export type ComplianceState = "OK" | "WARNED" | "ESCALATED" | "RESOLVED" | "SHUTDOWN";
+
+export interface TransparencyDto {
+  projectId: string;
+  chainId: number;
+  auditStatus: "audited" | "unaudited";
+  note: string | null;
+  complianceState: ComplianceState | "not_checked" | null;
+  shadowWallet: string | null;
+  lastCheckedAt: string | null;
+  windowDays: number;
+  observedNative: string | null;
+  routedNative: string | null;
+  shortfallBps: number | null;
+  toleranceBps: number;
+  frozen: null;
+}
+
+export interface ComplianceCaseDto {
+  id: string;
+  projectId: string;
+  chainId: number;
+  state: ComplianceState;
+  openedAt: string;
+  stateChangedAt: string;
+  escalatedAt: string | null;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+  lastCheckedAt: string | null;
+  observedNative: string | null;
+  routedNative: string | null;
+  shortfallBps: number | null;
+  windowStart: string | null;
+  windowEnd: string | null;
+}
+
+export function getProjectTransparency(projectId: string, signal?: AbortSignal): Promise<TransparencyDto> {
+  return apiFetch<TransparencyDto>(`/projects/${encodeURIComponent(projectId)}/transparency`, { signal });
+}
+
+export function listAdminCompliance(
+  params: { limit?: number; offset?: number; state?: ComplianceState; chainId?: number },
+  signal?: AbortSignal,
+): Promise<Page<ComplianceCaseDto>> {
+  return apiFetch<Page<ComplianceCaseDto>>(`/admin/compliance${buildQuery(params)}`, { signal });
+}
+
 export function listAdminRelayRequests(
   params: {
     limit?: number;
