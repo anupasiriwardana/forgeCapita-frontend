@@ -3,6 +3,16 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { listProjects, type ProjectDto } from "@/lib/api";
 import { ProjectCard } from "@/components/ProjectCard";
+import { MarketplaceFilters as MarketplaceFiltersPanel } from "@/components/MarketplaceFilters";
+import {
+  PAGE_SIZE,
+  canGoNext,
+  hasActiveFilters,
+  parseFilters,
+  toListParams,
+  toQueryString,
+  type MarketplaceFilters,
+} from "@/lib/marketplaceFilters";
 
 export const dynamic = "force-dynamic";
 
@@ -38,13 +48,27 @@ function ProjectsSkeleton() {
   );
 }
 
-async function ProjectsSection() {
+async function ProjectsSection({ filters }: { filters: MarketplaceFilters }) {
   let projects: ProjectDto[] = [];
+  let total = 0;
   try {
-    projects = (await listProjects({ limit: 50 })).items;
+    const res = await listProjects(toListParams(filters));
+    projects = res.items;
+    total = res.total;
   } catch (err) {
     console.warn("[ProjectsSection] Unable to load projects:", err);
   }
+
+  const filtered = hasActiveFilters(filters);
+  const from = (filters.page - 1) * PAGE_SIZE + 1;
+  const to = from + projects.length - 1;
+  const hasPrev = filters.page > 1;
+  const hasNext = canGoNext(filters, total);
+  const pageHref = (page: number): string => {
+    const qs = toQueryString({ ...filters, page });
+    return qs ? `/?${qs}` : "/";
+  };
+  const pagerStyle = { textDecoration: "none", padding: "8px 16px", fontSize: "14px" } as const;
 
   return (
     <>
@@ -52,25 +76,73 @@ async function ProjectsSection() {
       <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "40px" }}>
         <div className="divider" style={{ flex: 1, margin: 0 }} />
         <span style={{ fontSize: "13px", color: "var(--text-muted)", whiteSpace: "nowrap", fontWeight: 600 }}>
-          {projects.length > 0
-            ? `${projects.length} active project${projects.length !== 1 ? "s" : ""}`
-            : "No active projects yet"}
+          {total > 0
+            ? `${total} project${total !== 1 ? "s" : ""}${filtered ? " found" : ""}`
+            : filtered
+              ? "No matching projects"
+              : "No projects yet"}
         </span>
         <div className="divider" style={{ flex: 1, margin: 0 }} />
       </div>
 
       {/* Grid or Empty State */}
       {projects.length > 0 ? (
+        <>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+              gap: "24px",
+            }}
+          >
+            {projects.map((project, i) => (
+              <ProjectCard key={project.id} project={project} index={i} />
+            ))}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "16px",
+              marginTop: "32px",
+              flexWrap: "wrap",
+            }}
+          >
+            {hasPrev && (
+              <Link href={pageHref(filters.page - 1)} className="btn-secondary" style={pagerStyle}>
+                ← Previous
+              </Link>
+            )}
+            <span style={{ fontSize: "13px", color: "var(--text-muted)", fontWeight: 600 }}>
+              Showing {from}-{to} of {total}
+            </span>
+            {hasNext && (
+              <Link href={pageHref(filters.page + 1)} className="btn-secondary" style={pagerStyle}>
+                Next →
+              </Link>
+            )}
+          </div>
+        </>
+      ) : filtered || filters.page > 1 ? (
         <div
+          className="fade-in-up"
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-            gap: "24px",
+            textAlign: "center",
+            padding: "64px 24px",
+            background: "rgba(255, 255, 255, 0.02)",
+            borderRadius: "24px",
+            border: "1px dashed rgba(255, 255, 255, 0.12)",
+            maxWidth: "600px",
+            margin: "0 auto",
           }}
         >
-          {projects.map((project, i) => (
-            <ProjectCard key={project.id} project={project} index={i} />
-          ))}
+          <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "10px", color: "var(--text-primary)" }}>
+            No projects match these filters
+          </h2>
+          <Link href="/" className="btn-secondary" style={pagerStyle}>
+            Clear filters
+          </Link>
         </div>
       ) : (
         <div
@@ -122,7 +194,13 @@ async function ProjectsSection() {
   );
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const filters = parseFilters(await searchParams);
+  const suspenseKey = toQueryString(filters);
   return (
     <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 24px" }}>
       {/* Hero Section */}
@@ -176,8 +254,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Projects streaming section */}
-      <Suspense fallback={<ProjectsSkeleton />}>
-        <ProjectsSection />
+      <MarketplaceFiltersPanel key={filters.q || filters.category ? "text" : "clear"} current={filters} />
+      <Suspense key={suspenseKey} fallback={<ProjectsSkeleton />}>
+        <ProjectsSection filters={filters} />
       </Suspense>
     </div>
   );

@@ -127,7 +127,8 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 ## Phase 4: Marketplace & project pages
 
-- [ ] **FE-30** Marketplace filters: category, chain, status, search; sorting; pagination; skeleton loading; mobile filter sheet.
+- [x] **FE-30** Marketplace filters: category, chain, status, search; sorting; pagination; skeleton loading; mobile filter sheet.
+  - Done 2026-11-09 (WS-09.1: `lib/marketplaceFilters.ts`, `components/MarketplaceFilters.tsx`, `app/page.tsx`; URL-driven, params validated against the API schema; code verified, runtime NOT verified). Simplification: mobile sheet is a collapsible Filters panel, collapsed at all widths; clearing the search by hand may drop focus once.
 - [ ] **FE-31** (PARTIAL 2026-11-09 WS-10.C: `components/TransparencyPanel.tsx` on the project page, public, shows state badge, shadow wallet, last checked, observed vs routed, shortfall; unaudited chains show the API note; frozen flag hidden (API returns null); code verified, runtime NOT verified; remaining: the rest of the redesign) Project detail redesign: funding progress, milestones timeline, team, repo link, contract addresses (with explorer links), **Transparency panel** (approved shadow wallet shown permanently, compliance state, last reconciliation, deposits vs observed, freeze flag).
 - [x] **FE-32** Investor actions on the project page: invest (user-paid), **claim tokens (gasless)**, stake / unstake, claim yield, refund buttons (`refundFailedCrowdfund`, `refundDeadProject`) with state checks and clear "you pay gas" / "free" labels.
   - User-paid parts done 2026-11-06 (`components/InvestorPanel.tsx`: stake with approve, unstake with vote-lock block, claim yield, both refunds, "you pay gas" labels; code verified, runtime NOT verified). Gasless claim tokens + gasless stake (Permit) + pay-gas fallbacks done 2026-11-07 (WS-08.3L; code verified against the api and contracts, runtime NOT verified).
