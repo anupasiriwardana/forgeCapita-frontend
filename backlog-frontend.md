@@ -179,12 +179,12 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 ### Investor dashboard (`/investor`)
 - [ ] **FE-55** Portfolio overview (backed projects, token balances, staked amounts, yield claimed); open polls needing attention; claim yield; refunds; queued gasless request history.
   - Partial (2026-11-06, WS-09.4-lean): minimal `/portfolio` done (positions list from indexer `GET /investors/:address/positions`: invested net of refunds, refunded, staked, token balance, yield claimed, Navbar link). Runtime not verified.
-  - Partial (2026-11-10, WS-09.5-lean; code verified, tsc 0, lint clean, USER-VERIFIED 2026-11-10 (user-reported: claimable yield matches, gasless requests listed, signed-out hint)): per-position claimable yield (on-chain `getClaimableYield`, Claim link) and 'Gasless requests' section done. Update 2026-11-10 (WS-09.5b): open-poll and refund badges done (FE-126, FE-127; code verified, runtime NOT verified). Remaining: name join beyond first 100 projects (FE-128); FE-55 stays unticked until FE-128 is done.
-- [x] **FE-126** (2026-11-10, WS-09.5b; code verified, tsc 0, lint clean, runtime NOT verified) Portfolio: open polls needing attention ('Vote open until <date>' badge linking to milestones).
-- [x] **FE-127** (2026-11-10, WS-09.5b; code verified, runtime NOT verified) Portfolio: refunds list ('Refund available' badge linking to the project; refund tx stays in InvestorPanel).
+  - Partial (2026-11-10, WS-09.5-lean; code verified, tsc 0, lint clean, USER-VERIFIED 2026-11-10 (user-reported: claimable yield matches, gasless requests listed, signed-out hint)): per-position claimable yield (on-chain `getClaimableYield`, Claim link) and 'Gasless requests' section done. Update 2026-11-10 (WS-09.5b): open-poll and refund badges done (FE-126, FE-127; code verified, USER-VERIFIED 2026-11-10 (user-reported: refund badge, vote badge, explorer links all 'works'; not verified by Claude)). Remaining: name join beyond first 100 projects (FE-128); FE-55 stays unticked until FE-128 is done.
+- [x] **FE-126** (2026-11-10, WS-09.5b; code verified, tsc 0, lint clean, USER-VERIFIED 2026-11-10 (user-reported)) Portfolio: open polls needing attention ('Vote open until <date>' badge linking to milestones).
+- [x] **FE-127** (2026-11-10, WS-09.5b; code verified, USER-VERIFIED 2026-11-10 (user-reported)) Portfolio: refunds list ('Refund available' badge linking to the project; refund tx stays in InvestorPanel).
 - [ ] **FE-128** Portfolio: project name / distributor join beyond the first 100 projects (listProjects limit 100; positions beyond it show dash for claimable yield).
 - [x] **FE-129** (2026-11-10, WS-09.5b; grep verified, tsc 0) Move `explorerTxUrl` from `components/admin/shared.tsx` into `lib/` (portfolio now imports it from the admin components).
-- [ ] **FE-130** Portfolio claimable yield uses `formatEth` (Number() internally); covered by FE-112, switch to the bigint-safe formatter when it exists.
+- [x] **FE-130** (2026-11-10, WS-09.5c; code read + scratch run, tsc 0, lint clean, runtime NOT verified) Portfolio claimable yield uses `formatEth`, now bigint-safe (covered by FE-112).
 - (API-83 investor endpoint: deferred / not needed, the lean portfolio uses indexer positions, on-chain reads and existing `GET /relay`.)
 
 ### Founder dashboard (`/founder`)
@@ -194,7 +194,8 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-118** Use IndexerLagNote on other indexer-based screens (dashboard cards, portfolio, p2p lists).
 - [ ] **FE-119** Optimistic update of 'Total claimed' from the on-chain claim receipt (show the claimed amount immediately until the indexer catches up).
 - [ ] **IDX-59** (watch item, recurring indexer lag, now ~9 min; lives in the indexer repo, noted here for the user-facing note)
-- [ ] **FE-112** Shared bigint-safe formatter replacing `formatEth`/`formatNative` (they use `Number()`, losing precision on large wei); CreatorFunds uses its own `fmtWei` meanwhile.
+- [x] **FE-112** (2026-11-10, WS-09.5c; code read + scratch run of the copied function, tsc 0, lint clean, runtime NOT verified) `formatEth` in lib/api.ts rewritten with bigint-only arithmetic (half away from zero, decimals clamped 0-18, '-' on unparsable input); `formatNative` picks it up.
+  - Remaining (minor): CreatorFunds still uses its own `fmtWei`; consolidate if wanted.
 - [ ] **FE-113** Public revenue page (WS-10.6): totals and history for investors.
 - [ ] **FE-114** Decide whether CreatorFunds should also show for former developers (history only); claim history pagination (currently latest 20).
 - [x] **FE-120** (added and done 2026-11-09, WS-10.C; code read vs API DTOs, tsc 0, lint clean, runtime NOT verified) Staff `/admin` Compliance tab (`components/admin/ComplianceTab.tsx`): state and network filters, columns project/network/state/observed vs routed/shortfall/last checked/window and note, refresh, paging; lib/api.ts `listAdminCompliance`.

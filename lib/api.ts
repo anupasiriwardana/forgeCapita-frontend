@@ -1090,11 +1090,30 @@ export async function fetchRecentTrades(limit = 20): Promise<P2PTrade[]> {
 
 // ── Formatting helpers ────────────────────────────────────────────────────
 
-/** Convert raw bigint-string wei value to a formatted ETH string */
+/**
+ * Convert raw bigint-string wei value to a fixed-decimal ETH string.
+ * Pure bigint arithmetic (no precision loss), rounds half away from zero.
+ * Returns "0" for empty input and "-" for unparsable input.
+ */
 export function formatEth(wei?: string | null, decimals = 4): string {
   if (!wei) return "0";
-  const eth = Number(BigInt(wei)) / 1e18;
-  return eth.toFixed(decimals);
+  let value: bigint;
+  try {
+    value = BigInt(wei);
+  } catch {
+    return "-";
+  }
+  const places = Math.min(18, Math.max(0, Math.floor(decimals)));
+  const negative = value < ZERO;
+  const abs = negative ? -value : value;
+  const step = BigInt(10) ** BigInt(18 - places);
+  const scaled = (abs + step / BigInt(2)) / step;
+  const scale = BigInt(10) ** BigInt(places);
+  const whole = scaled / scale;
+  const frac = scaled % scale;
+  const sign = negative && scaled > ZERO ? "-" : "";
+  if (places === 0) return `${sign}${whole.toString()}`;
+  return `${sign}${whole.toString()}.${frac.toString().padStart(places, "0")}`;
 }
 
 /** Same as formatEth, suffixed with the native currency of the given chain. */
