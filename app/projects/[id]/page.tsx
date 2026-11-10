@@ -13,6 +13,7 @@ import { ApiError, getProject, formatEth, fundingProgress, shortAddr, type Proje
 import Link from "next/link";
 import { Suspense } from "react";
 import { chainCurrency, chainName } from "@/config/chains";
+import { ReportProblem } from "@/components/ComplaintDialog";
 import { InvestorPanel } from "@/components/InvestorPanel";
 import { DeveloperPanel } from "@/components/DeveloperPanel";
 import { CreatorFunds } from "@/components/CreatorFunds";
@@ -415,6 +416,7 @@ function ProjectDetailInner({ id }: { id: string }) {
           <GasLedger project={project} />
           <FundingGate project={project} nowSeconds={nowSeconds} onFunded={() => void refetchBalance()} />
           <InvestorPanel project={project} nowSeconds={nowSeconds} />
+          <ReportProblem projectId={project.id} />
         </div>
       </div>
     </div>

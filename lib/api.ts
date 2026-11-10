@@ -791,6 +791,71 @@ export function listAdminCompliance(
   return apiFetch<Page<ComplianceCaseDto>>(`/admin/compliance${buildQuery(params)}`, { signal });
 }
 
+// ── Investor complaints ───────────────────────────────────────────────────
+
+export type ComplaintCategory = "MISREPRESENTATION" | "REVENUE_UNDERREPORTING" | "INACTIVITY" | "SECURITY" | "OTHER";
+export type ComplaintStatus = "OPEN" | "INVESTIGATING" | "RESOLVED" | "DISMISSED";
+
+export interface ComplaintDto {
+  id: string;
+  projectId: string;
+  chainId: number;
+  category: ComplaintCategory;
+  body: string;
+  evidenceUrl: string | null;
+  status: ComplaintStatus;
+  /** Staff response, visible to the reporter. */
+  staffNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+}
+
+/** Staff view: adds the reporter wallet. */
+export interface AdminComplaintDto extends ComplaintDto {
+  reporterAddress: string;
+}
+
+export interface ComplaintInput {
+  projectId: string;
+  category: ComplaintCategory;
+  body: string;
+  evidenceUrl?: string;
+}
+
+export async function createComplaint(input: ComplaintInput): Promise<ComplaintDto> {
+  const body: Record<string, string> = { projectId: input.projectId, category: input.category, body: input.body };
+  if (input.evidenceUrl) body.evidenceUrl = input.evidenceUrl;
+  const data = await apiFetch<{ complaint: ComplaintDto }>("/complaints", { method: "POST", body });
+  return data.complaint;
+}
+
+export async function listMyComplaints(signal?: AbortSignal): Promise<ComplaintDto[]> {
+  const data = await apiFetch<{ items: ComplaintDto[] }>("/complaints/mine", { signal });
+  return data.items;
+}
+
+export function listAdminComplaints(
+  params: { limit?: number; offset?: number; status?: ComplaintStatus; projectId?: string },
+  signal?: AbortSignal,
+): Promise<Page<AdminComplaintDto>> {
+  return apiFetch<Page<AdminComplaintDto>>(`/admin/complaints${buildQuery(params)}`, { signal });
+}
+
+export async function patchAdminComplaint(
+  id: string,
+  status: ComplaintStatus,
+  note?: string,
+): Promise<AdminComplaintDto> {
+  const body: { status: ComplaintStatus; note?: string } = { status };
+  if (note) body.note = note;
+  const data = await apiFetch<{ complaint: AdminComplaintDto }>(`/admin/complaints/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body,
+  });
+  return data.complaint;
+}
+
 export function listAdminRelayRequests(
   params: {
     limit?: number;

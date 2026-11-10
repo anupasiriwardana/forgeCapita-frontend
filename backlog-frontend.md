@@ -143,7 +143,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [x] **FE-124** (done 2026-11-10, code read; runtime NOT verified; manual-address fallback included) (added 2026-11-10, WS-09.4b; UX) Create Listing token picker: replace the pasted token address with a list of the connected wallet's project tokens (addresses from the project list, `balanceOf` via `useReadContracts` on the connected chain), hide zero balances, show the unstaked wallet balance, selecting fills the address, Max button fills the amount; manual address fallback only if trivial. Approval step stays untouched.
 - [x] **FE-125** (done 2026-11-10, code read; runtime NOT verified; reconciles on indexer fetch, 10 min expiry) (added 2026-11-10, WS-09.4b; PERF) Optimistic P2P state after create/cancel/buy receipts: read the new listing from the chain (`ListingCreated` log from the receipt, or `nextListingId`/`listings(id)`), merge it into the displayed list by composite id `<chainId>:<listingId>`, dedupe against indexer listings, drop cancelled/filled ids from view, reconcile when the indexer catches up.
   - USER-VERIFIED 2026-11-10 (user-reported, not verified by Claude): FE-123, FE-124, FE-125 work (10,000 shows '10,000', picker, instant listing, cancel and buy).
-- [ ] **FE-35** Complaint entry point on every project page (opens the complaint form, FE-72).
+- [x] **FE-35** Complaint entry point on every project page (opens the complaint form, FE-72). Done 2026-11-10 (WS-11.1-lean): ReportProblem button on `/projects/[id]` (sign-in hint when signed out); verified by code read, tsc 0, lint clean; runtime NOT verified.
 
 ## Phase 5: Gasless action UX
 
@@ -253,6 +253,12 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 
 ### Investor protection features
 - [ ] **FE-72** Complaint form and "my complaints" page with thread and status.
+  - PARTIAL 2026-11-10 (WS-11.1-lean; code read, tsc 0, lint clean, runtime NOT verified): ComplaintDialog form, My complaints list on `/portfolio` (status badges), staff Complaints tab in `/admin` (filter, paging, detail, status change with note). Remaining: thread, a dedicated "my complaints" page.
+  - 2026-11-10 follow-up: reporter sees the staff note in My complaints; staff tab labelled 'Note shown to reporter'; code read, tsc 0, lint clean; runtime NOT verified.
+- [ ] **FE-72a** Complaints: message thread (needs API-60b).
+- [ ] **FE-72b** Complaints: evidence upload (needs API-60c).
+- [ ] **FE-72c** Complaints: ESCALATED status and assignee in the staff tab (needs API-60a).
+- [ ] **FE-72d** Complaints: Risk Center link (needs API-61) and reporter list paging beyond 100 (needs API-60g).
 - [ ] **FE-73** Takeover signalling vote page (staked-balance snapshot, weight, deadline, result).
 - [ ] **FE-74** Notification centre (in-app) matching email notifications.
 

@@ -15,6 +15,7 @@ import {
 import { phaseInputOf, refundsOpenFor } from "@/lib/projectState";
 import { chainCurrency, chainName } from "@/config/chains";
 import { ABIS } from "@/lib/contracts";
+import { MyComplaints } from "@/components/MyComplaints";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { explorerTxUrl } from "@/lib/explorer";
 import { failureOfRequest, listRelayRequests, type RelayRequest } from "@/lib/relay";
@@ -353,6 +354,7 @@ export default function PortfolioPage() {
       )}
 
       <GaslessRequests />
+      <MyComplaints />
     </div>
   );
 }
