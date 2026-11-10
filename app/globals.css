@@ -417,3 +417,20 @@ textarea.input-field { resize: vertical; min-height: 100px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Project detail layout: two columns on wide screens, actions first on narrow ones */
+.project-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 32px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .project-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .project-actions {
+    order: -1;
+  }
+}

@@ -271,7 +271,7 @@ function ProjectDetailInner({ id }: { id: string }) {
         <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{name || shortAddr(project.escrowAddress)}</span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "32px", alignItems: "start" }}>
+      <div className="project-layout">
         {/* Left: Project Info */}
         <div>
           {/* Header */}
@@ -384,6 +384,14 @@ function ProjectDetailInner({ id }: { id: string }) {
             </div>
           </div>
 
+          {/* Transparency and governance */}
+          <section style={{ marginBottom: "24px" }}>
+            <h2 style={{ fontSize: "18px", marginBottom: "16px" }}>Transparency and governance</h2>
+            <MilestonePanel project={project} nowSeconds={nowSeconds} />
+            <TransparencyPanel project={project} />
+            <GasLedger project={project} />
+          </section>
+
           {/* Milestones Link */}
           <Link
             href={`/projects/${encodeURIComponent(id)}/milestones`}
@@ -406,19 +414,19 @@ function ProjectDetailInner({ id }: { id: string }) {
             </div>
             <span style={{ color: "var(--brand-accent)", fontSize: "18px" }}>→</span>
           </Link>
+
+          <div style={{ marginTop: "24px" }}>
+            <ReportProblem projectId={project.id} />
+          </div>
         </div>
 
-        {/* Right: Funding Panel */}
-        <div style={{ position: "sticky", top: "88px" }}>
+        {/* Right: actions */}
+        <div className="project-actions">
           <DeveloperPanel project={project} nowSeconds={nowSeconds} />
           <CreatorFunds project={project} />
           <GuardianPanel project={project} nowSeconds={nowSeconds} />
-          <MilestonePanel project={project} nowSeconds={nowSeconds} />
-          <TransparencyPanel project={project} />
-          <GasLedger project={project} />
           <FundingGate project={project} nowSeconds={nowSeconds} onFunded={() => void refetchBalance()} />
           <InvestorPanel project={project} nowSeconds={nowSeconds} />
-          <ReportProblem projectId={project.id} />
         </div>
       </div>
     </div>
@@ -428,7 +436,7 @@ function ProjectDetailInner({ id }: { id: string }) {
 function LoadingSkeleton() {
   return (
     <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "48px 24px" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "32px" }}>
+      <div className="project-layout">
         <div className="glass-card" style={{ padding: "32px", height: "400px", opacity: 0.5 }} />
         <div className="glass-card" style={{ padding: "28px", height: "300px", opacity: 0.5 }} />
       </div>
