@@ -17,6 +17,7 @@ import { ReportProblem } from "@/components/ComplaintDialog";
 import { InvestorPanel } from "@/components/InvestorPanel";
 import { DeveloperPanel } from "@/components/DeveloperPanel";
 import { CreatorFunds } from "@/components/CreatorFunds";
+import { GuardianPanel } from "@/components/GuardianPanel";
 import { MilestonePanel } from "@/components/MilestonePanel";
 import { GasLedger } from "@/components/GasLedger";
 import { TransparencyPanel } from "@/components/TransparencyPanel";
@@ -411,6 +412,7 @@ function ProjectDetailInner({ id }: { id: string }) {
         <div style={{ position: "sticky", top: "88px" }}>
           <DeveloperPanel project={project} nowSeconds={nowSeconds} />
           <CreatorFunds project={project} />
+          <GuardianPanel project={project} nowSeconds={nowSeconds} />
           <MilestonePanel project={project} nowSeconds={nowSeconds} />
           <TransparencyPanel project={project} />
           <GasLedger project={project} />
