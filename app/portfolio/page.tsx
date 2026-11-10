@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useAccount } from "wagmi";
+import { useAccount, useConfig, useReadContracts } from "wagmi";
 import { formatUnits } from "viem";
 import {
   fetchInvestorPositions,
@@ -12,8 +12,16 @@ import {
   type InvestorPosition,
 } from "@/lib/api";
 import { chainCurrency, chainName } from "@/config/chains";
+import { ABIS } from "@/lib/contracts";
+import { useAuth } from "@/components/web3/AuthProvider";
+import { explorerTxUrl } from "@/components/admin/shared";
+import { failureOfRequest, listRelayRequests, type RelayRequest } from "@/lib/relay";
+
+type Addr = `0x${string}`;
 
 const ZERO = BigInt(0);
+const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
+const DASH = "—";
 
 /** 18-decimals token amount, trimmed to at most 4 fractional digits. */
 function formatToken(wei: string): string {
@@ -31,10 +39,103 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function statusBadge(status: string): string {
+  if (status === "CONFIRMED") return "badge-active";
+  if (status === "FAILED" || status === "EXPIRED") return "badge-inactive";
+  return "badge-pending";
+}
+
+function GaslessRequests() {
+  const { user, loading: authLoading } = useAuth();
+  const [items, setItems] = useState<RelayRequest[] | null>(null);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const signedIn = user !== null;
+
+  useEffect(() => {
+    if (!signedIn) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    listRelayRequests(20, signal)
+      .then((list) => {
+        if (!signal.aborted) setItems(list);
+      })
+      .catch((err: unknown) => {
+        if (signal.aborted) return;
+        setError(err instanceof Error ? err.message : "Failed to load gasless requests");
+      });
+    return () => controller.abort();
+  }, [signedIn, reloadKey]);
+
+  const retry = useCallback(() => {
+    setError("");
+    setItems(null);
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  return (
+    <section style={{ marginTop: "40px" }}>
+      <h2 style={{ fontSize: "20px", marginBottom: "16px" }}>Gasless requests</h2>
+
+      {!signedIn && (
+        <p style={{ color: "var(--text-muted)" }}>
+          {authLoading ? "Checking sign-in…" : "Sign in to see your gasless requests"}
+        </p>
+      )}
+
+      {signedIn && error && (
+        <div className="alert alert-error" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <span>⚠️ {error}</span>
+          <button className="btn-secondary" onClick={retry}>Retry</button>
+        </div>
+      )}
+
+      {signedIn && !error && items === null && (
+        <p style={{ color: "var(--text-muted)" }}>Loading gasless requests…</p>
+      )}
+
+      {signedIn && !error && items !== null && items.length === 0 && (
+        <p style={{ color: "var(--text-muted)" }}>No gasless requests yet.</p>
+      )}
+
+      {signedIn && !error && items !== null && items.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {items.map((r) => {
+            const failure = failureOfRequest(r);
+            const txUrl = r.txHash ? explorerTxUrl(r.chainId, r.txHash) : null;
+            const created = new Date(r.createdAt);
+            return (
+              <div key={r.id} className="glass-card" style={{ padding: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+                  <strong>{r.kind}</strong>
+                  <span className={`badge ${statusBadge(r.status)}`}>{r.status}</span>
+                </div>
+                <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--text-muted)", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                  <span>{chainName(r.chainId)}</span>
+                  <span>{Number.isNaN(created.getTime()) ? DASH : created.toLocaleString()}</span>
+                  <Link href={`/projects/${encodeURIComponent(r.projectId)}`}>Project</Link>
+                  {txUrl && (
+                    <a href={txUrl} target="_blank" rel="noopener noreferrer">Transaction</a>
+                  )}
+                </div>
+                {failure && (
+                  <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--rose)" }}>{failure.message}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function PortfolioPage() {
   const { address, isConnected } = useAccount();
+  const config = useConfig();
   const [positions, setPositions] = useState<InvestorPosition[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
+  const [distributors, setDistributors] = useState<Record<string, Addr>>({});
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -60,16 +161,51 @@ export default function PortfolioPage() {
       .then((list) => {
         if (signal.aborted) return;
         const map: Record<string, string> = {};
+        const dist: Record<string, Addr> = {};
         for (const p of list.items) {
           if (p.profile?.name) map[p.id] = p.profile.name;
+          if (ADDRESS_REGEX.test(p.distributorAddress)) dist[p.id] = p.distributorAddress as Addr;
         }
         setNames(map);
+        setDistributors(dist);
       })
       .catch(() => {
         /* names are optional: fall back to token symbol / address */
       });
     return () => controller.abort();
   }, [address, reloadKey]);
+
+  const supportedChainIds = config.chains.map((c) => c.id as number);
+  const yieldTargets = (positions ?? []).map((p) => {
+    const distributor = distributors[p.projectId];
+    return distributor && supportedChainIds.includes(p.chainId) ? { chainId: p.chainId, distributor } : null;
+  });
+  const yieldCalls = yieldTargets.flatMap((t) =>
+    t && address
+      ? [
+          {
+            address: t.distributor,
+            abi: ABIS.distributor,
+            functionName: "getClaimableYield" as const,
+            args: [address] as const,
+            chainId: t.chainId,
+          },
+        ]
+      : [],
+  );
+  const { data: yieldData } = useReadContracts({
+    allowFailure: true,
+    contracts: yieldCalls,
+    query: { enabled: isConnected && yieldCalls.length > 0 },
+  });
+
+  function claimableOf(index: number): bigint | null {
+    if (!yieldTargets[index]) return null;
+    let slot = 0;
+    for (let i = 0; i < index; i++) if (yieldTargets[i]) slot++;
+    const result = yieldData?.[slot];
+    return result && result.status === "success" && typeof result.result === "bigint" ? result.result : null;
+  }
 
   return (
     <div style={{ maxWidth: "960px", margin: "0 auto", padding: "40px 24px" }}>
@@ -100,39 +236,43 @@ export default function PortfolioPage() {
 
       {isConnected && !error && positions !== null && positions.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {positions.map((p) => {
+          {positions.map((p, index) => {
             const net = BigInt(p.invested) - BigInt(p.refunded);
             const name = names[p.projectId] || p.tokenSymbol || shortAddr(p.escrowAddress);
+            const claimable = claimableOf(index);
+            const href = `/projects/${encodeURIComponent(p.projectId)}`;
             return (
-              <Link
-                key={p.projectId}
-                href={`/projects/${encodeURIComponent(p.projectId)}`}
-                className="glass-card"
-                style={{ padding: "20px", textDecoration: "none", color: "inherit", display: "block" }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
-                  <strong style={{ fontSize: "18px" }}>{name}</strong>
-                  <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>
-                    {chainName(p.chainId)} · {p.state} · {p.tokenSymbol}
-                  </span>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
-                  <Stat label="Invested" value={`${formatEth(net.toString())} ${chainCurrency(p.chainId)}`} />
-                  {BigInt(p.refunded) !== ZERO && (
-                    <Stat label="Refunded" value={`${formatEth(p.refunded)} ${chainCurrency(p.chainId)}`} />
-                  )}
-                  <Stat label="Staked" value={`${formatToken(p.stakedBalance)} ${p.tokenSymbol}`} />
-                  <Stat label="Token balance" value={`${formatToken(p.tokensHeld)} ${p.tokenSymbol}`} />
-                  <Stat label="Yield claimed" value={`${formatEth(p.yieldClaimed)} ${chainCurrency(p.chainId)}`} />
-                </div>
+              <div key={p.projectId} className="glass-card" style={{ padding: "20px" }}>
+                <Link href={href} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+                    <strong style={{ fontSize: "18px" }}>{name}</strong>
+                    <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>
+                      {chainName(p.chainId)} · {p.state} · {p.tokenSymbol}
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
+                    <Stat label="Invested" value={`${formatEth(net.toString())} ${chainCurrency(p.chainId)}`} />
+                    {BigInt(p.refunded) !== ZERO && (
+                      <Stat label="Refunded" value={`${formatEth(p.refunded)} ${chainCurrency(p.chainId)}`} />
+                    )}
+                    <Stat label="Staked" value={`${formatToken(p.stakedBalance)} ${p.tokenSymbol}`} />
+                    <Stat label="Token balance" value={`${formatToken(p.tokensHeld)} ${p.tokenSymbol}`} />
+                    <Stat label="Yield claimed" value={`${formatEth(p.yieldClaimed)} ${chainCurrency(p.chainId)}`} />
+                  </div>
+                </Link>
                 <div style={{ marginTop: "12px", fontSize: "13px", color: "var(--text-muted)" }}>
-                  Claimable yield: open project
+                  Claimable yield:{" "}
+                  {claimable === null ? DASH : `${formatEth(claimable.toString())} ${chainCurrency(p.chainId)}`}
+                  {" · "}
+                  <Link href={href}>Claim</Link>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>
       )}
+
+      <GaslessRequests />
     </div>
   );
 }
