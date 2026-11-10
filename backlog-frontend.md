@@ -179,11 +179,11 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 ### Investor dashboard (`/investor`)
 - [ ] **FE-55** Portfolio overview (backed projects, token balances, staked amounts, yield claimed); open polls needing attention; claim yield; refunds; queued gasless request history.
   - Partial (2026-11-06, WS-09.4-lean): minimal `/portfolio` done (positions list from indexer `GET /investors/:address/positions`: invested net of refunds, refunded, staked, token balance, yield claimed, Navbar link). Runtime not verified.
-  - Partial (2026-11-10, WS-09.5-lean; code verified, tsc 0, lint clean, runtime NOT verified): per-position claimable yield (on-chain `getClaimableYield`, Claim link) and 'Gasless requests' section done. Remaining: open polls needing attention (FE-126), refunds list (FE-127), name join beyond first 100 projects (FE-128).
-- [ ] **FE-126** Portfolio: open polls needing attention.
-- [ ] **FE-127** Portfolio: refunds list.
+  - Partial (2026-11-10, WS-09.5-lean; code verified, tsc 0, lint clean, USER-VERIFIED 2026-11-10 (user-reported: claimable yield matches, gasless requests listed, signed-out hint)): per-position claimable yield (on-chain `getClaimableYield`, Claim link) and 'Gasless requests' section done. Update 2026-11-10 (WS-09.5b): open-poll and refund badges done (FE-126, FE-127; code verified, runtime NOT verified). Remaining: name join beyond first 100 projects (FE-128); FE-55 stays unticked until FE-128 is done.
+- [x] **FE-126** (2026-11-10, WS-09.5b; code verified, tsc 0, lint clean, runtime NOT verified) Portfolio: open polls needing attention ('Vote open until <date>' badge linking to milestones).
+- [x] **FE-127** (2026-11-10, WS-09.5b; code verified, runtime NOT verified) Portfolio: refunds list ('Refund available' badge linking to the project; refund tx stays in InvestorPanel).
 - [ ] **FE-128** Portfolio: project name / distributor join beyond the first 100 projects (listProjects limit 100; positions beyond it show dash for claimable yield).
-- [ ] **FE-129** Move `explorerTxUrl` from `components/admin/shared.tsx` into `lib/` (portfolio now imports it from the admin components).
+- [x] **FE-129** (2026-11-10, WS-09.5b; grep verified, tsc 0) Move `explorerTxUrl` from `components/admin/shared.tsx` into `lib/` (portfolio now imports it from the admin components).
 - [ ] **FE-130** Portfolio claimable yield uses `formatEth` (Number() internally); covered by FE-112, switch to the bigint-safe formatter when it exists.
 - (API-83 investor endpoint: deferred / not needed, the lean portfolio uses indexer positions, on-chain reads and existing `GET /relay`.)
 

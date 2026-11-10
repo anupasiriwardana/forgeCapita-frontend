@@ -10,11 +10,13 @@ import {
   listProjects,
   shortAddr,
   type InvestorPosition,
+  type ProjectDto,
 } from "@/lib/api";
+import { phaseInputOf, refundsOpenFor } from "@/lib/projectState";
 import { chainCurrency, chainName } from "@/config/chains";
 import { ABIS } from "@/lib/contracts";
 import { useAuth } from "@/components/web3/AuthProvider";
-import { explorerTxUrl } from "@/components/admin/shared";
+import { explorerTxUrl } from "@/lib/explorer";
 import { failureOfRequest, listRelayRequests, type RelayRequest } from "@/lib/relay";
 
 type Addr = `0x${string}`;
@@ -136,6 +138,8 @@ export default function PortfolioPage() {
   const [positions, setPositions] = useState<InvestorPosition[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
   const [distributors, setDistributors] = useState<Record<string, Addr>>({});
+  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
+  const [projects, setProjects] = useState<Record<string, ProjectDto>>({});
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -166,8 +170,11 @@ export default function PortfolioPage() {
           if (p.profile?.name) map[p.id] = p.profile.name;
           if (ADDRESS_REGEX.test(p.distributorAddress)) dist[p.id] = p.distributorAddress as Addr;
         }
+        const byId: Record<string, ProjectDto> = {};
+        for (const p of list.items) byId[p.id] = p;
         setNames(map);
         setDistributors(dist);
+        setProjects(byId);
       })
       .catch(() => {
         /* names are optional: fall back to token symbol / address */
@@ -207,6 +214,61 @@ export default function PortfolioPage() {
     return result && result.status === "success" && typeof result.result === "bigint" ? result.result : null;
   }
 
+  // Open-vote detection: only positions with staked tokens on supported chains are read.
+  const voteTargets = (positions ?? []).map((p) =>
+    address && supportedChainIds.includes(p.chainId) && ADDRESS_REGEX.test(p.escrowAddress) && BigInt(p.stakedBalance) > ZERO
+      ? { chainId: p.chainId, escrow: p.escrowAddress as Addr }
+      : null,
+  );
+  const indexCalls = voteTargets.flatMap((t) =>
+    t
+      ? [{ address: t.escrow, abi: ABIS.escrow, functionName: "currentMilestoneIndex" as const, chainId: t.chainId }]
+      : [],
+  );
+  const { data: indexData } = useReadContracts({
+    allowFailure: true,
+    contracts: indexCalls,
+    query: { enabled: isConnected && indexCalls.length > 0 },
+  });
+
+  function milestoneIndexOf(index: number): bigint | null {
+    if (!voteTargets[index]) return null;
+    let slot = 0;
+    for (let i = 0; i < index; i++) if (voteTargets[i]) slot++;
+    const result = indexData?.[slot];
+    return result && result.status === "success" && typeof result.result === "bigint" ? result.result : null;
+  }
+
+  const voteReadPositions = voteTargets.flatMap((t, i) => {
+    const milestoneIndex = milestoneIndexOf(i);
+    return t && address && milestoneIndex !== null ? [{ position: i, target: t, milestoneIndex }] : [];
+  });
+  const voteCalls = voteReadPositions.flatMap(({ target, milestoneIndex }) => [
+    { address: target.escrow, abi: ABIS.escrow, functionName: "milestones" as const, args: [milestoneIndex] as const, chainId: target.chainId },
+    { address: target.escrow, abi: ABIS.escrow, functionName: "votingEndTime" as const, args: [milestoneIndex] as const, chainId: target.chainId },
+    { address: target.escrow, abi: ABIS.escrow, functionName: "hasVoted" as const, args: [milestoneIndex, address as Addr] as const, chainId: target.chainId },
+  ]);
+  const { data: voteData } = useReadContracts({
+    allowFailure: true,
+    contracts: voteCalls,
+    query: { enabled: isConnected && voteCalls.length > 0 },
+  });
+
+  /** Voting deadline (unix seconds) when the wallet has an unvoted open poll on this position, else null. */
+  function openVoteEndOf(index: number): bigint | null {
+    const slot = voteReadPositions.findIndex((r) => r.position === index);
+    if (slot < 0 || !voteData) return null;
+    const milestone = voteData[slot * 3];
+    const end = voteData[slot * 3 + 1];
+    const voted = voteData[slot * 3 + 2];
+    if (!milestone || milestone.status !== "success" || !Array.isArray(milestone.result)) return null;
+    if (!end || end.status !== "success" || typeof end.result !== "bigint") return null;
+    if (!voted || voted.status !== "success" || voted.result !== false) return null;
+    const [, , isVotingOpen, isExecuted] = milestone.result as readonly unknown[];
+    if (isVotingOpen !== true || isExecuted !== false) return null;
+    return end.result > BigInt(nowSeconds) ? end.result : null;
+  }
+
   return (
     <div style={{ maxWidth: "960px", margin: "0 auto", padding: "40px 24px" }}>
       <h1 style={{ fontSize: "28px", marginBottom: "24px" }}>Portfolio</h1>
@@ -241,6 +303,12 @@ export default function PortfolioPage() {
             const name = names[p.projectId] || p.tokenSymbol || shortAddr(p.escrowAddress);
             const claimable = claimableOf(index);
             const href = `/projects/${encodeURIComponent(p.projectId)}`;
+            const project = projects[p.projectId];
+            const refundAvailable =
+              net > ZERO &&
+              project !== undefined &&
+              refundsOpenFor(BigInt(nowSeconds), phaseInputOf(project));
+            const voteEnd = openVoteEndOf(index);
             return (
               <div key={p.projectId} className="glass-card" style={{ padding: "20px" }}>
                 <Link href={href} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
@@ -260,6 +328,18 @@ export default function PortfolioPage() {
                     <Stat label="Yield claimed" value={`${formatEth(p.yieldClaimed)} ${chainCurrency(p.chainId)}`} />
                   </div>
                 </Link>
+                {(refundAvailable || voteEnd !== null) && (
+                  <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    {refundAvailable && (
+                      <Link href={href} className="badge badge-pending">Refund available</Link>
+                    )}
+                    {voteEnd !== null && (
+                      <Link href={`${href}/milestones`} className="badge badge-pending">
+                        Vote open until {new Date(parseInt(voteEnd.toString(), 10) * 1000).toLocaleString()}
+                      </Link>
+                    )}
+                  </div>
+                )}
                 <div style={{ marginTop: "12px", fontSize: "13px", color: "var(--text-muted)" }}>
                   Claimable yield:{" "}
                   {claimable === null ? DASH : `${formatEth(claimable.toString())} ${chainCurrency(p.chainId)}`}

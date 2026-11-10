@@ -11,7 +11,7 @@ import { TokenPicker } from "@/components/TokenPicker";
 import { P2PListingCard, PROTOCOL_FEE_BPS, splitPrice } from "@/components/P2PListingCard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { IndexerLagNote } from "@/components/IndexerLagNote";
-import { explorerTxUrl } from "@/components/admin/shared";
+import { explorerTxUrl } from "@/lib/explorer";
 import { ABIS, getContractConfig } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
 import { chainCurrency, chainName } from "@/config/chains";

@@ -12,7 +12,8 @@ import {
   type RelayRequestStatus,
   type RelayStatusDto,
 } from "@/lib/api";
-import { ADMIN_PAGE_SIZE, AdminPager, ListState, ROW_STYLE, explorerTxUrl, truncate, useAdminList } from "./shared";
+import { ADMIN_PAGE_SIZE, AdminPager, ListState, ROW_STYLE, truncate, useAdminList } from "./shared";
+import { explorerTxUrl } from "@/lib/explorer";
 
 const KINDS: RelayKind[] = ["claim", "stake", "vote", "execute"];
 const STATUSES: RelayRequestStatus[] = ["QUEUED", "SENDING", "SENT", "CONFIRMED", "FAILED", "EXPIRED"];
