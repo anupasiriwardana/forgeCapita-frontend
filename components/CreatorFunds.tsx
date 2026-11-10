@@ -63,6 +63,11 @@ export function CreatorFunds({ project }: { project: ProjectDto }) {
   const [busy, setBusy] = useState<Action | null>(null);
   const [confirm, setConfirm] = useState<Action | null>(null);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [optimisticClaimed, setOptimisticClaimed] = useState<{
+    amount: bigint;
+    baseClaimed: bigint;
+    baseHashes: string[];
+  } | null>(null);
 
   const chainId = project.chainId;
   const currency = chainCurrency(chainId);
@@ -90,6 +95,14 @@ export function CreatorFunds({ project }: { project: ProjectDto }) {
 
   if (!isDeveloper) return null;
 
+  const claimedBase = toWei(revenue?.totals.totalCreatorClaimed);
+  const indexerCaughtUp =
+    optimisticClaimed !== null &&
+    (claimedBase > optimisticClaimed.baseClaimed ||
+      (revenue?.claims ?? []).some((c) => !optimisticClaimed.baseHashes.includes(c.txHash)));
+  const shownClaimed =
+    optimisticClaimed !== null && !indexerCaughtUp ? claimedBase + optimisticClaimed.amount : claimedBase;
+
   const pendingRaw = reads?.[0]?.result;
   const pending = typeof pendingRaw === "bigint" ? pendingRaw : null;
   const totals = revenue?.totals;
@@ -106,6 +119,8 @@ export function CreatorFunds({ project }: { project: ProjectDto }) {
 
   async function run(action: Action): Promise<void> {
     if (!router) return;
+    const claimAmount = pending ?? BigInt(0);
+    const baseRevenue = queryClient.getQueryData<NonNullable<typeof revenue>>(revenueKey);
     setBusy(action);
     setResult(null);
     try {
@@ -122,6 +137,11 @@ export function CreatorFunds({ project }: { project: ProjectDto }) {
         setResult({ ok: false, text: "Claim failed (reverted)." });
         return;
       }
+      setOptimisticClaimed((prev) => ({
+        amount: (prev && !indexerCaughtUp ? prev.amount : BigInt(0)) + claimAmount,
+        baseClaimed: prev && !indexerCaughtUp ? prev.baseClaimed : toWei(baseRevenue?.totals.totalCreatorClaimed),
+        baseHashes: prev && !indexerCaughtUp ? prev.baseHashes : (baseRevenue?.claims ?? []).map((c) => c.txHash),
+      }));
       setResult({
         ok: true,
         text: "Creator funds claimed. The indexer may take a little while to show the new history.",
@@ -159,7 +179,7 @@ export function CreatorFunds({ project }: { project: ProjectDto }) {
             {redirected > BigInt(0) && (
               <span>Redirected from the zero-staker fallback: <strong>{fmtWei(redirected)} {currency}</strong></span>
             )}
-            <span>Total claimed: <strong>{fmtWei(toWei(totals?.totalCreatorClaimed))} {currency}</strong></span>
+            <span>Total claimed: <strong>{fmtWei(shownClaimed)} {currency}</strong></span>
             <span>Last payment: <strong>{lastPayment}</strong></span>
           </div>
 

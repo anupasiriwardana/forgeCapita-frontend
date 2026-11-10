@@ -16,6 +16,7 @@ import { phaseInputOf, refundsOpenFor } from "@/lib/projectState";
 import { chainCurrency, chainName } from "@/config/chains";
 import { ABIS } from "@/lib/contracts";
 import { MyComplaints } from "@/components/MyComplaints";
+import { IndexerLagNote } from "@/components/IndexerLagNote";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { explorerTxUrl } from "@/lib/explorer";
 import { failureOfRequest, listRelayRequests, type RelayRequest } from "@/lib/relay";
@@ -273,6 +274,11 @@ export default function PortfolioPage() {
   return (
     <div style={{ maxWidth: "960px", margin: "0 auto", padding: "40px 24px" }}>
       <h1 style={{ fontSize: "28px", marginBottom: "24px" }}>Portfolio</h1>
+
+      {isConnected &&
+        Array.from(new Set((positions ?? []).map((p) => p.chainId))).map((id) => (
+          <IndexerLagNote key={id} chainId={id} />
+        ))}
 
       {!isConnected && (
         <div className="alert alert-warning">

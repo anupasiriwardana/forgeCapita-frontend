@@ -194,9 +194,9 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 ### Founder dashboard (`/founder`)
 - [x] **FE-111** (2026-11-09, WS-12.1a; code verified vs RevenueRouter.sol, tsc 0, lint clean, runtime NOT verified) Developer-only 'Creator funds' card (`components/CreatorFunds.tsx`, project page): on-chain pending `creatorPendingFunds` (10 s), totals and claim history from the indexer, 'Claim creator funds' with ConfirmDialog (user pays gas). Note (user decision 2026-11-09): routePayment UI intentionally not exposed; revenue routing is the founder's payment process + WS-10 reconciliation.
 - [x] **FE-116** (2026-11-09, WS-12.1b; code verified, tsc 0, lint clean, runtime NOT verified) Indexer lag note without minutes: `lib/useIndexerLag.ts` (polls indexer /status every 60 s, behind when newest block older than 120 s) and `components/IndexerLagNote.tsx`, used in CreatorFunds, GasLedger and /launches; post-tx messages say 'a little while'. Trigger: 'Total claimed' did not rise after a claim because the indexer was ~9 min behind.
-- [ ] **FE-117** One shared query for indexer /status instead of per-instance polling (each IndexerLagNote polls separately).
-- [ ] **FE-118** Use IndexerLagNote on other indexer-based screens (dashboard cards, portfolio, p2p lists).
-- [ ] **FE-119** Optimistic update of 'Total claimed' from the on-chain claim receipt (show the claimed amount immediately until the indexer catches up).
+- [x] **FE-117** One shared query for indexer /status instead of per-instance polling (each IndexerLagNote polls separately). (2026-11-10: shared react-query key, 60 s; code read, tsc 0; runtime not verified)
+- [x] **FE-118** Use IndexerLagNote on other indexer-based screens (dashboard cards, portfolio, p2p lists). (2026-11-10: lean scope, added to /portfolio once per chain; /p2p, /launches, CreatorFunds, GasLedger already had it; other screens not needed)
+- [x] **FE-119** Optimistic update of 'Total claimed' from the on-chain claim receipt (show the claimed amount immediately until the indexer catches up).
 - [ ] **IDX-59** (watch item, recurring indexer lag, now ~9 min; lives in the indexer repo, noted here for the user-facing note)
 - [x] **FE-112** (2026-11-10, WS-09.5c; code read + scratch run of the copied function, tsc 0, lint clean, runtime NOT verified) `formatEth` in lib/api.ts rewritten with bigint-only arithmetic (half away from zero, decimals clamped 0-18, '-' on unparsable input); `formatNative` picks it up.
   - Remaining (minor): CreatorFunds still uses its own `fmtWei`; consolidate if wanted.
