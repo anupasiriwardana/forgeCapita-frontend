@@ -3,6 +3,7 @@
 import type { P2PListing } from "@/lib/api";
 import { formatEth, shortAddr } from "@/lib/api";
 import { chainCurrency } from "@/config/chains";
+import { formatTokenAmount } from "@/lib/format";
 
 /** Protocol fee in basis points, taken from the price at fill (mirrors the contract). */
 export const PROTOCOL_FEE_BPS = 100;
@@ -30,7 +31,7 @@ export function P2PListingCard({ listing, onBuy, onCancel, viewer, isPending, in
   const { fee, proceeds } = splitPrice(BigInt(listing.priceInETH));
   const feeText = `${formatEth(fee.toString(), 6)} ${currency}`;
   const proceedsText = `${formatEth(proceeds.toString(), 6)} ${currency}`;
-  const tokenAmount = Number(listing.tokenAmount).toLocaleString();
+  const tokenAmount = formatTokenAmount(listing.tokenAmount);
 
   return (
     <div

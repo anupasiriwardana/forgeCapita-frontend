@@ -7,6 +7,20 @@ export function formatVotes(wei: bigint): string {
   return trimmed ? `${whole}.${trimmed}` : whole;
 }
 
+/** Token amount in wei (18 decimals) as a grouped decimal string; "-" for invalid input. Bigint-safe. */
+export function formatTokenAmount(wei: string | bigint, maxFractionDigits = 4): string {
+  let value: bigint;
+  try {
+    value = BigInt(wei);
+  } catch {
+    return "-";
+  }
+  const [whole, frac = ""] = formatUnits(value, 18).split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const trimmed = frac.slice(0, maxFractionDigits).replace(/0+$/, "");
+  return trimmed ? `${grouped}.${trimmed}` : grouped;
+}
+
 /** Votes as a percentage of the public supply with one decimal (BigInt math); "0.0" when supply is 0. */
 export function pctOfSupply(votes: bigint, publicSupply: bigint): string {
   if (publicSupply <= BigInt(0)) return "0.0";

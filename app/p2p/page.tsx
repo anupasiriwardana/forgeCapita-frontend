@@ -2,22 +2,78 @@
 
 import { useState, Suspense } from "react";
 import { useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId, useConfig, usePublicClient } from "wagmi";
+import { useWriteContract, useAccount, useChainId, useConfig, usePublicClient } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
-import { isAddress, parseEther, parseUnits } from "viem";
+import { isAddress, parseEther, parseUnits, parseEventLogs, formatUnits, type PublicClient, type TransactionReceipt } from "viem";
 import { fetchActiveListings, fetchRecentTrades, formatEth, shortAddr, type P2PListing } from "@/lib/api";
+import { formatTokenAmount } from "@/lib/format";
+import { TokenPicker } from "@/components/TokenPicker";
 import { P2PListingCard, PROTOCOL_FEE_BPS, splitPrice } from "@/components/P2PListingCard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { IndexerLagNote } from "@/components/IndexerLagNote";
 import { explorerTxUrl } from "@/components/admin/shared";
 import { ABIS, getContractConfig } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
-import { chainCurrency } from "@/config/chains";
+import { chainCurrency, chainName } from "@/config/chains";
+
+/** How long an optimistic entry may outlive the indexer before it is dropped. */
+const OPTIMISTIC_TTL_MS = 10 * 60 * 1000;
+const OPTIMISTIC_REFETCH_MS = 5000;
+
+type P2PConfig = NonNullable<ReturnType<typeof getContractConfig<"p2pExchange">>>;
+
+/**
+ * Reads the created listing back from the chain (receipt log + listings()) and hands it to the
+ * optimistic list. Best effort: on failure the indexer refetch still shows the listing later.
+ */
+async function publishCreated(
+  logs: TransactionReceipt["logs"],
+  p2p: P2PConfig,
+  client: PublicClient,
+  chainId: number,
+  onCreated: (listing: P2PListing) => void,
+): Promise<void> {
+  try {
+    const created = parseEventLogs({ abi: p2p.abi, logs, eventName: "ListingCreated" }).find(
+      (l) => l.address.toLowerCase() === p2p.address.toLowerCase(),
+    );
+    if (!created) return;
+    const listingId = created.args.listingId;
+    const [seller, tokenAddress, tokenAmount, priceInETH, active] = await client.readContract({
+      address: p2p.address,
+      abi: p2p.abi,
+      functionName: "listings",
+      args: [listingId],
+    });
+    if (!active) return;
+    onCreated({
+      id: `${chainId}:${listingId.toString()}`,
+      chainId,
+      seller,
+      tokenAddress,
+      tokenAmount: tokenAmount.toString(),
+      priceInETH: priceInETH.toString(),
+      status: "ACTIVE",
+    });
+  } catch {
+    // Read-back is an optimisation only; the indexer remains the source of truth.
+  }
+}
 
 // ── Create Listing Modal ───────────────────────────────────────────────────
 
-function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function CreateListingModal({
+  onClose,
+  onSuccess,
+  onCreated,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+  onCreated: (listing: P2PListing) => void;
+}) {
   const [tokenAddress, setTokenAddress] = useState("");
+  const [tokenBalance, setTokenBalance] = useState<bigint | null>(null);
+  const [manualToken, setManualToken] = useState(false);
   const [tokenAmount, setTokenAmount] = useState("");
   const [priceEth, setPriceEth] = useState("");
   const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
@@ -91,6 +147,7 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
       });
       const receipt = await waitForTransactionReceipt(config, { hash });
       if (receipt.status !== "success") { failWith("Listing transaction failed (reverted)."); return; }
+      await publishCreated(receipt.logs, p2p, publicClient, chainId, onCreated);
       setTxStatus("success");
       setTimeout(() => { onSuccess(); onClose(); }, 2000);
     } catch (err) {
@@ -117,33 +174,56 @@ function CreateListingModal({ onClose, onSuccess }: { onClose: () => void; onSuc
         {txStatus === "success" ? (
           <div className="alert alert-success">
             <span>✅</span>
-            <span>Listing created! The P2P market will update shortly.</span>
+            <span>Listing created and visible now.</span>
           </div>
         ) : (
           <form onSubmit={handleCreate}>
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               <div>
-                <label className="label">Token Contract Address</label>
-                <input
-                  className="input-field"
-                  value={tokenAddress}
-                  onChange={e => setTokenAddress(e.target.value)}
-                  placeholder="0x..."
-                  required
-                />
+                <label className="label">Token</label>
+                {manualToken ? (
+                  <input
+                    className="input-field"
+                    value={tokenAddress}
+                    onChange={e => { setTokenAddress(e.target.value); setTokenBalance(null); }}
+                    placeholder="0x..."
+                    required
+                  />
+                ) : (
+                  <TokenPicker
+                    chainId={chainId}
+                    wallet={address}
+                    selected={tokenAddress}
+                    networkName={chainName(chainId)}
+                    onSelect={(addr, balance) => { setTokenAddress(addr); setTokenBalance(balance); }}
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setManualToken(m => !m); setTokenAddress(""); setTokenBalance(null); }}
+                  style={{ background: "none", border: "none", color: "var(--brand-accent)", cursor: "pointer", fontSize: "12px", padding: "6px 0" }}
+                >
+                  {manualToken ? "Pick from my tokens" : "Use another token address"}
+                </button>
               </div>
               <div>
                 <label className="label">Token Amount</label>
-                <input
-                  className="input-field"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={tokenAmount}
-                  onChange={e => setTokenAmount(e.target.value)}
-                  placeholder="1000"
-                  required
-                />
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    className="input-field"
+                    type="text"
+                    inputMode="decimal"
+                    value={tokenAmount}
+                    onChange={e => setTokenAmount(e.target.value)}
+                    placeholder="1000"
+                    required
+                  />
+                  {tokenBalance !== null && (
+                    <button type="button" className="btn-secondary" onClick={() => setTokenAmount(formatUnits(tokenBalance, 18))}>
+                      Max
+                    </button>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="label">Price in {chainCurrency(chainId)}</label>
@@ -226,7 +306,7 @@ function RecentTrades({ chainId }: { chainId: number }) {
                   <tr key={t.id} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={{ padding: "8px" }}>{new Date(Number(t.timestamp) * 1000).toLocaleString()}</td>
                     <td style={{ padding: "8px", fontFamily: "monospace" }}>{shortAddr(t.tokenAddress)}</td>
-                    <td style={{ padding: "8px" }}>{formatEth(t.tokenAmount, 2)}</td>
+                    <td style={{ padding: "8px" }}>{formatTokenAmount(t.tokenAmount)}</td>
                     <td style={{ padding: "8px" }}>{formatEth(t.pricePaid, 4)} {chainCurrency(t.chainId)}</td>
                     <td style={{ padding: "8px", fontFamily: "monospace" }}>{shortAddr(t.seller)}</td>
                     <td style={{ padding: "8px", fontFamily: "monospace" }}>{shortAddr(t.buyer)}</td>
@@ -260,16 +340,51 @@ function P2PContent() {
   const [cancelTarget, setCancelTarget] = useState<P2PListing | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-  const { data: listings } = useSuspenseQuery({
+  // Optimistic state (id -> time added) bridges the indexer lag after confirmed receipts.
+  const [optimistic, setOptimistic] = useState<Record<string, { listing: P2PListing; at: number }>>({});
+  const [removedIds, setRemovedIds] = useState<Record<string, number>>({});
+  const hasOptimistic = Object.keys(optimistic).length > 0 || Object.keys(removedIds).length > 0;
+
+  const { data: indexed, dataUpdatedAt } = useSuspenseQuery({
     queryKey: ["p2p-listings"],
     queryFn: fetchActiveListings,
+    refetchInterval: hasOptimistic ? OPTIMISTIC_REFETCH_MS : false,
   });
+
+  // Reconcile once per indexer fetch (state adjusted during render, keyed on the fetch time).
+  const [reconciledAt, setReconciledAt] = useState(0);
+  if (reconciledAt !== dataUpdatedAt) {
+    setReconciledAt(dataUpdatedAt);
+    const ids = new Set(indexed.map((l) => l.id));
+    const alive = (at: number): boolean => dataUpdatedAt - at < OPTIMISTIC_TTL_MS;
+    const nextOptimistic = Object.fromEntries(
+      Object.entries(optimistic).filter(([id, v]) => !ids.has(id) && alive(v.at)),
+    );
+    if (Object.keys(nextOptimistic).length !== Object.keys(optimistic).length) setOptimistic(nextOptimistic);
+    const nextRemoved = Object.fromEntries(
+      Object.entries(removedIds).filter(([id, at]) => ids.has(id) && alive(at)),
+    );
+    if (Object.keys(nextRemoved).length !== Object.keys(removedIds).length) setRemovedIds(nextRemoved);
+  }
+
+  const indexedIds = new Set(indexed.map((l) => l.id));
+  const listings = [
+    ...indexed,
+    ...Object.values(optimistic).map((v) => v.listing).filter((l) => !indexedIds.has(l.id)),
+  ].filter((l) => !(l.id in removedIds));
+
+  function markRemoved(id: string) {
+    setRemovedIds((prev) => ({ ...prev, [id]: Date.now() }));
+    setOptimistic((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)));
+  }
+
+  function addOptimistic(listing: P2PListing) {
+    setOptimistic((prev) => ({ ...prev, [listing.id]: { listing, at: Date.now() } }));
+  }
 
   const { writeContractAsync } = useWriteContract();
   const buyClient = usePublicClient();
-  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [buyError, setBuyError] = useState("");
-  useWaitForTransactionReceipt({ hash: txHash });
 
   async function handleBuy(listing: P2PListing) {
     if (!isConnected) { setBuyError("Connect your wallet to buy."); return; }
@@ -289,8 +404,9 @@ function P2PContent() {
         value: BigInt(listing.priceInETH),
         ...(await getFeeOverrides(buyClient)),
       });
-      setTxHash(hash);
-      // Optimistically remove the listing from UI
+      const receipt = await waitForTransactionReceipt(config, { hash });
+      if (receipt.status !== "success") { setBuyError("Purchase transaction failed (reverted)."); return; }
+      markRemoved(listing.id);
       queryClient.invalidateQueries({ queryKey: ["p2p-listings"] });
     } catch (err) {
       setBuyError(err instanceof Error ? err.message : "Purchase failed");
@@ -323,6 +439,7 @@ function P2PContent() {
       });
       const receipt = await waitForTransactionReceipt(config, { hash });
       if (receipt.status !== "success") { setBuyError("Cancel transaction failed (reverted)."); return; }
+      markRemoved(listing.id);
       queryClient.invalidateQueries({ queryKey: ["p2p-listings"] });
     } catch (err) {
       const e = err as { shortMessage?: string; message?: string };
@@ -332,15 +449,15 @@ function P2PContent() {
     }
   }
 
-  const volumeByChain = new Map<number, number>();
+  const volumeByChain = new Map<number, bigint>();
   for (const l of listings) {
-    volumeByChain.set(l.chainId, (volumeByChain.get(l.chainId) ?? 0) + Number(BigInt(l.priceInETH)) / 1e18);
+    volumeByChain.set(l.chainId, (volumeByChain.get(l.chainId) ?? BigInt(0)) + BigInt(l.priceInETH));
   }
   const totalVolume =
     volumeByChain.size === 0
-      ? `${(0).toFixed(4)} ${chainCurrency(chainId)}`
+      ? `0 ${chainCurrency(chainId)}`
       : Array.from(volumeByChain.entries())
-          .map(([id, v]) => `${v.toFixed(4)} ${chainCurrency(id)}`)
+          .map(([id, v]) => `${formatTokenAmount(v)} ${chainCurrency(id)}`)
           .join(" + ");
 
   return (
@@ -459,6 +576,7 @@ function P2PContent() {
         <CreateListingModal
           onClose={() => setShowModal(false)}
           onSuccess={() => queryClient.invalidateQueries({ queryKey: ["p2p-listings"] })}
+          onCreated={addOptimistic}
         />
       )}
     </div>
