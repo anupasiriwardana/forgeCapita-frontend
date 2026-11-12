@@ -13,6 +13,7 @@ import {
   createLaunchDraft,
   describeFounderError,
   fetchFounderMe,
+  formatEth,
   fetchLaunchEligibility,
   getProject,
   projectIdOf,
@@ -24,11 +25,22 @@ import {
 import { ABIS, getContractConfig } from "@/lib/contracts";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { getFeeOverrides } from "@/lib/fees";
+import { useMinimumGoal } from "@/lib/useMinimumGoal";
+import { MinimumGoalPanel, liveMinimumWei } from "@/components/MinimumGoalPanel";
 
 const ATTACH_MAX_ATTEMPTS = 4;
 const ATTACH_RETRY_DELAY_MS = 3000;
 const INDEX_POLL_ATTEMPTS = 10;
 const INDEX_POLL_DELAY_MS = 3000;
+
+function parseGoalWei(eth: string): bigint | null {
+  if (eth === "") return null;
+  try {
+    return parseEther(eth);
+  } catch {
+    return null;
+  }
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -115,6 +127,10 @@ export default function CreateProjectPage() {
 
   const { writeContractAsync } = useWriteContract();
 
+  const minimumGoal = useMinimumGoal(chainId);
+  const enteredGoalWei = parseGoalWei(fundingGoalEth);
+  const liveMinWei = liveMinimumWei(minimumGoal.data);
+  const belowMinimum = liveMinWei !== null && enteredGoalWei !== null && enteredGoalWei < liveMinWei;
 
   const totalPct = milestones.reduce((s, m) => s + Number(m.percentage || 0), 0);
 
@@ -174,6 +190,11 @@ export default function CreateProjectPage() {
     if (totalPct !== 100) { setErrorMsg("Milestone percentages must sum to 100%."); return; }
     if (!name || !description || !fundingGoalEth) { setErrorMsg("Name, description, and funding goal are required."); return; }
 
+    if (belowMinimum && liveMinWei !== null) {
+      setErrorMsg(`Funding goal is below the minimum of ${formatEth(liveMinWei.toString(), 6)} ${chainCurrency(chainId)}.`);
+      return;
+    }
+
     const factory = getContractConfig(chainId, "factory");
     if (!factory) { setErrorMsg("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
     if (!publicClient) { setErrorMsg("No RPC client available for this network."); return; }
@@ -194,6 +215,7 @@ export default function CreateProjectPage() {
         logoUrl,
         websiteUrl,
         pitchDeckUrl,
+        ...(enteredGoalWei !== null ? { fundingGoalWei: enteredGoalWei.toString() } : {}),
         ...(isFounder ? { shadowWalletId } : {}),
       });
     } catch (err) {
@@ -512,6 +534,7 @@ export default function CreateProjectPage() {
               <input className="input-field" value={totalSupply} onChange={e => setTotalSupply(e.target.value)} placeholder="1000000" type="number" min="1" />
             </div>
           </div>
+          <MinimumGoalPanel chainId={chainId} goal={minimumGoal.data} enteredWei={enteredGoalWei} />
         </div>
 
         {/* ── Milestones ── */}
@@ -610,7 +633,7 @@ export default function CreateProjectPage() {
           type="submit"
           className="btn-primary"
           style={{ width: "100%", padding: "16px", fontSize: "16px" }}
-          disabled={isBusy || !isConnected || founderBlocked}
+          disabled={isBusy || !isConnected || founderBlocked || belowMinimum}
         >
           {isLoading ? (
             <>

@@ -274,6 +274,30 @@ export interface LaunchDraftInput {
   pitchDeckUrl?: string;
   category?: string;
   shadowWalletId?: string;
+  /** Declared funding goal in wei (decimal string); enforced against the live minimum server-side. */
+  fundingGoalWei?: string;
+}
+
+/** Gas-based minimum funding goal. All amounts are decimal wei strings. */
+export interface MinimumGoalDto {
+  mode: "live" | "test";
+  minGoalWei: string | null;
+  floor: string;
+  ceiling?: string;
+  gasPriceUsed: string;
+  l1FeeUsed: string;
+  gasUnits: string;
+  N: string;
+  M: string;
+  /** Safety margin in basis points. */
+  margin: string;
+  windowHours: string;
+  computedAt: string;
+  stale: boolean;
+}
+
+export function getMinimumGoal(chainId: number, signal?: AbortSignal): Promise<MinimumGoalDto> {
+  return apiFetch<MinimumGoalDto>(`/gas/${encodeURIComponent(String(chainId))}/minimum-goal`, { signal });
 }
 
 export interface LaunchDraftDto {
