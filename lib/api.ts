@@ -1275,6 +1275,31 @@ export function formatEth(wei?: string | null, decimals = 4): string {
   return `${sign}${whole.toString()}.${frac.toString().padStart(places, "0")}`;
 }
 
+/**
+ * Like formatEth but rounds the magnitude UP, so the displayed value is never
+ * below the real one (used for minimums a user may retype). Bigint only.
+ */
+export function formatEthCeil(wei?: string | null, decimals = 6): string {
+  if (!wei) return "0";
+  let value: bigint;
+  try {
+    value = BigInt(wei);
+  } catch {
+    return "-";
+  }
+  const places = Math.min(18, Math.max(0, Math.floor(decimals)));
+  const negative = value < ZERO;
+  const abs = negative ? -value : value;
+  const step = BigInt(10) ** BigInt(18 - places);
+  const scaled = (abs + step - BigInt(1)) / step;
+  const scale = BigInt(10) ** BigInt(places);
+  const whole = scaled / scale;
+  const frac = scaled % scale;
+  const sign = negative && scaled > ZERO ? "-" : "";
+  if (places === 0) return `${sign}${whole.toString()}`;
+  return `${sign}${whole.toString()}.${frac.toString().padStart(places, "0")}`;
+}
+
 /** Same as formatEth, suffixed with the native currency of the given chain. */
 export function formatNative(wei: string | null | undefined, chainId: number, decimals = 4): string {
   return `${formatEth(wei, decimals)} ${chainCurrency(chainId)}`;

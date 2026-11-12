@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatUnits } from "viem";
 import { chainCurrency } from "@/config/chains";
-import { formatEth, type MinimumGoalDto } from "@/lib/api";
+import { formatEth, formatEthCeil, type MinimumGoalDto } from "@/lib/api";
 
 interface Props {
   chainId: number;
@@ -45,7 +45,7 @@ export function MinimumGoalPanel({ chainId, goal, enteredWei }: Props) {
     return <p style={noteStyle}>Could not load the minimum; the server will still check.</p>;
   }
   const below = enteredWei !== null && enteredWei < minWei;
-  const minText = `${formatEth(goal.minGoalWei, 6)} ${currency}`;
+  const minText = `${formatEthCeil(goal.minGoalWei, 6)} ${currency}`;
   const gasPrice = parseWei(goal.gasPriceUsed);
   const margin = parseWei(goal.margin);
 
@@ -82,7 +82,7 @@ export function MinimumGoalPanel({ chainId, goal, enteredWei }: Props) {
             <li>Safety margin: {margin === null ? "-" : formatUnits(margin, 2)}%</li>
             <li>Averaging window: {goal.windowHours} hours</li>
             <li>Computed at: {new Date(goal.computedAt).toLocaleString()}</li>
-            <li>Floor: {formatEth(goal.floor, 6)} {currency}</li>
+            <li>Floor: {formatEthCeil(goal.floor, 6)} {currency}</li>
           </ul>
         </div>
       )}

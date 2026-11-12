@@ -13,7 +13,7 @@ import {
   createLaunchDraft,
   describeFounderError,
   fetchFounderMe,
-  formatEth,
+  formatEthCeil,
   fetchLaunchEligibility,
   getProject,
   projectIdOf,
@@ -191,7 +191,7 @@ export default function CreateProjectPage() {
     if (!name || !description || !fundingGoalEth) { setErrorMsg("Name, description, and funding goal are required."); return; }
 
     if (belowMinimum && liveMinWei !== null) {
-      setErrorMsg(`Funding goal is below the minimum of ${formatEth(liveMinWei.toString(), 6)} ${chainCurrency(chainId)}.`);
+      setErrorMsg(`Funding goal is below the minimum of ${formatEthCeil(liveMinWei.toString(), 6)} ${chainCurrency(chainId)}.`);
       return;
     }
 
