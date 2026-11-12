@@ -181,7 +181,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-51** Gated deploy step: `launchProject` is disabled until eligibility endpoint (API-39) says the founder is cleared; deployment uses the approved metadata; after confirmation link the escrow address to the application.
 - [ ] **FE-52** Drag-and-drop file upload component (image / PDF) with progress, size and type limits, preview; replaces the logo and pitch deck URL inputs.
 
-- [ ] **FE-53** Minimum funding goal per chain: the application and deploy forms show and enforce a separate minimum for Arbitrum Sepolia (ETH) and BSC Testnet (BNB), with a short explanation that the 5% platform fee must cover the sponsored gas for about 100 investors and 5 milestones (contracts v2 design section 13). Values come from per-chain configuration (public, not secret) so they can be recalibrated without a code change.
+- [ ] **FE-53** Minimum funding goal (CORRECTED 2026-11-12; step WS-07.13b, after API WS-07.13a): NOT on `/apply`; shown on the launch form `/projects/create` only. Reads `GET /api/v1/gas/:chainId/minimum-goal` (no frontend env). `mode: live`: show the live minimum in the chain's coin, a 'How is this calculated?' panel (gas price, L1 fee, gas units, N, M, margin, window, floor, computedAt) and block submit below the minimum (also send `fundingGoalWei` with the draft). `mode: test`: no minimum or blocker, only a small note that minimum goals are disabled in test mode. The server enforces too (API-41).
 
 ### Investor dashboard (`/investor`)
 - [ ] **FE-55** Portfolio overview (backed projects, token balances, staked amounts, yield claimed); open polls needing attention; claim yield; refunds; queued gasless request history.
