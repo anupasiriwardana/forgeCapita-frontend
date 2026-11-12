@@ -10,6 +10,8 @@ import { getFeeOverrides } from "@/lib/fees";
 import { chainCurrency } from "@/config/chains";
 import { GaslessNotice, RelayStatus } from "@/components/RelayStatus";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { useWriteAllowed } from "@/components/web3/useWriteAllowed";
+import { ProfileRequiredNotice } from "@/components/ProfileRequiredNotice";
 import {
   describeRelayError,
   isTerminalStatus,
@@ -113,7 +115,8 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   const relayActive = relayBusy || (relayStatus !== null && !isTerminalStatus(relayStatus));
   const relayConfirmed = relayStatus === "CONFIRMED";
   const canClaimTokens = fundingClosedOnChain && !cancelledOnChain && deposit > ZERO && !tokensClaimed;
-  const disabled = busy || relayActive || wrongChain || !isConnected;
+  const { allowed: writeAllowed } = useWriteAllowed();
+  const disabled = busy || relayActive || wrongChain || !isConnected || !writeAllowed;
 
   async function send(
     label: string,
@@ -291,6 +294,8 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
               <span>Switch your wallet to this project&apos;s network (chain {project.chainId}) to use these actions.</span>
             </div>
           )}
+
+          <ProfileRequiredNotice />
 
           <div>
             <div style={row}><span style={muted}>Deposited</span><span>{fmt(deposit)} {chainCurrency(project.chainId)}</span></div>

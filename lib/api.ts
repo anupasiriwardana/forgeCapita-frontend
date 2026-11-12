@@ -190,7 +190,7 @@ export class ApiError extends Error {
 }
 
 interface ApiFetchOptions {
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "PUT";
   body?: unknown;
   signal?: AbortSignal;
 }
@@ -202,7 +202,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { method = "GET", body, signal } = options;
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (method === "POST" || method === "PATCH") headers["Content-Type"] = "application/json";
+  if (method === "POST" || method === "PATCH" || method === "PUT") headers["Content-Type"] = "application/json";
 
   let res: Response;
   try {
@@ -342,6 +342,8 @@ export interface AuthUser {
   id: string;
   address: string;
   role: string;
+  /** Absent on an older API; treat only a strict `false` as incomplete. */
+  profileComplete?: boolean;
 }
 
 export interface NonceResponse {
@@ -381,6 +383,57 @@ export async function fetchSession(signal?: AbortSignal): Promise<AuthUser | nul
 /** Logout answers 204 with no body. */
 export async function logoutSession(): Promise<void> {
   await apiFetch<void>("/auth/logout", { method: "POST", body: {} });
+}
+
+// ── Personal (KYC) profile; PII, never log or persist client-side ─────────
+
+export interface UserProfileDto {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  region: string | null;
+  postalCode: string;
+  country: string;
+  dateOfBirth: string;
+}
+
+export interface UserProfileInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  region?: string;
+  postalCode: string;
+  country: string;
+  dateOfBirth: string;
+}
+
+export interface MyProfileDto {
+  profile: UserProfileDto | null;
+  profileComplete: boolean;
+}
+
+export function getMyProfile(signal?: AbortSignal): Promise<MyProfileDto> {
+  return apiFetch<MyProfileDto>("/profile/me", { signal });
+}
+
+/** Strict API body: optional fields are omitted when empty. */
+export function saveMyProfile(
+  body: UserProfileInput,
+  signal?: AbortSignal,
+): Promise<{ profile: UserProfileDto; profileComplete: true }> {
+  const clean: Record<string, string> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (typeof value === "string" && value !== "") clean[key] = value;
+  }
+  return apiFetch("/profile/me", { method: "PUT", body: clean, signal });
 }
 
 // ── Applications and admin ────────────────────────────────────────────────

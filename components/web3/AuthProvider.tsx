@@ -16,6 +16,10 @@ interface AuthContextValue {
   role: string | null;
   loading: boolean;
   error: string | null;
+  /** True only when the API explicitly reports the personal profile as incomplete. */
+  profileIncomplete: boolean;
+  /** Re-reads the session (e.g. after saving the profile). */
+  refreshSession: () => Promise<void>;
   /** Resolves true when a session exists for the connected wallet afterwards. */
   signIn: () => Promise<boolean>;
   signOut: () => Promise<void>;
@@ -125,15 +129,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [signMessageAsync]);
 
+  const refreshSession = useCallback(async (): Promise<void> => {
+    const wallet = addressRef.current;
+    if (!wallet) return;
+    try {
+      const found = await fetchSession();
+      if (addressRef.current?.toLowerCase() !== wallet.toLowerCase()) return;
+      setSession(found && found.address.toLowerCase() === wallet.toLowerCase() ? found : null);
+    } catch {
+      // Keep the current session; the next reload re-checks it.
+    }
+  }, []);
+
   const signOut = useCallback(async (): Promise<void> => {
     setSession(null);
     setErrorState(null);
     await logoutSession().catch(() => undefined);
   }, []);
 
+  const profileIncomplete = user !== null && user.profileComplete === false;
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, role: user?.role ?? null, loading, error, signIn, signOut }),
-    [user, loading, error, signIn, signOut],
+    () => ({ user, role: user?.role ?? null, loading, error, profileIncomplete, refreshSession, signIn, signOut }),
+    [user, loading, error, profileIncomplete, refreshSession, signIn, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

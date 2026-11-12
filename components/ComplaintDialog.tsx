@@ -3,6 +3,8 @@
 import { useId, useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { useWriteAllowed } from "@/components/web3/useWriteAllowed";
+import { ProfileRequiredNotice } from "@/components/ProfileRequiredNotice";
 import {
   createComplaint,
   describeApiError,
@@ -143,6 +145,7 @@ export function ReportProblem({ projectId }: { projectId: string }) {
   const { user, signIn } = useAuth();
   const [open, setOpen] = useState(false);
   const [filed, setFiled] = useState(false);
+  const { allowed: writeAllowed } = useWriteAllowed();
 
   if (!user) {
     return (
@@ -155,7 +158,8 @@ export function ReportProblem({ projectId }: { projectId: string }) {
 
   return (
     <div style={{ marginTop: "16px" }}>
-      <button type="button" className="btn-secondary" onClick={() => { setFiled(false); setOpen(true); }}>
+      <ProfileRequiredNotice />
+      <button type="button" className="btn-secondary" disabled={!writeAllowed} onClick={() => { setFiled(false); setOpen(true); }}>
         Report a problem
       </button>
       {filed && (

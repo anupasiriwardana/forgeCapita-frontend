@@ -6,6 +6,8 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { useSendTransaction, useWaitForTransactionReceipt, useAccount, useBalance, useChainId, useConfig, usePublicClient, useReadContracts } from "wagmi";
 import { ABIS } from "@/lib/contracts";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { useWriteAllowed } from "@/components/web3/useWriteAllowed";
+import { ProfileRequiredNotice } from "@/components/ProfileRequiredNotice";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { parseEther } from "viem";
 import { getFeeOverrides } from "@/lib/fees";
@@ -62,6 +64,7 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
   const { isConnected, address } = useAccount();
   const walletChainId = useChainId();
   const wrongChain = walletChainId !== project.chainId;
+  const { allowed: writeAllowed } = useWriteAllowed();
   const [ethAmount, setEthAmount] = useState("");
   const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [txError, setTxError] = useState("");
@@ -74,7 +77,7 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
   async function handleFund(e: React.FormEvent) {
     e.preventDefault();
     if (!ethAmount || Number(ethAmount) <= 0) return;
-    if (wrongChain) return;
+    if (wrongChain || !writeAllowed) return;
     setTxStatus("pending");
     setTxError("");
     try {
@@ -112,6 +115,7 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
         </div>
       ) : (
         <form onSubmit={handleFund}>
+          <ProfileRequiredNotice />
           {wrongChain && (
             <div className="alert alert-warning" style={{ marginBottom: "16px" }}>
               <span>⚠️</span>
@@ -133,7 +137,7 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
             <button
               type="submit"
               className="btn-primary"
-              disabled={txStatus === "pending" || !ethAmount || wrongChain}
+              disabled={txStatus === "pending" || !ethAmount || wrongChain || !writeAllowed}
               style={{ flexShrink: 0, padding: "12px 20px" }}
             >
               {txStatus === "pending" ? <span className="spinner" style={{ width: "16px", height: "16px" }} /> : "Fund ⚡"}

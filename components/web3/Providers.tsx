@@ -5,6 +5,7 @@ import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { wagmiConfig } from "@/config/wagmi";
 import { AuthProvider } from "@/components/web3/AuthProvider";
+import { ProfileGate } from "@/components/ProfileGate";
 import "@rainbow-me/rainbowkit/styles.css";
 import { useState } from "react";
 
@@ -29,7 +30,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
             fontStack: "system",
           })}
         >
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <ProfileGate />
+            {children}
+          </AuthProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

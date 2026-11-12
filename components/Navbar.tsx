@@ -23,6 +23,7 @@ export function Navbar() {
   if (role === "founder") links.push({ href: "/founder", label: "Founder" });
   if (role === "founder" || role === "staff" || role === "admin") links.push({ href: "/launches", label: "My launches" });
   if (role === "staff" || role === "admin") links.push({ href: "/admin", label: "Admin" });
+  if (user) links.push({ href: "/profile", label: "Profile" });
 
   return (
     <header className="sticky top-0 z-40 w-full">
