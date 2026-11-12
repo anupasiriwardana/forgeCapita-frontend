@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AuditLogTab } from "@/components/admin/AuditLogTab";
 import { ComplianceTab } from "@/components/admin/ComplianceTab";
 import { ComplaintsTab } from "@/components/admin/ComplaintsTab";
@@ -15,6 +15,7 @@ import {
   approveApplication,
   approveShadowWallet,
   getAdminApplication,
+  getStaffUserProfile,
   listAdminApplications,
   listAdminShadowWallets,
   listAdminUsers,
@@ -28,6 +29,7 @@ import {
   type ManagedRole,
   type ShadowWalletStatus,
   type StaffShadowWalletDto,
+  type UserProfileDto,
   type UserRole,
 } from "@/lib/api";
 
@@ -93,6 +95,43 @@ function ApplicationsSection({ selfAddress }: { selfAddress: string }) {
   const [kyc, setKyc] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [applicantProfile, setApplicantProfile] = useState<UserProfileDto | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const profileController = useRef<AbortController | null>(null);
+
+  const clearProfile = useCallback(() => {
+    profileController.current?.abort();
+    profileController.current = null;
+    setApplicantProfile(null);
+    setProfileLoaded(false);
+    setProfileLoading(false);
+    setProfileError("");
+  }, []);
+
+  useEffect(() => () => profileController.current?.abort(), []);
+
+  const viewProfile = (address: string) => {
+    profileController.current?.abort();
+    const controller = new AbortController();
+    profileController.current = controller;
+    const { signal } = controller;
+    setProfileLoading(true);
+    setProfileError("");
+    getStaffUserProfile(address, signal)
+      .then((p) => {
+        if (signal.aborted) return;
+        setApplicantProfile(p);
+        setProfileLoaded(true);
+        setProfileLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (signal.aborted) return;
+        setProfileError(describeApiError(err, "Failed to load profile"));
+        setProfileLoading(false);
+      });
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -133,6 +172,7 @@ function ApplicationsSection({ selfAddress }: { selfAddress: string }) {
     setKyc(false);
     setNote("");
     setSuccess("");
+    clearProfile();
   };
 
   const review = useCallback(
@@ -187,6 +227,7 @@ function ApplicationsSection({ selfAddress }: { selfAddress: string }) {
               setSelectedId(null);
               setDetail(null);
               setSuccess("");
+              clearProfile();
             }}
           >
             {t.label}
@@ -244,6 +285,37 @@ function ApplicationsSection({ selfAddress }: { selfAddress: string }) {
               {detail.repoUrl && <Row label="Repository"><SafeLink href={detail.repoUrl} /></Row>}
               {detail.contact && <Row label="Contact">{detail.contact}</Row>}
               <Row label="Submitted">{new Date(detail.createdAt).toLocaleString()}</Row>
+              <Row label="KYC documents link">
+                {detail.kycDocsUrl ? <SafeLink href={detail.kycDocsUrl} /> : "No documents link (submitted before this field existed)"}
+              </Row>
+              {detail.kycNote && <Row label="Applicant note"><span style={{ whiteSpace: "pre-wrap" }}>{detail.kycNote}</span></Row>}
+              <div style={{ marginBottom: "10px" }}>
+                <button type="button" className="btn-secondary" disabled={profileLoading} onClick={() => viewProfile(detail.walletAddress)}>
+                  {profileLoading ? "Loading…" : "View applicant profile"}
+                </button>
+                {profileError && <div role="alert" className="alert alert-error" style={{ marginTop: "8px" }}>{profileError}</div>}
+                {profileLoaded && !applicantProfile && (
+                  <p style={{ marginTop: "8px", color: "var(--text-secondary)" }}>No profile on file</p>
+                )}
+                {applicantProfile && (
+                  <div style={{ marginTop: "8px" }}>
+                    <Row label="Name">{applicantProfile.firstName} {applicantProfile.lastName}</Row>
+                    <Row label="Email">{applicantProfile.email}</Row>
+                    <Row label="Phone">{applicantProfile.phone}</Row>
+                    <Row label="Address">
+                      {[
+                        applicantProfile.addressLine1,
+                        applicantProfile.addressLine2,
+                        applicantProfile.city,
+                        applicantProfile.region,
+                        applicantProfile.postalCode,
+                        applicantProfile.country,
+                      ].filter((part): part is string => Boolean(part)).join(", ")}
+                    </Row>
+                    <Row label="Date of birth">{applicantProfile.dateOfBirth}</Row>
+                  </div>
+                )}
+              </div>
               {detail.reviewNote && <Row label="Review note">{detail.reviewNote}</Row>}
               {detail.kycVerifiedAt && <Row label="KYC verified at">{new Date(detail.kycVerifiedAt).toLocaleString()}</Row>}
               {detail.status === "pending" && (

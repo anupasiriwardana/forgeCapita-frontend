@@ -460,6 +460,21 @@ export interface ApplicationDto {
   userId?: string;
   reviewedBy?: string | null;
   kycVerifiedBy?: string | null;
+  /** Staff DTO only; never present for the applicant. */
+  kycDocsUrl?: string | null;
+  kycNote?: string | null;
+}
+
+/** Staff only; PII, never log or persist client-side. */
+export async function getStaffUserProfile(
+  address: string,
+  signal?: AbortSignal,
+): Promise<UserProfileDto | null> {
+  const data = await apiFetch<{ profile: UserProfileDto | null }>(
+    `/admin/users/${encodeURIComponent(address)}/profile`,
+    { signal },
+  );
+  return data.profile;
 }
 
 export interface AdminUserDto {
@@ -484,6 +499,8 @@ export interface ApplicationInput {
   pitchDeckUrl: string;
   repoUrl?: string;
   contact?: string;
+  kycDocsUrl: string;
+  kycNote?: string;
 }
 
 function buildQuery(params: Record<string, string | number | undefined>): string {

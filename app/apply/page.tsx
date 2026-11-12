@@ -51,7 +51,7 @@ function StatusCard({ app }: { app: ApplicationDto }) {
   );
 }
 
-const EMPTY_FORM = { projectName: "", summary: "", websiteUrl: "", pitchDeckUrl: "", repoUrl: "", contact: "" };
+const EMPTY_FORM = { projectName: "", summary: "", websiteUrl: "", pitchDeckUrl: "", repoUrl: "", contact: "", kycDocsUrl: "", kycNote: "" };
 type FormState = typeof EMPTY_FORM;
 
 function validate(f: FormState): string | null {
@@ -65,6 +65,9 @@ function validate(f: FormState): string | null {
   const repo = f.repoUrl.trim();
   if (repo && (repo.length > 300 || !REPO_HOST.test(repo))) return "Repository URL must be an https github.com or gitlab.com URL";
   if (f.contact.trim().length > 200) return "Contact must be at most 200 characters";
+  const docs = f.kycDocsUrl.trim();
+  if (!docs || docs.length > 500 || !HTTPS_URL.test(docs)) return "KYC documents link must be an https URL (max 500 characters)";
+  if (f.kycNote.trim().length > 500) return "Note for reviewer must be at most 500 characters";
   return null;
 }
 
@@ -118,6 +121,8 @@ export default function ApplyPage() {
         pitchDeckUrl: form.pitchDeckUrl.trim(),
         repoUrl: form.repoUrl.trim(),
         contact: form.contact.trim(),
+        kycDocsUrl: form.kycDocsUrl.trim(),
+        kycNote: form.kycNote.trim(),
       };
       try {
         await submitApplication(body);
@@ -197,6 +202,17 @@ export default function ApplyPage() {
             <div>
               <label className="label" htmlFor="contact">Contact (optional)</label>
               <input id="contact" className="input-field" maxLength={200} value={form.contact} onChange={set("contact")} />
+            </div>
+            <div>
+              <label className="label" htmlFor="kycDocsUrl">KYC documents link</label>
+              <input id="kycDocsUrl" className="input-field" type="url" maxLength={500} placeholder="https://" value={form.kycDocsUrl} onChange={set("kycDocsUrl")} required />
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                Share a Google Drive or other storage folder link with soft copies of your NIC and other required documents. Set sharing so staff can open it.
+              </div>
+            </div>
+            <div>
+              <label className="label" htmlFor="kycNote">Note for reviewer (optional)</label>
+              <textarea id="kycNote" className="input-field" rows={3} maxLength={500} value={form.kycNote} onChange={set("kycNote")} />
             </div>
             {formError && <div role="alert" className="alert alert-error">{formError}</div>}
             <button type="submit" className="btn-primary" disabled={sending}>
