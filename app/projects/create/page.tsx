@@ -449,6 +449,9 @@ export default function CreateProjectPage() {
               <li>{eligibility.checks.shadowWalletAvailable ? "✓" : "✗"} Approved shadow wallet available{" "}
                 {!eligibility.checks.shadowWalletAvailable && <Link href="/founder" style={{ color: "var(--brand-accent)" }}>(request one)</Link>}
               </li>
+              <li>{eligibility.checks.repoProvisioned ? "✓" : "✗"} Project repository{" "}
+                {!eligibility.checks.repoProvisioned && <Link href="/founder#repo" style={{ color: "var(--brand-accent)" }}>(request it)</Link>}
+              </li>
             </ul>
           )}
           {eligibility?.eligible && freeWallets.length === 0 && (

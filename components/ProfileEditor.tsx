@@ -31,6 +31,11 @@ function isHttpsUrl(value: string): boolean {
   }
 }
 
+/** Wallet-selection gate; deliberately ignores the repository check. */
+function walletChecksPass({ checks }: LaunchEligibilityDto): boolean {
+  return checks.applicationApproved && checks.agreementAccepted && checks.shadowWalletAvailable;
+}
+
 interface FormValues {
   name: string;
   description: string;
@@ -97,7 +102,7 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
     const { signal } = controller;
     fetchLaunchEligibility(signal)
       .then(async (result) => {
-        const me = result.eligible ? await fetchFounderMe(signal) : null;
+        const me = walletChecksPass(result) ? await fetchFounderMe(signal) : null;
         if (signal.aborted) return;
         setEligibility(result);
         setFreeWallets(me ? me.wallets.filter((w) => w.status === "approved" && w.projectId === null) : []);
@@ -168,8 +173,8 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
     }
   }
 
-  const walletBlocked =
-    needsWallet && (gateError !== "" || !eligibility || !eligibility.eligible || freeWallets.length === 0);
+  const walletChecksOk = eligibility !== null && walletChecksPass(eligibility);
+  const walletBlocked = needsWallet && (gateError !== "" || !walletChecksOk || freeWallets.length === 0);
 
   return (
     <div className="glass-card fade-in-up" style={{ padding: "24px", marginBottom: "24px" }}>
@@ -216,17 +221,17 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
           <div style={{ marginTop: "16px" }}>
             {gateError && <div role="alert" className="alert alert-error">{gateError}</div>}
             {!gateError && !eligibility && <p style={{ color: "var(--text-secondary)" }}>Checking eligibility…</p>}
-            {eligibility && !eligibility.eligible && (
+            {eligibility && !walletChecksOk && (
               <p style={{ color: "var(--text-secondary)" }}>
                 Launch requirements are not met yet. See <Link href="/founder" style={{ color: "var(--brand-accent)" }}>/founder</Link>.
               </p>
             )}
-            {eligibility?.eligible && freeWallets.length === 0 && (
+            {walletChecksOk && freeWallets.length === 0 && (
               <p style={{ color: "var(--text-secondary)" }}>
                 No free approved wallet: request one on <Link href="/founder" style={{ color: "var(--brand-accent)" }}>/founder</Link>
               </p>
             )}
-            {eligibility?.eligible && freeWallets.length > 0 && (
+            {walletChecksOk && freeWallets.length > 0 && (
               <>
                 <label className="label" htmlFor="pe-wallet">Shadow wallet *</label>
                 <select id="pe-wallet" className="input-field" value={shadowWalletId} onChange={(e) => setShadowWalletId(e.target.value)}>

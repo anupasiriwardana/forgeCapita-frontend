@@ -12,13 +12,19 @@ import {
   fetchAgreement,
   fetchFounderMe,
   fetchLaunchEligibility,
+  fetchOwnRepo,
+  provisionRepo,
   requestShadowWallet,
   shortAddr,
   type FounderMeDto,
   type LaunchEligibilityDto,
+  type RepoDto,
 } from "@/lib/api";
 
 const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
+const GITHUB_LOGIN_REGEX = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const MIN_PROJECT_NAME = 3;
+const MAX_PROJECT_NAME = 60;
 const MIN_NAME = 2;
 const MAX_NAME = 120;
 
@@ -216,6 +222,178 @@ function WalletsSection({ me, onChanged }: { me: FounderMeDto; onChanged: () => 
   );
 }
 
+function repoErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 503) return "Repository provisioning is not available right now. Try again later.";
+    if (err.status === 409) return "A repository request already exists for a different GitHub user.";
+    if (err.status === 422) return "GitHub user not found. Check the username.";
+  }
+  return describeFounderError(err, "Could not request the repository");
+}
+
+function RepoSection({ onChanged }: { onChanged: () => void }) {
+  const [repo, setRepo] = useState<RepoDto | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [login, setLogin] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function refresh(): Promise<void> {
+    try {
+      setRepo(await fetchOwnRepo());
+      setLoadError("");
+    } catch (err) {
+      setLoadError(describeFounderError(err, "Failed to load repository"));
+    }
+  }
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    fetchOwnRepo(signal)
+      .then((current) => {
+        if (!signal.aborted) setRepo(current);
+      })
+      .catch((err: unknown) => {
+        if (!signal.aborted) setLoadError(describeFounderError(err, "Failed to load repository"));
+      })
+      .finally(() => {
+        if (!signal.aborted) setLoaded(true);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const trimmedName = projectName.trim();
+  const nameValid = trimmedName.length >= MIN_PROJECT_NAME && trimmedName.length <= MAX_PROJECT_NAME && /[A-Za-z0-9]/.test(trimmedName);
+  const trimmedLogin = login.trim();
+  const loginValid = GITHUB_LOGIN_REGEX.test(trimmedLogin);
+
+  async function submit(githubUsername: string): Promise<void> {
+    if (busy || !nameValid) return;
+    setBusy(true);
+    setError("");
+    try {
+      const created = await provisionRepo({ githubUsername, projectName: trimmedName });
+      setRepo(created);
+      onChanged();
+    } catch (err) {
+      setError(repoErrorMessage(err));
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const nameInput = (
+    <div style={{ marginTop: "12px" }}>
+      <label className="label" htmlFor="repoProjectName">Project name</label>
+      <input
+        id="repoProjectName"
+        className="input-field"
+        value={projectName}
+        maxLength={MAX_PROJECT_NAME}
+        onChange={(e) => setProjectName(e.target.value)}
+      />
+      {projectName !== "" && !nameValid && (
+        <p style={{ fontSize: "12px", color: "var(--rose)", marginTop: "4px" }}>
+          Use 3 to 60 characters including at least one letter or digit
+        </p>
+      )}
+    </div>
+  );
+
+  const errorBox = error && <div role="alert" className="alert alert-error" style={{ marginTop: "12px" }}>{error}</div>;
+  let body: React.ReactNode;
+  if (!loaded) {
+    body = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
+  } else if (loadError && !repo) {
+    body = <div role="alert" className="alert alert-error">{loadError}</div>;
+  } else if (!repo) {
+    body = (
+      <>
+        <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>
+          You need a free GitHub account; create one first if you have none
+        </p>
+        <label className="label" htmlFor="repoGithubUser">GitHub username</label>
+        <input
+          id="repoGithubUser"
+          className="input-field"
+          value={login}
+          maxLength={39}
+          onChange={(e) => setLogin(e.target.value)}
+        />
+        {trimmedLogin !== "" && !loginValid && (
+          <p style={{ fontSize: "12px", color: "var(--rose)", marginTop: "4px" }}>Enter a valid GitHub username</p>
+        )}
+        {nameInput}
+        {errorBox}
+        <button
+          type="button"
+          className="btn-primary"
+          style={{ marginTop: "12px" }}
+          disabled={busy || !loginValid || !nameValid}
+          onClick={() => void submit(trimmedLogin)}
+        >
+          {busy ? "Requesting…" : "Request repository"}
+        </button>
+      </>
+    );
+  } else {
+    const safeLink = repo.htmlUrl.startsWith("https://");
+    body = (
+      <>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", fontSize: "14px" }}>
+          {safeLink ? (
+            <a href={repo.htmlUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)" }}>
+              {repo.fullName}
+            </a>
+          ) : (
+            <span>{repo.fullName}</span>
+          )}
+          <span className={`badge ${repo.status === "active" ? "badge-active" : repo.status === "invited" ? "badge-pending" : "badge-inactive"}`}>
+            {repo.status}
+          </span>
+          <span>GitHub user: {repo.founderLogin}</span>
+          <span style={{ color: "var(--text-secondary)" }}>{new Date(repo.createdAt).toLocaleString()}</span>
+        </div>
+        {repo.status === "invited" && (
+          <p style={{ marginTop: "12px", color: "var(--text-secondary)" }}>
+            Accept the invite in your GitHub notifications or email
+          </p>
+        )}
+        {repo.status === "failed" && (
+          <>
+            <p style={{ marginTop: "12px", color: "var(--text-secondary)" }}>
+              The invite failed. The repository check stays unmet until a retry succeeds.
+            </p>
+            {nameInput}
+            {errorBox}
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ marginTop: "12px" }}
+              disabled={busy || !nameValid}
+              onClick={() => void submit(repo.founderLogin)}
+            >
+              {busy ? "Retrying…" : "Retry invite"}
+            </button>
+          </>
+        )}
+        {repo.status !== "failed" && errorBox}
+      </>
+    );
+  }
+
+  return (
+    <section id="repo" className="glass-card" style={{ padding: "24px", marginTop: "24px" }}>
+      <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>Project repository</h2>
+      {body}
+    </section>
+  );
+}
+
 function FounderDashboard() {
   const [me, setMe] = useState<FounderMeDto | null>(null);
   const [eligibility, setEligibility] = useState<LaunchEligibilityDto | null>(null);
@@ -254,10 +432,12 @@ function FounderDashboard() {
           <Check ok={checks.applicationApproved} label="Application approved" href="/apply" />
           <Check ok={checks.agreementAccepted} label="Agreement accepted" href="#agreement" />
           <Check ok={checks.shadowWalletAvailable} label="Approved shadow wallet available" href="#wallets" />
+          <Check ok={checks.repoProvisioned} label="Project repository" href="#repo" />
         </ul>
       </section>
       <AgreementSection me={me} onChanged={reload} />
       <WalletsSection me={me} onChanged={reload} />
+      <RepoSection onChanged={reload} />
     </>
   );
 }

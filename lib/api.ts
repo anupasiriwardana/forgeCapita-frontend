@@ -683,7 +683,37 @@ export interface LaunchEligibilityDto {
     applicationApproved: boolean;
     agreementAccepted: boolean;
     shadowWalletAvailable: boolean;
+    repoProvisioned: boolean;
   };
+}
+
+export type RepoStatus = "invited" | "active" | "failed";
+
+export interface RepoDto {
+  fullName: string;
+  htmlUrl: string;
+  founderLogin: string;
+  status: RepoStatus;
+  createdAt: string;
+}
+
+/** Returns null when the founder has no repository yet (404). */
+export async function fetchOwnRepo(signal?: AbortSignal): Promise<RepoDto | null> {
+  try {
+    const data = await apiFetch<{ repo: RepoDto }>("/founders/me/repo", { signal });
+    return data.repo;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function provisionRepo(
+  body: { githubUsername: string; projectName: string },
+  signal?: AbortSignal,
+): Promise<RepoDto> {
+  const data = await apiFetch<{ repo: RepoDto }>("/founders/me/repo", { method: "POST", body, signal });
+  return data.repo;
 }
 
 export function fetchAgreement(signal?: AbortSignal): Promise<AgreementDto> {
