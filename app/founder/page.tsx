@@ -18,13 +18,13 @@ import {
   fetchAgreement,
   fetchFounderMe,
   fetchLaunchEligibility,
-  fetchOwnRepo,
+  fetchOwnRepos,
   provisionRepo,
   requestShadowWallet,
   shortAddr,
   type FounderMeDto,
   type LaunchEligibilityDto,
-  type RepoDto,
+  type OwnRepoDto,
 } from "@/lib/api";
 
 const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
@@ -237,8 +237,30 @@ function repoErrorMessage(err: unknown): string {
   return describeFounderError(err, "Could not request the repository");
 }
 
+function RepoCard({ repo }: { repo: OwnRepoDto }) {
+  const safeLink = repo.htmlUrl.startsWith("https://");
+  const badge = repo.status === "active" ? "badge-active" : repo.status === "invited" ? "badge-pending" : "badge-inactive";
+  return (
+    <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", fontSize: "14px" }}>
+      {safeLink ? (
+        <a href={repo.htmlUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)" }}>
+          {repo.fullName}
+        </a>
+      ) : (
+        <span>{repo.fullName}</span>
+      )}
+      <span className={`badge ${badge}`}>{repo.status}</span>
+      <span>GitHub user: {repo.founderLogin}</span>
+      <span style={{ color: "var(--text-secondary)" }}>{new Date(repo.createdAt).toLocaleString()}</span>
+      <span style={{ color: "var(--text-secondary)" }}>
+        {repo.projectId !== null ? `Linked to project ${repo.projectName ?? repo.projectId}` : "Not used yet"}
+      </span>
+    </div>
+  );
+}
+
 function RepoSection({ onChanged }: { onChanged: () => void }) {
-  const [repo, setRepo] = useState<RepoDto | null>(null);
+  const [repos, setRepos] = useState<OwnRepoDto[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [login, setLogin] = useState("");
@@ -248,22 +270,22 @@ function RepoSection({ onChanged }: { onChanged: () => void }) {
 
   async function refresh(): Promise<void> {
     try {
-      setRepo(await fetchOwnRepo());
+      setRepos(await fetchOwnRepos());
       setLoadError("");
     } catch (err) {
-      setLoadError(describeFounderError(err, "Failed to load repository"));
+      setLoadError(describeFounderError(err, "Failed to load repositories"));
     }
   }
 
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
-    fetchOwnRepo(signal)
-      .then((current) => {
-        if (!signal.aborted) setRepo(current);
+    fetchOwnRepos(signal)
+      .then((items) => {
+        if (!signal.aborted) setRepos(items);
       })
       .catch((err: unknown) => {
-        if (!signal.aborted) setLoadError(describeFounderError(err, "Failed to load repository"));
+        if (!signal.aborted) setLoadError(describeFounderError(err, "Failed to load repositories"));
       })
       .finally(() => {
         if (!signal.aborted) setLoaded(true);
@@ -275,14 +297,16 @@ function RepoSection({ onChanged }: { onChanged: () => void }) {
   const nameValid = trimmedName.length >= MIN_PROJECT_NAME && trimmedName.length <= MAX_PROJECT_NAME && /[A-Za-z0-9]/.test(trimmedName);
   const trimmedLogin = login.trim();
   const loginValid = GITHUB_LOGIN_REGEX.test(trimmedLogin);
+  const hasUnlinked = repos.some((r) => r.projectId === null);
+  const hasFailedUnlinked = repos.some((r) => r.status === "failed" && r.projectId === null);
 
   async function submit(githubUsername: string): Promise<void> {
     if (busy || !nameValid) return;
     setBusy(true);
     setError("");
     try {
-      const created = await provisionRepo({ githubUsername, projectName: trimmedName });
-      setRepo(created);
+      await provisionRepo({ githubUsername, projectName: trimmedName });
+      await refresh();
       onChanged();
     } catch (err) {
       setError(repoErrorMessage(err));
@@ -311,83 +335,84 @@ function RepoSection({ onChanged }: { onChanged: () => void }) {
   );
 
   const errorBox = error && <div role="alert" className="alert alert-error" style={{ marginTop: "12px" }}>{error}</div>;
+  const requestForm = (
+    <>
+      {repos.length > 0 && (
+        <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>
+          Your repository is linked; you can request another for your next project
+        </p>
+      )}
+      <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>
+        You need a free GitHub account; create one first if you have none
+      </p>
+      <label className="label" htmlFor="repoGithubUser">GitHub username</label>
+      <input
+        id="repoGithubUser"
+        className="input-field"
+        value={login}
+        maxLength={39}
+        onChange={(e) => setLogin(e.target.value)}
+      />
+      {trimmedLogin !== "" && !loginValid && (
+        <p style={{ fontSize: "12px", color: "var(--rose)", marginTop: "4px" }}>Enter a valid GitHub username</p>
+      )}
+      {nameInput}
+      {errorBox}
+      <button
+        type="button"
+        className="btn-primary"
+        style={{ marginTop: "12px" }}
+        disabled={busy || !loginValid || !nameValid}
+        onClick={() => void submit(trimmedLogin)}
+      >
+        {busy ? "Requesting…" : "Request repository"}
+      </button>
+    </>
+  );
+
   let body: React.ReactNode;
   if (!loaded) {
     body = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
-  } else if (loadError && !repo) {
+  } else if (loadError && repos.length === 0) {
     body = <div role="alert" className="alert alert-error">{loadError}</div>;
-  } else if (!repo) {
-    body = (
-      <>
-        <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>
-          You need a free GitHub account; create one first if you have none
-        </p>
-        <label className="label" htmlFor="repoGithubUser">GitHub username</label>
-        <input
-          id="repoGithubUser"
-          className="input-field"
-          value={login}
-          maxLength={39}
-          onChange={(e) => setLogin(e.target.value)}
-        />
-        {trimmedLogin !== "" && !loginValid && (
-          <p style={{ fontSize: "12px", color: "var(--rose)", marginTop: "4px" }}>Enter a valid GitHub username</p>
-        )}
-        {nameInput}
-        {errorBox}
-        <button
-          type="button"
-          className="btn-primary"
-          style={{ marginTop: "12px" }}
-          disabled={busy || !loginValid || !nameValid}
-          onClick={() => void submit(trimmedLogin)}
-        >
-          {busy ? "Requesting…" : "Request repository"}
-        </button>
-      </>
-    );
   } else {
-    const safeLink = repo.htmlUrl.startsWith("https://");
     body = (
       <>
-        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", fontSize: "14px" }}>
-          {safeLink ? (
-            <a href={repo.htmlUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)" }}>
-              {repo.fullName}
-            </a>
-          ) : (
-            <span>{repo.fullName}</span>
-          )}
-          <span className={`badge ${repo.status === "active" ? "badge-active" : repo.status === "invited" ? "badge-pending" : "badge-inactive"}`}>
-            {repo.status}
-          </span>
-          <span>GitHub user: {repo.founderLogin}</span>
-          <span style={{ color: "var(--text-secondary)" }}>{new Date(repo.createdAt).toLocaleString()}</span>
-        </div>
-        {repo.status === "invited" && (
-          <p style={{ marginTop: "12px", color: "var(--text-secondary)" }}>
-            Accept the invite in your GitHub notifications or email
-          </p>
-        )}
-        {repo.status === "failed" && (
-          <>
-            <p style={{ marginTop: "12px", color: "var(--text-secondary)" }}>
-              The invite failed. The repository check stays unmet until a retry succeeds.
-            </p>
-            {nameInput}
-            {errorBox}
-            <button
-              type="button"
-              className="btn-primary"
-              style={{ marginTop: "12px" }}
-              disabled={busy || !nameValid}
-              onClick={() => void submit(repo.founderLogin)}
-            >
-              {busy ? "Retrying…" : "Retry invite"}
-            </button>
-          </>
-        )}
-        {repo.status !== "failed" && errorBox}
+        {repos.map((repo) => (
+          <div key={repo.id} style={{ marginBottom: "16px" }}>
+            <RepoCard repo={repo} />
+            {repo.status === "invited" && repo.projectId === null && (
+              <p style={{ marginTop: "12px", color: "var(--text-secondary)" }}>
+                Accept the invite in your GitHub notifications or email
+              </p>
+            )}
+            {repo.status === "revoked" && repo.projectId === null && (
+              <p style={{ marginTop: "12px", color: "var(--text-secondary)" }}>
+                Access to this repository was revoked. Contact support.
+              </p>
+            )}
+            {repo.status === "failed" && repo.projectId === null && (
+              <>
+                <p style={{ marginTop: "12px", color: "var(--text-secondary)" }}>
+                  The invite failed. The repository check stays unmet until a retry succeeds.
+                </p>
+                {nameInput}
+                {errorBox}
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ marginTop: "12px" }}
+                  disabled={busy || !nameValid}
+                  onClick={() => void submit(repo.founderLogin)}
+                >
+                  {busy ? "Retrying…" : "Retry invite"}
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+        {!hasUnlinked && requestForm}
+        {hasUnlinked && !hasFailedUnlinked && errorBox}
       </>
     );
   }

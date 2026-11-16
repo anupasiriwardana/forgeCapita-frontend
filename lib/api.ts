@@ -274,6 +274,8 @@ export interface LaunchDraftInput {
   pitchDeckUrl?: string;
   category?: string;
   shadowWalletId?: string;
+  /** Chosen repository (founders only); the server defaults to the founder's single selectable repo. */
+  repoId?: string;
   /** Declared funding goal in wei (decimal string); enforced against the live minimum server-side. */
   fundingGoalWei?: string;
 }
@@ -687,9 +689,10 @@ export interface LaunchEligibilityDto {
   };
 }
 
-export type RepoStatus = "invited" | "active" | "failed";
+export type RepoStatus = "invited" | "active" | "failed" | "revoked";
 
 export interface RepoDto {
+  id: string;
   fullName: string;
   htmlUrl: string;
   founderLogin: string;
@@ -706,6 +709,25 @@ export async function fetchOwnRepo(signal?: AbortSignal): Promise<RepoDto | null
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
   }
+}
+
+export interface OwnRepoDto {
+  id: string;
+  fullName: string;
+  htmlUrl: string;
+  founderLogin: string;
+  status: RepoStatus;
+  createdAt: string;
+  projectId: string | null;
+  projectName: string | null;
+  /** True while a pending or attached launch draft holds this repository. */
+  reserved: boolean;
+}
+
+/** All of the founder's repositories, newest first. */
+export async function fetchOwnRepos(signal?: AbortSignal): Promise<OwnRepoDto[]> {
+  const data = await apiFetch<{ items: OwnRepoDto[] }>("/founders/me/repos", { signal });
+  return data.items;
 }
 
 export async function provisionRepo(

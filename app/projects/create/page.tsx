@@ -15,11 +15,13 @@ import {
   fetchFounderMe,
   formatEthCeil,
   fetchLaunchEligibility,
+  fetchOwnRepos,
   getProject,
   projectIdOf,
   shortAddr,
   type LaunchDraftDto,
   type LaunchEligibilityDto,
+  type OwnRepoDto,
   type ShadowWalletDto,
 } from "@/lib/api";
 import { ABIS, getContractConfig } from "@/lib/contracts";
@@ -81,12 +83,18 @@ export default function CreateProjectPage() {
   const [eligibility, setEligibility] = useState<LaunchEligibilityDto | null>(null);
   const [freeWallets, setFreeWallets] = useState<ShadowWalletDto[]>([]);
   const [shadowWalletId, setShadowWalletId] = useState("");
+  const [selectableRepos, setSelectableRepos] = useState<OwnRepoDto[]>([]);
+  const [repoId, setRepoId] = useState("");
   const [gateError, setGateError] = useState("");
   const [slowIndexId, setSlowIndexId] = useState("");
   const isFounder = role === "founder";
 
   function freeWalletsOf(wallets: ShadowWalletDto[]): ShadowWalletDto[] {
     return wallets.filter((w) => w.status === "approved" && w.projectId === null && !w.reserved);
+  }
+
+  function selectableReposOf(repos: OwnRepoDto[]): OwnRepoDto[] {
+    return repos.filter((r) => (r.status === "invited" || r.status === "active") && r.projectId === null && !r.reserved);
   }
 
   async function refreshWallets(): Promise<void> {
@@ -105,10 +113,15 @@ export default function CreateProjectPage() {
     const { signal } = controller;
     fetchLaunchEligibility(signal)
       .then(async (result) => {
-        const me = result.eligible ? await fetchFounderMe(signal) : null;
+        const [me, repos] = result.eligible
+          ? await Promise.all([fetchFounderMe(signal), fetchOwnRepos(signal)])
+          : [null, []];
         if (signal.aborted) return;
+        const selectable = selectableReposOf(repos);
         setEligibility(result);
         setFreeWallets(me ? freeWalletsOf(me.wallets) : []);
+        setSelectableRepos(selectable);
+        setRepoId(selectable.length === 1 ? (selectable[0]?.id ?? "") : "");
         setGateError("");
       })
       .catch((err: unknown) => {
@@ -123,7 +136,7 @@ export default function CreateProjectPage() {
   const founderBlocked =
     authPending ||
     roleBlocked ||
-    (isFounder && (!eligibility || !eligibility.eligible || shadowWalletId === "" || gateError !== ""));
+    (isFounder && (!eligibility || !eligibility.eligible || shadowWalletId === "" || repoId === "" || gateError !== ""));
 
   const { writeContractAsync } = useWriteContract();
 
@@ -186,7 +199,7 @@ export default function CreateProjectPage() {
     if (isBusy) return;
     if (!isConnected) { setErrorMsg("Please connect your wallet first."); return; }
     if (roleBlocked) { setErrorMsg("Only approved founders can launch projects."); return; }
-    if (founderBlocked) { setErrorMsg("Complete the launch requirements and pick a shadow wallet first."); return; }
+    if (founderBlocked) { setErrorMsg("Complete the launch requirements and pick a shadow wallet and a repository first."); return; }
     if (totalPct !== 100) { setErrorMsg("Milestone percentages must sum to 100%."); return; }
     if (!name || !description || !fundingGoalEth) { setErrorMsg("Name, description, and funding goal are required."); return; }
 
@@ -216,7 +229,7 @@ export default function CreateProjectPage() {
         websiteUrl,
         pitchDeckUrl,
         ...(enteredGoalWei !== null ? { fundingGoalWei: enteredGoalWei.toString() } : {}),
-        ...(isFounder ? { shadowWalletId } : {}),
+        ...(isFounder ? { shadowWalletId, repoId } : {}),
       });
     } catch (err) {
       setStatus("error");
@@ -471,6 +484,31 @@ export default function CreateProjectPage() {
                 <option value="">Select a wallet</option>
                 {freeWallets.map((w) => (
                   <option key={w.id} value={w.id}>{shortAddr(w.address)}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {eligibility?.eligible && selectableRepos.length === 0 && (
+            <p style={{ color: "var(--text-secondary)", marginTop: "12px" }}>
+              You need a repository first: <Link href="/founder#repo" style={{ color: "var(--brand-accent)" }}>request one on /founder</Link>
+            </p>
+          )}
+          {eligibility?.eligible && selectableRepos.length === 1 && selectableRepos[0] && (
+            <div style={{ marginTop: "12px" }}>
+              <span className="label">Repository *</span>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "14px" }}>
+                <input type="radio" name="repoId" checked={repoId === selectableRepos[0].id} onChange={() => setRepoId(selectableRepos[0]?.id ?? "")} />
+                {selectableRepos[0].fullName}
+              </label>
+            </div>
+          )}
+          {eligibility?.eligible && selectableRepos.length > 1 && (
+            <div style={{ marginTop: "12px" }}>
+              <label className="label" htmlFor="repoId">Repository *</label>
+              <select id="repoId" className="input-field" value={repoId} onChange={(e) => setRepoId(e.target.value)}>
+                <option value="">Select a repository</option>
+                {selectableRepos.map((r) => (
+                  <option key={r.id} value={r.id}>{r.fullName}</option>
                 ))}
               </select>
             </div>
