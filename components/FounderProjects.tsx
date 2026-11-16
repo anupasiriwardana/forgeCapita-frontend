@@ -1,0 +1,222 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { complianceBadge, formatBps } from "@/components/TransparencyPanel";
+import { useAuth } from "@/components/web3/AuthProvider";
+import { chainName } from "@/config/chains";
+import { FOUNDER_COMPLIANCE_TEXT } from "@/lib/founderCompliance";
+import {
+  fetchOwnRepos,
+  formatNative,
+  getProjectTransparency,
+  getTakeoverByProject,
+  listProjects,
+  shortAddr,
+  type OwnRepoDto,
+  type ProjectDto,
+  type ProjectState,
+  type PublicTakeoverCaseDto,
+  type TransparencyDto,
+} from "@/lib/api";
+
+const MUTED = { fontSize: "13px", color: "var(--text-muted)" } as const;
+const LINK = { color: "var(--brand-accent)" } as const;
+
+const STATE_BADGE: Record<ProjectState, string> = {
+  FUNDING: "badge-active",
+  ACTIVE: "badge-active",
+  COMPLETED: "badge-brand",
+  FAILED: "badge-inactive",
+  CANCELLED: "badge-inactive",
+  SHUTDOWN: "badge-danger",
+};
+
+const NEXT_ACTION: Record<ProjectState, string> = {
+  FUNDING: "Open the project to close funding and start",
+  ACTIVE: "Manage milestones and claim creator funds on the project page",
+  COMPLETED: "All milestones are done. Nothing is required from you.",
+  FAILED: "A milestone failed and investors can claim refunds. Nothing more can be done on this project.",
+  CANCELLED: "Funding was cancelled and investors can claim refunds.",
+  SHUTDOWN: "Staff shut this project down. Contact support if you disagree.",
+};
+
+const TAKEOVER_RESULT: Record<string, string> = {
+  passed: "passed",
+  failed: "failed",
+  no_quorum: "no quorum",
+};
+
+/** Integer percent (0-100) from decimal wei strings using bigint math only. */
+function progressPercent(raised: string, goal: string): number {
+  try {
+    const goalWei = BigInt(goal);
+    if (goalWei <= BigInt(0)) return 0;
+    const pct = (BigInt(raised) * BigInt(100)) / goalWei;
+    return pct >= BigInt(100) ? 100 : Number(pct);
+  } catch {
+    return 0;
+  }
+}
+
+function ComplianceBlock({ project }: { project: ProjectDto }) {
+  const [data, setData] = useState<TransparencyDto | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getProjectTransparency(project.id, controller.signal)
+      .then((d) => {
+        if (!controller.signal.aborted) setData(d);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [project.id]);
+
+  if (!data || data.auditStatus === "unaudited") return null;
+  const state = data.complianceState ?? "not_checked";
+  return (
+    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
+      <p style={{ marginBottom: "6px" }}>
+        Revenue compliance:{" "}
+        <span className={`badge ${complianceBadge(state)}`}>{state === "not_checked" ? "not checked" : state}</span>
+      </p>
+      <p style={{ fontSize: "14px", marginBottom: "6px" }}>{FOUNDER_COMPLIANCE_TEXT[state]}</p>
+      {data.observedNative != null && data.routedNative != null && (
+        <p style={{ fontSize: "14px" }}>
+          Observed {formatNative(data.observedNative, data.chainId)} vs routed{" "}
+          {formatNative(data.routedNative, data.chainId)} (last {data.windowDays} days)
+        </p>
+      )}
+      {data.shortfallBps != null && (
+        <p style={MUTED}>
+          Shortfall {formatBps(data.shortfallBps)} (tolerance {formatBps(data.toleranceBps)})
+        </p>
+      )}
+      <p style={MUTED}>Last checked: {data.lastCheckedAt ? new Date(data.lastCheckedAt).toLocaleString() : "never"}</p>
+    </div>
+  );
+}
+
+function TakeoverNotice({ project }: { project: ProjectDto }) {
+  const [item, setItem] = useState<PublicTakeoverCaseDto | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getTakeoverByProject(project.chainId, project.escrowAddress, controller.signal)
+      .then((c) => {
+        if (!controller.signal.aborted) setItem(c);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [project.chainId, project.escrowAddress]);
+
+  if (!item || (item.status !== "vote_open" && item.status !== "closed")) return null;
+  const href = `/projects/${encodeURIComponent(project.id)}`;
+  return (
+    <div className="alert alert-warning" style={{ marginTop: "12px" }}>
+      {item.status === "vote_open" ? (
+        <span>
+          A takeover vote is open (ends {item.endsAt ? new Date(item.endsAt).toLocaleString() : "soon"}). The community is
+          voting on replacing the developer with {shortAddr(item.candidateWallet)}. The result is advisory; staff decide.
+        </span>
+      ) : (
+        <span>
+          Vote closed: {item.result ? (TAKEOVER_RESULT[item.result] ?? item.result) : "no result"}. Staff may propose a new
+          developer on-chain.
+        </span>
+      )}{" "}
+      <Link href={href} style={LINK}>View project</Link>
+    </div>
+  );
+}
+
+function ProjectRow({ project, repo }: { project: ProjectDto; repo: OwnRepoDto | undefined }) {
+  const name = project.profile?.name ?? project.tokenName;
+  const pct = progressPercent(project.totalRaised, project.fundingGoal);
+  const showCompliance = project.state !== "FUNDING" && project.state !== "CANCELLED";
+  const repoLink = repo && repo.htmlUrl.startsWith("https://") ? repo : undefined;
+
+  return (
+    <div style={{ padding: "16px 0", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+        <strong>{name}</strong>
+        <span style={MUTED}>{chainName(project.chainId)}</span>
+        <span className={`badge ${STATE_BADGE[project.state]}`}>{project.state}</span>
+        {project.state === "ACTIVE" && <span style={MUTED}>Milestone {project.currentMilestoneIndex}</span>}
+      </div>
+      <p style={{ fontSize: "14px", margin: "8px 0 4px" }}>
+        Raised {formatNative(project.totalRaised, project.chainId)} of {formatNative(project.fundingGoal, project.chainId)}
+      </p>
+      <div className="progress-bar" style={{ height: "6px", marginBottom: "8px" }}>
+        <div className="progress-fill" style={{ width: `${pct.toString()}%` }} />
+      </div>
+      <p style={{ fontSize: "14px", marginBottom: "8px" }}>Next action: {NEXT_ACTION[project.state]}</p>
+      <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "14px" }}>
+        <Link href={`/projects/${encodeURIComponent(project.id)}`} style={LINK}>Open project</Link>
+        {repoLink && (
+          <a href={repoLink.htmlUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
+            Repository
+          </a>
+        )}
+      </div>
+      {showCompliance && <ComplianceBlock project={project} />}
+      <TakeoverNotice project={project} />
+    </div>
+  );
+}
+
+export function FounderProjects() {
+  const { user } = useAuth();
+  const address = user?.address;
+  const [projects, setProjects] = useState<ProjectDto[] | null>(null);
+  const [repos, setRepos] = useState<OwnRepoDto[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!address) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    listProjects({ developer: address, limit: 100, sort: "created_at", order: "desc" }, signal)
+      .then((list) => {
+        if (signal.aborted) return;
+        setProjects(list.items);
+        setError("");
+      })
+      .catch(() => {
+        if (!signal.aborted) setError("Failed to load your projects");
+      });
+    fetchOwnRepos(signal)
+      .then((items) => {
+        if (!signal.aborted) setRepos(items);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [address]);
+
+  let body: React.ReactNode;
+  if (error) {
+    body = <div role="alert" className="alert alert-error">{error}</div>;
+  } else if (projects === null) {
+    body = <p style={{ color: "var(--text-secondary)" }}>Loading...</p>;
+  } else if (projects.length === 0) {
+    body = (
+      <p style={{ color: "var(--text-secondary)" }}>
+        No projects yet.{" "}
+        <Link href="/projects/create" style={LINK}>Create a project</Link>
+        {" or check "}
+        <Link href="/launches" style={LINK}>your launch drafts</Link>.
+      </p>
+    );
+  } else {
+    body = projects.map((p) => (
+      <ProjectRow key={p.id} project={p} repo={repos.find((r) => r.projectId === p.id)} />
+    ));
+  }
+
+  return (
+    <section id="projects" className="glass-card" style={{ padding: "24px", marginBottom: "24px" }}>
+      <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>My projects</h2>
+      {body}
+    </section>
+  );
+}

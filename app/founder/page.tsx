@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { getAddress } from "viem";
 import { useAccount, useSignMessage } from "wagmi";
 import { AcceptDeveloperRole } from "@/components/AcceptDeveloperRole";
+import { FounderProjects } from "@/components/FounderProjects";
 import { ProfileRequiredNotice } from "@/components/ProfileRequiredNotice";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { useWriteAllowed } from "@/components/web3/useWriteAllowed";
@@ -559,6 +560,7 @@ function FounderDashboard() {
           <Check ok={checks.repoProvisioned} label="Project repository" href="#repo" />
         </ul>
       </section>
+      <FounderProjects />
       <AgreementSection me={me} onChanged={reload} />
       <WalletsSection me={me} onChanged={reload} />
       <RepoSection onChanged={reload} />
