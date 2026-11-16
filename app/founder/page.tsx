@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAddress } from "viem";
 import { useAccount, useSignMessage } from "wagmi";
+import { AcceptDeveloperRole } from "@/components/AcceptDeveloperRole";
 import { ProfileRequiredNotice } from "@/components/ProfileRequiredNotice";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { useWriteAllowed } from "@/components/web3/useWriteAllowed";
@@ -485,6 +486,7 @@ function TakeoverSection() {
               {item.acceptedAt ? "Accepted. The vote is open." : "The vote is open."}
             </span>
           )}
+          {item.status === "closed" && <AcceptDeveloperRole item={item} writeAllowed={writeAllowed} />}
         </div>
       ))}
     </section>

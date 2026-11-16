@@ -24,6 +24,8 @@ import {
 } from "@/lib/api";
 import { formatTokenAmount } from "@/lib/format";
 import { ADMIN_PAGE_SIZE, AdminPager, ListState, ROW_STYLE, useAdminList } from "./shared";
+import { TakeoverExecution } from "./TakeoverExecution";
+import { TakeoverHandover } from "./TakeoverHandover";
 
 const STATUSES: TakeoverStatus[] = ["prepared", "vote_open", "closed", "cancelled"];
 const COLUMNS = "1.4fr 1.1fr 0.9fr 0.9fr 1.4fr 0.6fr 0.6fr";
@@ -319,6 +321,9 @@ function CaseDetail({ id, role, onChanged }: { id: string; role: UserRole; onCha
           )}
         </div>
       )}
+
+      <TakeoverExecution c={c} onSent={() => setReloadKey((k) => k + 1)} />
+      <TakeoverHandover c={c} role={role} onChanged={() => setReloadKey((k) => k + 1)} />
 
       <h4 style={{ fontSize: "14px", marginBottom: "6px" }}>Snapshot holders</h4>
       {detail.holders.items.length === 0 && <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>No snapshot holders.</p>}

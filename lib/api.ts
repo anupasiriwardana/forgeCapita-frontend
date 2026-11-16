@@ -1004,8 +1004,51 @@ export function fetchRelayStatus(signal?: AbortSignal): Promise<RelayStatusDto> 
 export type TakeoverStatus = "prepared" | "vote_open" | "closed" | "cancelled";
 export type TakeoverResult = "passed" | "failed" | "no_quorum";
 
+export type TakeoverExecutionState = "none" | "proposed" | "accepted" | "unknown";
+
+/** On-chain execution derived by the API from indexed developer_change events (staff detail only). */
+export interface TakeoverExecutionDto {
+  state: TakeoverExecutionState;
+  proposedTxHash: string | null;
+  proposedBlock: string | null;
+  proposedAt: string | null;
+  proposedBy: string | null;
+  acceptedTxHash: string | null;
+  acceptedBlock: string | null;
+  acceptedAt: string | null;
+  pendingForCandidate: boolean;
+  canPropose: boolean;
+  canProposeReason: string | null;
+}
+
+export type TakeoverRepoStatus = "invited" | "active" | "failed" | "revoked";
+
+/** The project's repository as seen on the case detail (staff only). */
+export interface TakeoverRepoDto {
+  id: string;
+  fullName: string;
+  htmlUrl: string;
+  status: TakeoverRepoStatus;
+  founderLogin: string;
+}
+
+export interface TakeoverHandoverDto {
+  githubLogin: string;
+  status: "invited" | "active";
+  handedOverAt: string;
+  handedOverBy?: string | null;
+}
+
 /** Staff view. Amounts and block numbers are decimal strings. */
 export interface TakeoverCaseDto {
+  /** Present on the detail response only. */
+  execution?: TakeoverExecutionDto;
+  /** Detail response only: null when no repository is linked to the project. */
+  repo?: TakeoverRepoDto | null;
+  /** Detail response only: null until the repository was handed over. */
+  handover?: TakeoverHandoverDto | null;
+  /** Detail response only: the candidate's own latest GitHub login, a prefill hint. */
+  suggestedGithubLogin?: string | null;
   id: string;
   chainId: number;
   projectId: string;
@@ -1067,6 +1110,9 @@ export interface PrepareTakeoverInput {
 export interface MyTakeoverCaseDto {
   id: string;
   projectId: string;
+  chainId: number;
+  candidateWallet: string;
+  execution: { state: TakeoverExecutionState; proposedTxHash: string | null; pendingForCandidate: boolean };
   status: TakeoverStatus;
   acceptedAt: string | null;
   acceptMessage: string | null;
@@ -1125,6 +1171,24 @@ export async function closeTakeoverCase(id: string): Promise<TakeoverCaseDto> {
     { method: "POST", body: {} },
   );
   return data.case;
+}
+
+export interface TakeoverHandoverResult {
+  handover: TakeoverHandoverDto;
+  repo: { id: string; fullName: string; htmlUrl: string; status: TakeoverRepoStatus };
+  alreadyHandedOver: boolean;
+}
+
+export function handoverTakeoverRepo(id: string, githubLogin: string): Promise<TakeoverHandoverResult> {
+  return apiFetch<TakeoverHandoverResult>(`/admin/takeover-cases/${encodeURIComponent(id)}/handover`, {
+    method: "POST",
+    body: { githubLogin },
+  });
+}
+
+/** Admin lock-out: removes the repo row's founder GitHub user (and a pending invite) from the repository. */
+export async function revokeRepoAccess(repoId: string): Promise<void> {
+  await apiFetch<unknown>(`/admin/repos/${encodeURIComponent(repoId)}/revoke`, { method: "POST", body: {} });
 }
 
 export async function listMyTakeoverCases(signal?: AbortSignal): Promise<MyTakeoverCaseDto[]> {
