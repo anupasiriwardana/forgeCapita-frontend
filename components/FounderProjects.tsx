@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useReadContracts } from "wagmi";
+import { useQueries } from "@tanstack/react-query";
+import { RevenueReport } from "@/components/RevenueReport";
 import { complianceBadge, formatBps } from "@/components/TransparencyPanel";
+import { ABIS } from "@/lib/contracts";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { chainName } from "@/config/chains";
 import { FOUNDER_COMPLIANCE_TEXT } from "@/lib/founderCompliance";
 import {
   fetchOwnRepos,
+  fetchProjectRevenue,
   formatNative,
   getProjectTransparency,
   getTakeoverByProject,
@@ -93,6 +98,12 @@ function ComplianceBlock({ project }: { project: ProjectDto }) {
         </p>
       )}
       <p style={MUTED}>Last checked: {data.lastCheckedAt ? new Date(data.lastCheckedAt).toLocaleString() : "never"}</p>
+      {state === "WARNED" && (
+        <p style={MUTED}>
+          The indexer might be behind, so ignore the warning if you have already routed the revenue. This check runs
+          periodically on indexed data; see &quot;last checked&quot; above.
+        </p>
+      )}
     </div>
   );
 }
@@ -130,7 +141,40 @@ function TakeoverNotice({ project }: { project: ProjectDto }) {
   );
 }
 
-function ProjectRow({ project, repo }: { project: ProjectDto; repo: OwnRepoDto | undefined }) {
+function isRevenueState(project: ProjectDto): boolean {
+  return project.state === "ACTIVE" || project.state === "COMPLETED";
+}
+
+/** undefined = still loading, null = unavailable, bigint = amount in wei. */
+type Claimable = bigint | null | undefined;
+
+function ClaimableLine({ project, claimable }: { project: ProjectDto; claimable: Claimable }) {
+  let text: string;
+  if (claimable === undefined) text = "Checking...";
+  else if (claimable === null) text = "Not available";
+  else text = formatNative(claimable.toString(), project.chainId, 6);
+  return (
+    <p style={{ fontSize: "14px", marginBottom: "8px" }}>
+      Claimable creator funds: <strong>{text}</strong>
+      {typeof claimable === "bigint" && claimable > BigInt(0) && (
+        <>
+          {" "}
+          <Link href={`/projects/${encodeURIComponent(project.id)}`} style={LINK}>Claim on project page</Link>
+        </>
+      )}
+    </p>
+  );
+}
+
+function ProjectRow({
+  project,
+  repo,
+  claimable,
+}: {
+  project: ProjectDto;
+  repo: OwnRepoDto | undefined;
+  claimable: Claimable;
+}) {
   const name = project.profile?.name ?? project.tokenName;
   const pct = progressPercent(project.totalRaised, project.fundingGoal);
   const showCompliance = project.state !== "FUNDING" && project.state !== "CANCELLED";
@@ -151,6 +195,7 @@ function ProjectRow({ project, repo }: { project: ProjectDto; repo: OwnRepoDto |
         <div className="progress-fill" style={{ width: `${pct.toString()}%` }} />
       </div>
       <p style={{ fontSize: "14px", marginBottom: "8px" }}>Next action: {NEXT_ACTION[project.state]}</p>
+      {isRevenueState(project) && <ClaimableLine project={project} claimable={claimable} />}
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "14px" }}>
         <Link href={`/projects/${encodeURIComponent(project.id)}`} style={LINK}>Open project</Link>
         {repoLink && (
@@ -160,8 +205,55 @@ function ProjectRow({ project, repo }: { project: ProjectDto; repo: OwnRepoDto |
         )}
       </div>
       {showCompliance && <ComplianceBlock project={project} />}
+      {isRevenueState(project) && <RevenueReport project={project} />}
       <TakeoverNotice project={project} />
     </div>
+  );
+}
+
+function ProjectList({ projects, repos }: { projects: ProjectDto[]; repos: OwnRepoDto[] }) {
+  const eligible = projects.filter(isRevenueState);
+  const revenueQueries = useQueries({
+    queries: eligible.map((p) => ({
+      queryKey: ["project-revenue", p.id] as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchProjectRevenue(p.chainId, p.escrowAddress, signal),
+    })),
+  });
+
+  const routers = eligible.map((p, i) => {
+    const router = revenueQueries[i]?.data?.routerAddress;
+    return router ? { project: p, router: router as `0x${string}` } : null;
+  });
+  const withRouter = routers.filter((r): r is { project: ProjectDto; router: `0x${string}` } => r !== null);
+
+  const { data: reads, isLoading: readsLoading } = useReadContracts({
+    allowFailure: true,
+    contracts: withRouter.map((r) => ({
+      address: r.router,
+      abi: ABIS.router,
+      functionName: "creatorPendingFunds" as const,
+      chainId: r.project.chainId,
+    })),
+    query: { enabled: withRouter.length > 0 },
+  });
+
+  function claimableFor(project: ProjectDto): Claimable {
+    const idx = eligible.indexOf(project);
+    const q = revenueQueries[idx];
+    if (!q || q.isLoading) return undefined;
+    const routerIdx = withRouter.findIndex((r) => r.project === project);
+    if (routerIdx < 0) return null;
+    if (readsLoading) return undefined;
+    const result = reads?.[routerIdx]?.result;
+    return typeof result === "bigint" ? result : null;
+  }
+
+  return (
+    <>
+      {projects.map((p) => (
+        <ProjectRow key={p.id} project={p} repo={repos.find((r) => r.projectId === p.id)} claimable={claimableFor(p)} />
+      ))}
+    </>
   );
 }
 
@@ -208,9 +300,7 @@ export function FounderProjects() {
       </p>
     );
   } else {
-    body = projects.map((p) => (
-      <ProjectRow key={p.id} project={p} repo={repos.find((r) => r.projectId === p.id)} />
-    ));
+    body = <ProjectList projects={projects} repos={repos} />;
   }
 
   return (

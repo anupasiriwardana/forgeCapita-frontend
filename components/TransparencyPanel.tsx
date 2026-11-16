@@ -98,6 +98,12 @@ export function TransparencyPanel({ project }: { project: ProjectDto }) {
           Shortfall {formatBps(data.shortfallBps)} (tolerance {formatBps(data.toleranceBps)})
         </p>
       )}
+      {state === "WARNED" && (
+        <p style={MUTED}>
+          This check uses indexed on-chain data, which can be a few minutes behind. A very recent payment may not be
+          counted yet.
+        </p>
+      )}
     </section>
   );
 }

@@ -1454,6 +1454,16 @@ export interface CreatorClaimRow {
   timestamp: string;
 }
 
+/** One UTC month (YYYY-MM) of routed revenue; amounts are decimal wei strings. */
+export interface RevenueMonthRow {
+  month: string;
+  paymentCount: number;
+  gross: string;
+  creatorCut: string;
+  investorCut: string;
+  platformFee: string;
+}
+
 export interface ProjectRevenueDto {
   chainId: number;
   projectId: string;
@@ -1472,6 +1482,8 @@ export interface ProjectRevenueDto {
     totalTreasuryClaimed: string;
     lastPaymentAt: string | null;
   };
+  /** Newest first, at most 120. */
+  months: RevenueMonthRow[];
 }
 
 /** Returns null when the indexer does not know the project yet (404): no revenue yet. */
