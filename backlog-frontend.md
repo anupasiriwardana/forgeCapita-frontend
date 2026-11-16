@@ -245,7 +245,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] On-chain freshness for state after close: the detail page may show FUNDING until the indexer catches up (only RAISED is live; 'Updating from the chain' note)
 
 ### Staff dashboard (`/staff`)
-- [ ] **FE-65** (partial; 2026-11-08 WS-11.2b added read-only Audit log, Launch drafts and Relay tabs; Risk Center, complaints, takeover prep remain) Applications queue (approve / request changes / reject), KYC review (secure document viewer), repo provisioning status, shadow wallet change approvals, complaints queue and thread, read-only Risk Center, takeover case preparation and signalling vote setup.
+- [ ] **FE-65** (partial; 2026-11-08 WS-11.2b added read-only Audit log, Launch drafts and Relay tabs; 2026-11-16 WS-11.4c-1 added the Takeover tab (prepare/list/detail/open/cancel/close/votes); Risk Center, complaints remain) Applications queue (approve / request changes / reject), KYC review (secure document viewer), repo provisioning status, shadow wallet change approvals, complaints queue and thread, read-only Risk Center, takeover case preparation and signalling vote setup.
   - Partial (2026-11-06, WS-07.4l, FIRST PART ticked per user direction): `/admin` applications queue (tabs, paging 20, detail, approve with KYC checkbox, reject with required note) and admin-only Users role management done. Second part done 2026-11-06 (WS-07.5l): `/admin` shadow wallet approvals queue. WS-07.12b 2026-11-12 (code read, tsc 0; browser NOT verified): application detail shows KYC documents link (SafeLink https-only, noopener noreferrer, legacy fallback text) and applicant note; click-only "View applicant profile" (GET /admin/users/:address/profile, plain text, cleared on selection/tab change, abort on unmount). Remaining: request-changes, repo provisioning, complaints, Risk Center, takeover prep.
 
 - [ ] Extract duplicated `SafeLink` and `Row` helpers from `app/apply/page.tsx` and `app/admin/page.tsx` into a shared component
@@ -275,6 +275,9 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-72c** Complaints: ESCALATED status and assignee in the staff tab (needs API-60a).
 - [ ] **FE-72d** Complaints: Risk Center link (needs API-61) and reporter list paging beyond 100 (needs API-60g).
 - [ ] **FE-73** Takeover signalling vote page (staked-balance snapshot, weight, deadline, result).
+  - Part 1 (WS-11.4c-1, 2026-11-16, code verified vs API, runtime NOT verified): admin/staff Takeover tab and candidate acceptance done. Remaining: public TakeoverPanel on /projects/[id] with signed voting (WS-11.4c-2, needs API my-vote endpoint API-62e and case id in the public by-project DTO).
+- [ ] FE-73a Takeover list: add a chain filter (API supports `chainId` on GET /admin/takeover-cases).
+- [ ] FE-73b Candidate section for wallets whose role is not 'founder' (edge case: /founder > Takeover requests is only shown inside the founder dashboard).
 - [ ] **FE-74** Notification centre (in-app) matching email notifications.
 
 ## Phase 7: Quality

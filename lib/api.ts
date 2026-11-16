@@ -999,6 +999,150 @@ export function fetchRelayStatus(signal?: AbortSignal): Promise<RelayStatusDto> 
   return apiFetch<RelayStatusDto>("/relay/status", { signal });
 }
 
+// ── Takeover cases ────────────────────────────────────────────────────────
+
+export type TakeoverStatus = "prepared" | "vote_open" | "closed" | "cancelled";
+export type TakeoverResult = "passed" | "failed" | "no_quorum";
+
+/** Staff view. Amounts and block numbers are decimal strings. */
+export interface TakeoverCaseDto {
+  id: string;
+  chainId: number;
+  projectId: string;
+  candidateWallet: string;
+  candidateUserId: string;
+  reason: string;
+  evidenceLinks: string[];
+  status: TakeoverStatus;
+  createdBy: string;
+  openedBy: string | null;
+  createdAt: string;
+  openedAt: string | null;
+  cancelledAt: string | null;
+  snapshotBlock: string | null;
+  snapshotBlockTimestamp: string | null;
+  snapshotTakenAt: string | null;
+  snapshotLagSeconds: number | null;
+  snapshotTotalStaked: string | null;
+  snapshotHolderCount: number | null;
+  candidateAcceptedAt: string | null;
+  developerAtOpen: string | null;
+  endsAt: string | null;
+  closedAt: string | null;
+  result: TakeoverResult | null;
+  quorumPercent: number | null;
+  yesWeight: string | null;
+  noWeight: string | null;
+  votedWeight: string | null;
+  voterCount: number | null;
+}
+
+export interface TakeoverHolderDto {
+  investorAddress: string;
+  stakedBalance: string;
+  unstakedBalance: string | null;
+}
+
+export interface TakeoverVoteDto {
+  voter: string;
+  choice: "YES" | "NO";
+  weight: string;
+  issuedAt: string;
+  updatedAt: string;
+}
+
+export interface TakeoverDetailDto {
+  case: TakeoverCaseDto;
+  holders: { items: TakeoverHolderDto[]; limit: number; offset: number };
+}
+
+export interface PrepareTakeoverInput {
+  chainId: number;
+  projectAddress: string;
+  candidateWallet: string;
+  reason: string;
+  evidenceLinks: string[];
+}
+
+export interface MyTakeoverCaseDto {
+  id: string;
+  projectId: string;
+  status: TakeoverStatus;
+  acceptedAt: string | null;
+  acceptMessage: string | null;
+}
+
+export function listTakeoverCases(
+  params: { status?: TakeoverStatus; chainId?: number; limit?: number; offset?: number },
+  signal?: AbortSignal,
+): Promise<Page<TakeoverCaseDto>> {
+  return apiFetch<Page<TakeoverCaseDto>>(`/admin/takeover-cases${buildQuery(params)}`, { signal });
+}
+
+export function getTakeoverDetail(
+  id: string,
+  params: { limit?: number; offset?: number },
+  signal?: AbortSignal,
+): Promise<TakeoverDetailDto> {
+  return apiFetch<TakeoverDetailDto>(`/admin/takeover-cases/${encodeURIComponent(id)}${buildQuery(params)}`, { signal });
+}
+
+export function listTakeoverVotes(
+  id: string,
+  params: { limit?: number; offset?: number },
+  signal?: AbortSignal,
+): Promise<Page<TakeoverVoteDto>> {
+  return apiFetch<Page<TakeoverVoteDto>>(
+    `/admin/takeover-cases/${encodeURIComponent(id)}/votes${buildQuery(params)}`,
+    { signal },
+  );
+}
+
+export async function prepareTakeoverCase(input: PrepareTakeoverInput): Promise<TakeoverCaseDto> {
+  const data = await apiFetch<{ case: TakeoverCaseDto }>("/admin/takeover-cases", { method: "POST", body: input });
+  return data.case;
+}
+
+export async function openTakeoverCase(id: string): Promise<TakeoverCaseDto> {
+  const data = await apiFetch<{ case: TakeoverCaseDto; alreadyOpen: boolean }>(
+    `/admin/takeover-cases/${encodeURIComponent(id)}/open`,
+    { method: "POST", body: {} },
+  );
+  return data.case;
+}
+
+export async function cancelTakeoverCase(id: string): Promise<TakeoverCaseDto> {
+  const data = await apiFetch<{ case: TakeoverCaseDto }>(
+    `/admin/takeover-cases/${encodeURIComponent(id)}/cancel`,
+    { method: "POST", body: {} },
+  );
+  return data.case;
+}
+
+export async function closeTakeoverCase(id: string): Promise<TakeoverCaseDto> {
+  const data = await apiFetch<{ case: TakeoverCaseDto }>(
+    `/admin/takeover-cases/${encodeURIComponent(id)}/close`,
+    { method: "POST", body: {} },
+  );
+  return data.case;
+}
+
+export async function listMyTakeoverCases(signal?: AbortSignal): Promise<MyTakeoverCaseDto[]> {
+  const data = await apiFetch<{ items: MyTakeoverCaseDto[] }>("/takeover-cases/mine", { signal });
+  return data.items;
+}
+
+export async function acceptTakeoverCase(
+  id: string,
+  input: { issuedAt: string; signature: string },
+): Promise<{ alreadyAccepted: boolean }> {
+  const data = await apiFetch<{ accepted: boolean; alreadyAccepted: boolean }>(
+    `/takeover-cases/${encodeURIComponent(id)}/accept`,
+    { method: "POST", body: input },
+  );
+  return { alreadyAccepted: data.alreadyAccepted };
+}
+
 function fieldDetails(details: unknown): string {
   if (!Array.isArray(details)) return "";
   const parts: string[] = [];

@@ -6,6 +6,7 @@ import { ComplianceTab } from "@/components/admin/ComplianceTab";
 import { ComplaintsTab } from "@/components/admin/ComplaintsTab";
 import { LaunchDraftsTab } from "@/components/admin/LaunchDraftsTab";
 import { RelayTab } from "@/components/admin/RelayTab";
+import { TakeoverTab } from "@/components/admin/TakeoverTab";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
 import {
@@ -618,7 +619,7 @@ function UsersSection() {
   );
 }
 
-type SectionKey = "applications" | "wallets" | "users" | "audit" | "drafts" | "relay" | "compliance" | "complaints";
+type SectionKey = "applications" | "wallets" | "users" | "audit" | "drafts" | "relay" | "compliance" | "complaints" | "takeover";
 
 function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: string }) {
   const [section, setSection] = useState<SectionKey>("applications");
@@ -631,6 +632,7 @@ function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: str
     { key: "relay", label: "Relay" },
     { key: "compliance", label: "Compliance" },
     { key: "complaints", label: "Complaints" },
+    { key: "takeover", label: "Takeover" },
   ];
   return (
     <>
@@ -656,6 +658,7 @@ function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: str
       {section === "relay" && <RelayTab />}
       {section === "compliance" && <ComplianceTab />}
       {section === "complaints" && <ComplaintsTab />}
+      {section === "takeover" && <TakeoverTab role={role} />}
     </>
   );
 }
