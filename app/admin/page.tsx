@@ -5,6 +5,7 @@ import { AuditLogTab } from "@/components/admin/AuditLogTab";
 import { ComplianceTab } from "@/components/admin/ComplianceTab";
 import { ComplaintsTab } from "@/components/admin/ComplaintsTab";
 import { LaunchDraftsTab } from "@/components/admin/LaunchDraftsTab";
+import { PlatformFeesTab } from "@/components/admin/PlatformFeesTab";
 import { RelayTab } from "@/components/admin/RelayTab";
 import { TakeoverTab } from "@/components/admin/TakeoverTab";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -619,7 +620,7 @@ function UsersSection() {
   );
 }
 
-type SectionKey = "applications" | "wallets" | "users" | "audit" | "drafts" | "relay" | "compliance" | "complaints" | "takeover";
+type SectionKey = "applications" | "wallets" | "users" | "audit" | "drafts" | "relay" | "compliance" | "complaints" | "takeover" | "fees";
 
 function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: string }) {
   const [section, setSection] = useState<SectionKey>("applications");
@@ -633,6 +634,7 @@ function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: str
     { key: "compliance", label: "Compliance" },
     { key: "complaints", label: "Complaints" },
     { key: "takeover", label: "Takeover" },
+    { key: "fees", label: "Platform fees" },
   ];
   return (
     <>
@@ -659,6 +661,7 @@ function AdminSections({ role, selfAddress }: { role: UserRole; selfAddress: str
       {section === "compliance" && <ComplianceTab />}
       {section === "complaints" && <ComplaintsTab />}
       {section === "takeover" && <TakeoverTab role={role} />}
+      {section === "fees" && <PlatformFeesTab />}
     </>
   );
 }
