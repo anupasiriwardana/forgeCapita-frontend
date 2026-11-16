@@ -22,6 +22,7 @@ import { CreatorFunds } from "@/components/CreatorFunds";
 import { GuardianPanel } from "@/components/GuardianPanel";
 import { MilestonePanel } from "@/components/MilestonePanel";
 import { GasLedger } from "@/components/GasLedger";
+import { TakeoverPanel } from "@/components/TakeoverPanel";
 import { TransparencyPanel } from "@/components/TransparencyPanel";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import {
@@ -394,6 +395,7 @@ function ProjectDetailInner({ id }: { id: string }) {
             <MilestonePanel project={project} nowSeconds={nowSeconds} />
             <TransparencyPanel project={project} />
             <GasLedger project={project} />
+            <TakeoverPanel chainId={project.chainId} escrowAddress={project.escrowAddress} />
           </section>
 
           {/* Milestones Link */}

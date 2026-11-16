@@ -275,7 +275,8 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-72c** Complaints: ESCALATED status and assignee in the staff tab (needs API-60a).
 - [ ] **FE-72d** Complaints: Risk Center link (needs API-61) and reporter list paging beyond 100 (needs API-60g).
 - [ ] **FE-73** Takeover signalling vote page (staked-balance snapshot, weight, deadline, result).
-  - Part 1 (WS-11.4c-1, 2026-11-16, code verified vs API, runtime NOT verified): admin/staff Takeover tab and candidate acceptance done. Remaining: public TakeoverPanel on /projects/[id] with signed voting (WS-11.4c-2, needs API my-vote endpoint API-62e and case id in the public by-project DTO).
+  - Part 1 (WS-11.4c-1, 2026-11-16, code verified vs API, runtime NOT verified): admin/staff Takeover tab and candidate acceptance done. 
+  - Part 2 (WS-11.4c-2, 2026-11-16, code verified, runtime NOT verified): components/TakeoverPanel.tsx on /projects/[id] (status, candidate, snapshot, countdown, yes/no %, quorum bar, voters, advisory note, signed Vote YES/NO, own vote). Voting UI done; remaining only browser/wallet verification by the user and FE-73a/FE-73b. Item stays unticked until the user verifies 11.4c-1 and 11.4c-2.
 - [ ] FE-73a Takeover list: add a chain filter (API supports `chainId` on GET /admin/takeover-cases).
 - [ ] FE-73b Candidate section for wallets whose role is not 'founder' (edge case: /founder > Takeover requests is only shown inside the founder dashboard).
 - [ ] **FE-74** Notification centre (in-app) matching email notifications.

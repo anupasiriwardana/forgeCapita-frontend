@@ -1143,6 +1143,81 @@ export async function acceptTakeoverCase(
   return { alreadyAccepted: data.alreadyAccepted };
 }
 
+/** Public aggregate tally of an opened takeover case. Weights are decimal strings (wei). */
+export interface TakeoverTallyDto {
+  status: TakeoverStatus;
+  result: TakeoverResult | null;
+  candidateWallet: string;
+  endsAt: string | null;
+  quorumPercent: number | null;
+  quorumWeightRequired: string | null;
+  snapshotTotalStaked: string | null;
+  yesWeight: string;
+  noWeight: string;
+  votedWeight: string;
+  voterCount: number;
+  quorumReached: boolean | null;
+  closedAt: string | null;
+  advisory: true;
+}
+
+export interface PublicTakeoverCaseDto extends TakeoverTallyDto {
+  id: string;
+  snapshotBlock: string | null;
+  holderCount: number | null;
+  openedAt: string | null;
+}
+
+export type VoteChoice = "YES" | "NO";
+
+export interface MyVoteDto {
+  eligible: boolean;
+  canVote: boolean;
+  weight: string | null;
+  myChoice: VoteChoice | null;
+  voteMessageTemplate: string | null;
+}
+
+export interface PostedVoteDto {
+  vote: { choice: VoteChoice; weight: string; issuedAt: string; updatedAt: string };
+  tally: TakeoverTallyDto;
+}
+
+/** The opened takeover case of a project, or null when there is none (404). */
+export async function getTakeoverByProject(
+  chainId: number,
+  address: string,
+  signal?: AbortSignal,
+): Promise<PublicTakeoverCaseDto | null> {
+  try {
+    const data = await apiFetch<{ case: PublicTakeoverCaseDto }>(
+      `/takeover-cases/by-project/${chainId}/${encodeURIComponent(address)}`,
+      { signal },
+    );
+    return data.case;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function getTakeoverTally(id: string, signal?: AbortSignal): Promise<TakeoverTallyDto> {
+  const data = await apiFetch<{ tally: TakeoverTallyDto }>(`/takeover-cases/${encodeURIComponent(id)}/tally`, { signal });
+  return data.tally;
+}
+
+export async function getMyVote(id: string, signal?: AbortSignal): Promise<MyVoteDto> {
+  const data = await apiFetch<{ myVote: MyVoteDto }>(`/takeover-cases/${encodeURIComponent(id)}/my-vote`, { signal });
+  return data.myVote;
+}
+
+export function postTakeoverVote(
+  id: string,
+  input: { choice: VoteChoice; issuedAt: string; signature: string },
+): Promise<PostedVoteDto> {
+  return apiFetch<PostedVoteDto>(`/takeover-cases/${encodeURIComponent(id)}/vote`, { method: "POST", body: input });
+}
+
 function fieldDetails(details: unknown): string {
   if (!Array.isArray(details)) return "";
   const parts: string[] = [];
