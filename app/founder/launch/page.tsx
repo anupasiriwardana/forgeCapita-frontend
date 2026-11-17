@@ -102,7 +102,7 @@ export default function CreateProjectPage() {
   const redirectedRef = useRef(false);
   const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
   const [nowMs] = useState(() => Date.now());
-  const { user, role, loading: authLoading, signIn } = useAuth();
+  const { user, role, loading: authLoading } = useAuth();
   const [eligibility, setEligibility] = useState<LaunchEligibilityDto | null>(null);
   const [freeWallets, setFreeWallets] = useState<ShadowWalletDto[]>([]);
   const [shadowWalletId, setShadowWalletId] = useState("");
@@ -165,7 +165,7 @@ export default function CreateProjectPage() {
   const goToLaunches = useCallback((): void => {
     if (redirectedRef.current) return;
     redirectedRef.current = true;
-    router.push("/launches");
+    router.push("/founder/launches");
   }, [router]);
 
   useEffect(() => {
@@ -369,7 +369,7 @@ export default function CreateProjectPage() {
   ];
 
   return (
-    <div style={{ maxWidth: "760px", margin: "0 auto", padding: "48px 24px" }}>
+    <div>
       {/* Header */}
       <div className="fade-in-up" style={{ marginBottom: "40px" }}>
         <span className="section-tag">Founder tools</span>
@@ -447,17 +447,6 @@ export default function CreateProjectPage() {
         </div>
       )}
 
-      {roleBlocked && (
-        <div className="glass-card fade-in-up" style={{ padding: "24px", marginBottom: "24px" }}>
-          <h2 style={{ fontSize: "18px", marginBottom: "12px" }}>Only approved founders can launch projects</h2>
-          {!user && (
-            <p style={{ marginBottom: "12px" }}>
-              <button type="button" className="btn-secondary" onClick={() => void signIn()}>Sign in</button>
-            </p>
-          )}
-          <Link href="/apply" style={linkStyle}>Apply to become a founder</Link>
-        </div>
-      )}
       {isFounder && (
         <div className="glass-card fade-in-up" style={{ padding: "24px", marginBottom: "24px" }}>
           <h2 style={{ fontSize: "18px", marginBottom: "12px" }}>Launch requirements</h2>
@@ -473,24 +462,24 @@ export default function CreateProjectPage() {
               <li style={requirementStyle}>
                 <StatusIcon state={eligibility.checks.agreementAccepted ? "done" : "todo"} label={eligibility.checks.agreementAccepted ? "Done" : "Not done"} />
                 <span>Agreement accepted</span>
-                {!eligibility.checks.agreementAccepted && <Link href="/founder" style={linkStyle}>Sign it</Link>}
+                {!eligibility.checks.agreementAccepted && <Link href="/founder/agreement" style={linkStyle}>Sign it</Link>}
               </li>
               <li style={requirementStyle}>
                 <StatusIcon state={eligibility.checks.shadowWalletAvailable ? "done" : "todo"} label={eligibility.checks.shadowWalletAvailable ? "Done" : "Not done"} />
                 <span>Approved shadow wallet</span>
                 <ShadowWalletInfo />
-                {!eligibility.checks.shadowWalletAvailable && <Link href="/founder" style={linkStyle}>Request one</Link>}
+                {!eligibility.checks.shadowWalletAvailable && <Link href="/founder/wallets" style={linkStyle}>Request one</Link>}
               </li>
               <li style={requirementStyle}>
                 <StatusIcon state={eligibility.checks.repoProvisioned ? "done" : "todo"} label={eligibility.checks.repoProvisioned ? "Done" : "Not done"} />
                 <span>Project code repository</span>
-                {!eligibility.checks.repoProvisioned && <Link href="/founder#repo" style={linkStyle}>Request it</Link>}
+                {!eligibility.checks.repoProvisioned && <Link href="/founder/repository" style={linkStyle}>Request it</Link>}
               </li>
             </ul>
           )}
           {eligibility?.eligible && freeWallets.length === 0 && (
             <p style={{ color: "var(--text-secondary)" }}>
-              You have no free shadow wallet. Request one on your <Link href="/founder" style={linkStyle}>founder page</Link>.
+              You have no free shadow wallet. Request one on the <Link href="/founder/wallets" style={linkStyle}>shadow wallets page</Link>.
             </p>
           )}
           {eligibility?.eligible && freeWallets.length > 0 && (
@@ -515,7 +504,7 @@ export default function CreateProjectPage() {
           )}
           {eligibility?.eligible && selectableRepos.length === 0 && (
             <p style={{ color: "var(--text-secondary)", marginTop: "12px" }}>
-              You need a project code repository first. Request one on your <Link href="/founder#repo" style={linkStyle}>founder page</Link>.
+              You need a project code repository first. Request one on the <Link href="/founder/repository" style={linkStyle}>repository page</Link>.
             </p>
           )}
           {eligibility?.eligible && selectableRepos.length === 1 && selectableRepos[0] && (

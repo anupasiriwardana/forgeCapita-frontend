@@ -8,14 +8,16 @@ import {
   Banknote,
   ChevronsLeft,
   ChevronsRight,
+  Coins,
   FileText,
   FilePenLine,
+  FolderKanban,
+  GitBranch,
   MessageSquareWarning,
   Radio,
   ScrollText,
   UserCheck,
   Users,
-  LayoutDashboard,
   LayoutGrid,
   ListChecks,
   LogOut,
@@ -91,9 +93,14 @@ function buildGroups(role: string): NavGroup[] {
     groups.push({
       label: "Founder",
       items: [
-        { href: "/founder", label: "Founder dashboard", icon: LayoutDashboard },
-        { href: "/launches", label: "My launches", icon: ListChecks },
-        { href: "/projects/create", label: "Launch project", icon: Rocket },
+        { href: "/founder/projects", label: "My projects", icon: FolderKanban },
+        { href: "/founder/launch", label: "Launch project", icon: Rocket },
+        { href: "/founder/launches", label: "My launches", icon: ListChecks },
+        { href: "/founder/revenue", label: "Revenue", icon: Coins },
+        { href: "/founder/repository", label: "Repository", icon: GitBranch },
+        { href: "/founder/wallets", label: "Shadow wallets", icon: Wallet },
+        { href: "/founder/takeover", label: "Takeover requests", icon: UserCheck },
+        { href: "/founder/agreement", label: "Agreement", icon: FileText },
       ],
     });
   }
@@ -102,7 +109,7 @@ function buildGroups(role: string): NavGroup[] {
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/projects") {
-    return pathname === "/projects" || (pathname.startsWith("/projects/") && !pathname.startsWith("/projects/create"));
+    return pathname === "/projects" || pathname.startsWith("/projects/");
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

@@ -173,18 +173,24 @@ function ClaimableLine({ project, claimable }: { project: ProjectDto; claimable:
   );
 }
 
+type FounderProjectsView = "projects" | "revenue";
+
 function ProjectRow({
   project,
   repo,
   claimable,
+  view,
 }: {
   project: ProjectDto;
   repo: OwnRepoDto | undefined;
   claimable: Claimable;
+  view: FounderProjectsView;
 }) {
   const name = project.profile?.name ?? project.tokenName;
   const pct = progressPercent(project.totalRaised, project.fundingGoal);
-  const showCompliance = project.state !== "FUNDING" && project.state !== "CANCELLED";
+  const revenueView = view === "revenue";
+  const showCompliance =
+    project.state !== "FUNDING" && project.state !== "CANCELLED" && (revenueView || !isRevenueState(project));
   const repoLink = repo && repo.htmlUrl.startsWith("https://") ? repo : undefined;
 
   return (
@@ -195,14 +201,18 @@ function ProjectRow({
         <span className={`badge ${STATE_BADGE[project.state]}`}>{project.state}</span>
         {project.state === "ACTIVE" && <span style={MUTED}>Milestone {project.currentMilestoneIndex}</span>}
       </div>
-      <p style={{ fontSize: "14px", margin: "8px 0 4px" }}>
-        Raised {formatNative(project.totalRaised, project.chainId)} of {formatNative(project.fundingGoal, project.chainId)}
-      </p>
-      <div className="progress-bar" style={{ height: "6px", marginBottom: "8px" }}>
-        <div className="progress-fill" style={{ width: `${pct.toString()}%` }} />
-      </div>
-      <p style={{ fontSize: "14px", marginBottom: "8px" }}>Next action: {NEXT_ACTION[project.state]}</p>
-      {isRevenueState(project) && <ClaimableLine project={project} claimable={claimable} />}
+      {!revenueView && (
+        <>
+          <p style={{ fontSize: "14px", margin: "8px 0 4px" }}>
+            Raised {formatNative(project.totalRaised, project.chainId)} of {formatNative(project.fundingGoal, project.chainId)}
+          </p>
+          <div className="progress-bar" style={{ height: "6px", marginBottom: "8px" }}>
+            <div className="progress-fill" style={{ width: `${pct.toString()}%` }} />
+          </div>
+          <p style={{ fontSize: "14px", marginBottom: "8px" }}>Next action: {NEXT_ACTION[project.state]}</p>
+        </>
+      )}
+      {revenueView && <ClaimableLine project={project} claimable={claimable} />}
       <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "14px" }}>
         <Link href={`/projects/${encodeURIComponent(project.id)}`} style={LINK}>Open project</Link>
         {repoLink && (
@@ -212,13 +222,21 @@ function ProjectRow({
         )}
       </div>
       {showCompliance && <ComplianceBlock project={project} />}
-      {isRevenueState(project) && <RevenueReport project={project} />}
-      <TakeoverNotice project={project} />
+      {revenueView && <RevenueReport project={project} />}
+      {!revenueView && <TakeoverNotice project={project} />}
     </div>
   );
 }
 
-function ProjectList({ projects, repos }: { projects: ProjectDto[]; repos: OwnRepoDto[] }) {
+function ProjectList({
+  projects,
+  repos,
+  view,
+}: {
+  projects: ProjectDto[];
+  repos: OwnRepoDto[];
+  view: FounderProjectsView;
+}) {
   const eligible = projects.filter(isRevenueState);
   const revenueQueries = useQueries({
     queries: eligible.map((p) => ({
@@ -258,13 +276,13 @@ function ProjectList({ projects, repos }: { projects: ProjectDto[]; repos: OwnRe
   return (
     <>
       {projects.map((p) => (
-        <ProjectRow key={p.id} project={p} repo={repos.find((r) => r.projectId === p.id)} claimable={claimableFor(p)} />
+        <ProjectRow key={p.id} project={p} repo={repos.find((r) => r.projectId === p.id)} claimable={claimableFor(p)} view={view} />
       ))}
     </>
   );
 }
 
-export function FounderProjects() {
+export function FounderProjects({ view = "projects" }: { view?: FounderProjectsView }) {
   const { user } = useAuth();
   const address = user?.address;
   const [projects, setProjects] = useState<ProjectDto[] | null>(null);
@@ -297,22 +315,23 @@ export function FounderProjects() {
     body = <div role="alert" className="alert alert-error">{error}</div>;
   } else if (projects === null) {
     body = <p style={{ color: "var(--text-secondary)" }}>Loading...</p>;
+  } else if (view === "revenue" && !projects.some(isRevenueState)) {
+    body = <p style={{ color: "var(--text-secondary)" }}>No projects in revenue state yet.</p>;
   } else if (projects.length === 0) {
     body = (
       <p style={{ color: "var(--text-secondary)" }}>
         No projects yet.{" "}
-        <Link href="/projects/create" style={LINK}>Create a project</Link>
+        <Link href="/founder/launch" style={LINK}>Create a project</Link>
         {" or check "}
-        <Link href="/launches" style={LINK}>your launch drafts</Link>.
+        <Link href="/founder/launches" style={LINK}>your launch drafts</Link>.
       </p>
     );
   } else {
-    body = <ProjectList projects={projects} repos={repos} />;
+    body = <ProjectList projects={view === "revenue" ? projects.filter(isRevenueState) : projects} repos={repos} view={view} />;
   }
 
   return (
-    <section id="projects" className="glass-card" style={{ padding: "24px", marginBottom: "24px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>My projects</h2>
+    <section id="projects" className="glass-card" style={{ padding: "24px" }}>
       {body}
     </section>
   );

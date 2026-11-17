@@ -208,12 +208,12 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
             {!gateError && !eligibility && <p style={{ color: "var(--text-secondary)" }}>Checking your launch requirements...</p>}
             {eligibility && !walletChecksOk && (
               <p style={{ color: "var(--text-secondary)" }}>
-                Launch requirements are not met yet. See your <Link href="/founder" style={{ color: "var(--brand-accent)" }}>founder page</Link>.
+                Launch requirements are not met yet. See your <Link href="/founder/projects" style={{ color: "var(--brand-accent)" }}>founder requirements</Link>.
               </p>
             )}
             {walletChecksOk && freeWallets.length === 0 && (
               <p style={{ color: "var(--text-secondary)" }}>
-                You have no free shadow wallet. Request one on your <Link href="/founder" style={{ color: "var(--brand-accent)" }}>founder page</Link>.
+                You have no free shadow wallet. Request one on the <Link href="/founder/wallets" style={{ color: "var(--brand-accent)" }}>shadow wallets page</Link>.
               </p>
             )}
             {walletChecksOk && freeWallets.length > 0 && (

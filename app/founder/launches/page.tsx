@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { IndexerLagNote } from "@/components/IndexerLagNote";
-import { useAuth } from "@/components/web3/AuthProvider";
 import { chainName } from "@/config/chains";
 import {
   ApiError,
@@ -138,7 +137,7 @@ function LaunchList() {
     <>
       <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
         <button type="button" className="btn-secondary" onClick={reload}>Refresh</button>
-        <Link href="/projects/create" style={{ color: "var(--brand-accent)", alignSelf: "center" }}>Launch a project</Link>
+        <Link href="/founder/launch" style={{ color: "var(--brand-accent)", alignSelf: "center" }}>Launch a project</Link>
       </div>
       {error && <div role="alert" className="alert alert-error" style={{ marginBottom: "16px" }}>{error}</div>}
       {items === null && !error && <p style={{ color: "var(--text-secondary)" }}>Loading…</p>}
@@ -172,31 +171,10 @@ function LaunchList() {
 }
 
 export default function LaunchesPage() {
-  const { user, role, loading, signIn } = useAuth();
-  let content: React.ReactNode;
-  if (loading && !user) {
-    content = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
-  } else if (!user) {
-    content = (
-      <div className="alert alert-warning" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-        <span>Please sign in</span>
-        <button type="button" className="btn-secondary" onClick={() => void signIn()}>Sign in</button>
-      </div>
-    );
-  } else if (role !== "founder" && role !== "staff" && role !== "admin") {
-    content = (
-      <div className="alert alert-warning">
-        Only founders have launches.{" "}
-        <Link href="/apply" style={{ color: "var(--brand-accent)" }}>Apply here</Link>
-      </div>
-    );
-  } else {
-    content = <LaunchList />;
-  }
   return (
-    <div style={{ maxWidth: "760px", margin: "0 auto", padding: "40px 24px" }}>
+    <>
       <h1 style={{ fontSize: "28px", marginBottom: "24px" }}>My launches</h1>
-      {content}
-    </div>
+      <LaunchList />
+    </>
   );
 }

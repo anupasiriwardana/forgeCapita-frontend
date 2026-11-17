@@ -185,7 +185,7 @@ async function ProjectsSection({ filters }: { filters: MarketplaceFilters }) {
             Be the first founder to launch a milestone-gated project on ForgeCapita!
           </p>
           <Link
-            href="/projects/create"
+            href="/founder/launch"
             className="btn-primary"
             style={{
               display: "inline-flex",
