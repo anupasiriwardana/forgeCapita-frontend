@@ -6,7 +6,9 @@ import { getAddress } from "viem";
 import { useAccount, useSignMessage } from "wagmi";
 import { AcceptDeveloperRole } from "@/components/AcceptDeveloperRole";
 import { FounderProjects } from "@/components/FounderProjects";
+import { ShadowWalletInfo } from "@/components/InfoDialog";
 import { ProfileRequiredNotice } from "@/components/ProfileRequiredNotice";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { useWriteAllowed } from "@/components/web3/useWriteAllowed";
 import {
@@ -52,7 +54,7 @@ function badgeClass(status: string): string {
 function Check({ ok, label, href }: { ok: boolean; label: string; href: string }) {
   return (
     <li style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
-      <span style={{ color: ok ? "var(--emerald)" : "var(--rose)", fontWeight: 700 }}>{ok ? "✓" : "✗"}</span>
+      <StatusIcon state={ok ? "done" : "error"} label={ok ? "Done" : "Not done"} />
       {ok ? <span>{label}</span> : <Link href={href} style={{ color: "var(--brand-accent)" }}>{label}</Link>}
     </li>
   );
@@ -173,7 +175,7 @@ function WalletsSection({ me, onChanged }: { me: FounderMeDto; onChanged: () => 
 
   return (
     <section id="wallets" className="glass-card" style={{ padding: "24px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>Shadow wallets</h2>
+      <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>Shadow wallets <ShadowWalletInfo /></h2>
       {me.wallets.length === 0 && <p style={{ color: "var(--text-secondary)" }}>No shadow wallets yet.</p>}
       {me.wallets.map((w) => (
         <div
@@ -197,7 +199,10 @@ function WalletsSection({ me, onChanged }: { me: FounderMeDto; onChanged: () => 
         </div>
       ))}
       <div style={{ marginTop: "16px" }}>
-        <label className="label" htmlFor="shadowAddress">Request a shadow wallet address</label>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <label className="label" htmlFor="shadowAddress">Request a shadow wallet address</label>
+          <ShadowWalletInfo />
+        </div>
         <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }}>
           Use a dedicated wallet for one project&apos;s revenue (the payment processor settles into it). Do not use your
           login or personal wallet. Each wallet can be bound to only one project.

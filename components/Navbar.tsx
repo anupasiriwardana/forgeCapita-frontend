@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Zap } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
@@ -58,10 +59,10 @@ export function Navbar() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "16px",
+                color: "white",
               }}
             >
-              ⚡
+              <Zap size={20} aria-hidden="true" />
             </div>
             <span
               style={{

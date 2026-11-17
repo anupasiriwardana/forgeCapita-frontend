@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatNative, type ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
@@ -330,7 +331,7 @@ export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; n
 
       {result && (
         <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
-          <span>{result.ok ? "✅" : "⚠️"}</span>
+          <StatusIcon state={result.ok ? "done" : "warning"} />
           <span>
             {result.text}
             {txHref && txHash && (

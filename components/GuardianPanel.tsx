@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
+import { AlertTriangle } from "lucide-react";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
@@ -225,7 +227,7 @@ export function GuardianPanel({ project, nowSeconds }: { project: ProjectDto; no
       </p>
       {wrongChain && (
         <div className="alert alert-warning" style={{ marginBottom: "16px" }}>
-          <span>⚠️</span>
+          <AlertTriangle size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
           <span>Switch your wallet to this project&apos;s network (chain {chainId}) to use guardian controls.</span>
         </div>
       )}
@@ -299,7 +301,7 @@ export function GuardianPanel({ project, nowSeconds }: { project: ProjectDto; no
 
       {result && (
         <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
-          <span>{result.ok ? "✅" : "⚠️"}</span>
+          <StatusIcon state={result.ok ? "done" : "warning"} />
           <span>
             {result.text}
             {link && (

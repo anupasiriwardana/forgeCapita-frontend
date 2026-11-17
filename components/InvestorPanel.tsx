@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useSignTypedData, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
+import { AlertTriangle, Lock, Plug, Wallet } from "lucide-react";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import { formatUnits, parseUnits } from "viem";
 import type { ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
@@ -278,19 +280,19 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
 
   return (
     <div className="glass-card" style={{ padding: "28px", marginTop: "24px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "4px" }}>👛 Your Position</h2>
+      <h2 style={{ fontSize: "20px", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}><Wallet size={20} aria-hidden="true" style={{ flexShrink: 0 }} />Your Position</h2>
       <p style={{ fontSize: "12px", ...muted, marginTop: 0 }}>Staking and claiming tokens can be gasless; the other actions need your own gas.</p>
 
       {!isConnected ? (
         <div className="alert alert-warning">
-          <span>🔌</span>
+          <Plug size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
           <span>Connect your wallet to see your position.</span>
         </div>
       ) : (
         <>
           {wrongChain && (
             <div className="alert alert-warning" style={{ marginBottom: "16px" }}>
-              <span>⚠️</span>
+              <AlertTriangle size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
               <span>Switch your wallet to this project&apos;s network (chain {project.chainId}) to use these actions.</span>
             </div>
           )}
@@ -346,7 +348,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
             <label className="label">Unstake (you pay gas)</label>
             {voteLocked && (
               <div className="alert alert-warning" style={{ marginBottom: "8px" }}>
-                <span>🔒</span>
+                <Lock size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
                 <span>Vote-locked: you voted on an active milestone. Unstaking opens when the poll closes.</span>
               </div>
             )}
@@ -386,7 +388,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
           )}
           {result && (
             <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
-              <span>{result.ok ? "✅" : "⚠️"}</span>
+              <StatusIcon state={result.ok ? "done" : "warning"} />
               <span>{result.text}</span>
             </div>
           )}

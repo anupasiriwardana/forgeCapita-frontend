@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatUnits } from "viem";
 import { fetchProjectRevenue, shortAddr, type ProjectDto } from "@/lib/api";
@@ -246,7 +247,7 @@ export function CreatorFunds({ project }: { project: ProjectDto }) {
 
       {result && (
         <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
-          <span>{result.ok ? "✅" : "⚠️"}</span>
+          <StatusIcon state={result.ok ? "done" : "warning"} />
           <span>{result.text}</span>
         </div>
       )}

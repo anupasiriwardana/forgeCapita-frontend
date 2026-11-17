@@ -300,7 +300,11 @@ function ProjectDetailInner({ id }: { id: string }) {
                 {profile?.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={profile.logoUrl} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                ) : "🚀"}
+                ) : (
+                  <span aria-hidden="true" style={{ fontWeight: 700, color: "var(--brand-accent)" }}>
+                    {(name || "P").charAt(0).toUpperCase()}
+                  </span>
+                )}
               </div>
               <div>
                 <h1 style={{ fontSize: "28px", margin: "0 0 8px" }}>{name || "Unnamed Project"}</h1>
@@ -366,7 +370,7 @@ function ProjectDetailInner({ id }: { id: string }) {
           {profile?.founderBio && (
             <div className="glass-card fade-in-up fade-in-up-1" style={{ padding: "24px", marginBottom: "24px" }}>
               <h2 style={{ fontSize: "16px", marginBottom: "12px", display: "flex", gap: "8px" }}>
-                👤 About the Founder
+                About the Founder
               </h2>
               <p style={{ color: "var(--text-secondary)", lineHeight: 1.7, fontSize: "14px", margin: 0 }}>
                 {profile.founderBio}

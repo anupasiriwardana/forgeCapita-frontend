@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp } from "lucide-react";
 import {
   CHAIN_OPTIONS,
   SORT_OPTIONS,
@@ -53,9 +54,14 @@ export function MarketplaceFilters({ current }: { current: Filters }) {
         aria-expanded={open}
         aria-controls="marketplace-filters-panel"
         onClick={() => setOpen((o) => !o)}
-        style={{ padding: "8px 16px", fontSize: "14px", marginBottom: open ? "12px" : "0" }}
+        style={{ padding: "8px 16px", fontSize: "14px", marginBottom: open ? "12px" : "0", display: "inline-flex", alignItems: "center", gap: "6px" }}
       >
-        Filters {open ? "▲" : "▼"}
+        Filters
+        {open ? (
+          <ChevronUp size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+        ) : (
+          <ChevronDown size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+        )}
       </button>
 
       <div
@@ -138,10 +144,15 @@ export function MarketplaceFilters({ current }: { current: Filters }) {
         <button
           type="button"
           className="btn-secondary"
-          style={{ padding: "10px 16px", fontSize: "14px" }}
+          style={{ padding: "10px 16px", fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "6px" }}
           onClick={() => apply({ order: (current.order ?? "desc") === "desc" ? "asc" : "desc" })}
         >
-          {(current.order ?? "desc") === "desc" ? "Descending ↓" : "Ascending ↑"}
+          {(current.order ?? "desc") === "desc" ? "Descending" : "Ascending"}
+          {(current.order ?? "desc") === "desc" ? (
+            <ArrowDown size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+          ) : (
+            <ArrowUp size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+          )}
         </button>
       </div>
     </div>

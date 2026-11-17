@@ -1,5 +1,6 @@
 "use client";
 
+import { ShoppingCart } from "lucide-react";
 import type { P2PListing } from "@/lib/api";
 import { formatEth, shortAddr } from "@/lib/api";
 import { chainCurrency } from "@/config/chains";
@@ -126,7 +127,8 @@ export function P2PListingCard({ listing, onBuy, onCancel, viewer, isPending, in
             </>
           ) : (
             <>
-              🛒 Buy for {priceEth}
+              <ShoppingCart size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+              Buy for {priceEth}
             </>
           )}
         </button>

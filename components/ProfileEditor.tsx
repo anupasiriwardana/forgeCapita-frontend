@@ -15,6 +15,7 @@ import {
   type ProjectDto,
   type ShadowWalletDto,
 } from "@/lib/api";
+import { ShadowWalletInfo } from "@/components/InfoDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
 
 const MAX_ATTEMPTS = 8;
@@ -39,8 +40,6 @@ function walletChecksPass({ checks }: LaunchEligibilityDto): boolean {
 interface FormValues {
   name: string;
   description: string;
-  founderBio: string;
-  logoUrl: string;
   websiteUrl: string;
   pitchDeckUrl: string;
   category: string;
@@ -52,14 +51,12 @@ function validate(v: FormValues): string {
   const description = v.description.trim();
   if (name.length < 1 || name.length > 120) return "Name is required (max 120 characters).";
   if (description.length < 1 || description.length > 5000) return "Description is required (max 5000 characters).";
-  if (v.founderBio.length > 5000) return "Founder bio must be at most 5000 characters.";
   const urls: Array<[string, string]> = [
-    ["Logo URL", v.logoUrl.trim()],
-    ["Website URL", v.websiteUrl.trim()],
-    ["Pitch deck URL", v.pitchDeckUrl.trim()],
+    ["Website link", v.websiteUrl.trim()],
+    ["Pitch deck link", v.pitchDeckUrl.trim()],
   ];
   for (const [label, value] of urls) {
-    if (value !== "" && !isHttpsUrl(value)) return `${label} must be a valid https URL (max ${MAX_URL} characters).`;
+    if (value !== "" && !isHttpsUrl(value)) return `${label} must be a valid https link (max ${MAX_URL} characters).`;
   }
   const category = v.category.trim();
   if (category !== "" && !CATEGORY_REGEX.test(category)) {
@@ -81,8 +78,6 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
   const [values, setValues] = useState<FormValues>({
     name: profile?.name ?? project.tokenName ?? "",
     description: profile?.description ?? "",
-    founderBio: profile?.founderBio ?? "",
-    logoUrl: profile?.logoUrl ?? "",
     websiteUrl: profile?.websiteUrl ?? "",
     pitchDeckUrl: profile?.pitchDeckUrl ?? "",
     category: profile?.category ?? "",
@@ -132,9 +127,9 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
         if (err.status !== 404) throw new Error(describeFounderError(err));
         if (attempt >= MAX_ATTEMPTS) {
           setSaveNote("");
-          throw new Error("Project not indexed yet; try again shortly");
+          throw new Error("Your project is not ready yet. Try again shortly.");
         }
-        setSaveNote(`Waiting for indexer (${attempt}/${MAX_ATTEMPTS})`);
+        setSaveNote(`Waiting for your project to appear (${attempt}/${MAX_ATTEMPTS})`);
         await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
       }
     }
@@ -151,8 +146,6 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
       projectId: project.id,
       name: values.name.trim(),
       description: values.description.trim(),
-      founderBio: values.founderBio,
-      logoUrl: values.logoUrl.trim(),
       websiteUrl: values.websiteUrl.trim(),
       pitchDeckUrl: values.pitchDeckUrl.trim(),
       category: values.category.trim(),
@@ -188,7 +181,7 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
       {successMsg && <div className="alert alert-success" style={{ marginBottom: "16px" }}>{successMsg}</div>}
 
       <form onSubmit={(e) => void handleSubmit(e)}>
-        <label className="label" htmlFor="pe-name">Project Name *</label>
+        <label className="label" htmlFor="pe-name">Project name *</label>
         <input id="pe-name" className="input-field" value={values.name} maxLength={120} required onChange={(e) => setField("name", e.target.value)} />
 
         <div style={{ marginTop: "16px" }}>
@@ -197,43 +190,38 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
         </div>
 
         <div style={{ marginTop: "16px" }}>
-          <label className="label" htmlFor="pe-logo">Logo URL</label>
-          <input id="pe-logo" className="input-field" type="url" placeholder="https://..." value={values.logoUrl} maxLength={MAX_URL} onChange={(e) => setField("logoUrl", e.target.value)} />
-        </div>
-        <div style={{ marginTop: "16px" }}>
-          <label className="label" htmlFor="pe-website">Website URL</label>
+          <label className="label" htmlFor="pe-website">Website link</label>
           <input id="pe-website" className="input-field" type="url" placeholder="https://..." value={values.websiteUrl} maxLength={MAX_URL} onChange={(e) => setField("websiteUrl", e.target.value)} />
         </div>
         <div style={{ marginTop: "16px" }}>
-          <label className="label" htmlFor="pe-deck">Pitch Deck URL</label>
+          <label className="label" htmlFor="pe-deck">Pitch deck link</label>
           <input id="pe-deck" className="input-field" type="url" placeholder="https://..." value={values.pitchDeckUrl} maxLength={MAX_URL} onChange={(e) => setField("pitchDeckUrl", e.target.value)} />
         </div>
         <div style={{ marginTop: "16px" }}>
           <label className="label" htmlFor="pe-category">Category</label>
           <input id="pe-category" className="input-field" placeholder="fintech" value={values.category} maxLength={32} onChange={(e) => setField("category", e.target.value)} />
         </div>
-        <div style={{ marginTop: "16px" }}>
-          <label className="label" htmlFor="pe-bio">Founder Bio</label>
-          <textarea id="pe-bio" className="input-field" value={values.founderBio} maxLength={5000} style={{ minHeight: "70px" }} onChange={(e) => setField("founderBio", e.target.value)} />
-        </div>
 
         {needsWallet && (
           <div style={{ marginTop: "16px" }}>
             {gateError && <div role="alert" className="alert alert-error">{gateError}</div>}
-            {!gateError && !eligibility && <p style={{ color: "var(--text-secondary)" }}>Checking eligibility…</p>}
+            {!gateError && !eligibility && <p style={{ color: "var(--text-secondary)" }}>Checking your launch requirements...</p>}
             {eligibility && !walletChecksOk && (
               <p style={{ color: "var(--text-secondary)" }}>
-                Launch requirements are not met yet. See <Link href="/founder" style={{ color: "var(--brand-accent)" }}>/founder</Link>.
+                Launch requirements are not met yet. See your <Link href="/founder" style={{ color: "var(--brand-accent)" }}>founder page</Link>.
               </p>
             )}
             {walletChecksOk && freeWallets.length === 0 && (
               <p style={{ color: "var(--text-secondary)" }}>
-                No free approved wallet: request one on <Link href="/founder" style={{ color: "var(--brand-accent)" }}>/founder</Link>
+                You have no free shadow wallet. Request one on your <Link href="/founder" style={{ color: "var(--brand-accent)" }}>founder page</Link>.
               </p>
             )}
             {walletChecksOk && freeWallets.length > 0 && (
               <>
-                <label className="label" htmlFor="pe-wallet">Shadow wallet *</label>
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <label className="label" htmlFor="pe-wallet">Shadow wallet *</label>
+                  <ShadowWalletInfo />
+                </div>
                 <select id="pe-wallet" className="input-field" value={shadowWalletId} onChange={(e) => setShadowWalletId(e.target.value)}>
                   <option value="">Select a wallet</option>
                   {freeWallets.map((w) => (
@@ -246,7 +234,7 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
         )}
 
         <button type="submit" className="btn-primary" style={{ marginTop: "20px" }} disabled={saving || walletBlocked}>
-          {saving ? (saveNote || "Saving Profile...") : profile === null ? "Save profile" : "Update profile"}
+          {saving ? (saveNote || "Saving...") : profile === null ? "Save profile" : "Update profile"}
         </button>
       </form>
     </div>

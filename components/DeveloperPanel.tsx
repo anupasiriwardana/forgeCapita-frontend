@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useAccount, useBalance, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
+import { Wrench } from "lucide-react";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
@@ -118,7 +120,7 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
 
   return (
     <div className="glass-card" style={{ padding: "28px", marginBottom: "24px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>🛠️ Developer</h2>
+      <h2 style={{ fontSize: "20px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}><Wrench size={20} aria-hidden="true" style={{ flexShrink: 0 }} />Developer</h2>
       {reason ? (
         <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>{reason}</p>
       ) : (
@@ -138,7 +140,7 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
       </ConfirmDialog>
       {result && (
         <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
-          <span>{result.ok ? "✅" : "⚠️"}</span>
+          <StatusIcon state={result.ok ? "done" : "warning"} />
           <span>{result.text}</span>
         </div>
       )}

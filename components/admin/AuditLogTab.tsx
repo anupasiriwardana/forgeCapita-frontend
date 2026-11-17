@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { ArrowRight } from "lucide-react";
 import { listAuditLog, shortAddr } from "@/lib/api";
 import { ADDRESS_REGEX, ADMIN_PAGE_SIZE, AdminPager, ListState, ROW_STYLE, shortId, truncate, useAdminList } from "./shared";
 
@@ -72,7 +73,10 @@ export function AuditLogTab() {
             <span style={{ wordBreak: "break-word" }}>{e.action}</span>
             <span title={e.target ?? undefined}>{e.target ? shortAddr(e.target) : "-"}</span>
             <span style={{ wordBreak: "break-word" }} title={`${e.before ?? ""} -> ${e.after ?? ""}`}>
-              {truncate(e.before ?? "-", 24)} → {truncate(e.after ?? "-", 24)}
+              {truncate(e.before ?? "-", 24)}{" "}
+              <ArrowRight size={14} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />
+              <span className="sr-only"> changed to </span>{" "}
+              {truncate(e.after ?? "-", 24)}
             </span>
             <span title={e.actorUserId ?? undefined}>{e.actorUserId ? shortId(e.actorUserId) : "-"}</span>
             <span style={{ color: "var(--text-secondary)" }}>{e.ip ?? "-"}</span>

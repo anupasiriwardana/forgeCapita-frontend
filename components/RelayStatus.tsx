@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle, CheckCircle2, ChevronRight, Circle } from "lucide-react";
 import { EXPLORER_URLS } from "@/config/chains";
 import { useAuth } from "@/components/web3/AuthProvider";
 import {
@@ -77,12 +78,20 @@ export function RelayStatus({ chainId, status, request, pollError, failure, onSe
             <span
               key={s.status}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
                 color: shown ? "var(--text-muted)" : i <= current ? "var(--emerald)" : "var(--text-muted)",
                 fontWeight: i === current && inFlight ? 700 : 400,
               }}
             >
-              {i <= current && !shown ? "●" : "○"} {s.label}
-              {i < STEPS.length - 1 ? " →" : ""}
+              {i <= current && !shown ? (
+                <CheckCircle2 size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+              ) : (
+                <Circle size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+              )}
+              {s.label}
+              {i < STEPS.length - 1 && <ChevronRight size={14} aria-hidden="true" style={{ flexShrink: 0 }} />}
             </span>
           ))}
           {inFlight && status !== "CONFIRMED" && <span className="spinner" style={{ width: "12px", height: "12px" }} />}
@@ -101,7 +110,7 @@ export function RelayStatus({ chainId, status, request, pollError, failure, onSe
       )}
       {shown && (
         <div className="alert alert-error" style={{ marginTop: "8px", fontSize: "13px" }}>
-          <span>⚠️</span>
+          <AlertTriangle size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
           <span>
             {shown.message}
             {onSelfPay && canFallbackToSelfPay(shown.code) && (

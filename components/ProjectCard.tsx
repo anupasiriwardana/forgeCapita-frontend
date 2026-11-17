@@ -1,19 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { ProjectStatusBadge } from "@/components/ProjectStatusBadge";
 import type { ProjectDto } from "@/lib/api";
 import { formatEth, fundingProgress, shortAddr } from "@/lib/api";
 import { chainCurrency, chainName } from "@/config/chains";
 import { displayState } from "@/lib/projectState";
 
-const STATE_BADGE: Record<ProjectDto["state"], { label: string; className: string }> = {
-  FUNDING: { label: "🟢 Funding", className: "badge-active" },
-  ACTIVE: { label: "🟢 Active", className: "badge-active" },
-  COMPLETED: { label: "✅ Completed", className: "badge-brand" },
-  FAILED: { label: "⚫ Failed", className: "badge-inactive" },
-  CANCELLED: { label: "⚫ Cancelled", className: "badge-inactive" },
-  SHUTDOWN: { label: "⚫ Shut down", className: "badge-inactive" },
-};
 
 interface ProjectCardProps {
   project: ProjectDto;
@@ -27,7 +21,6 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
   const name = project.profile?.name ?? project.tokenName;
   const description = project.profile?.description;
   const logoUrl = project.profile?.logoUrl;
-  const stateBadge = STATE_BADGE[displayState(project)];
 
   return (
     <Link
@@ -68,7 +61,9 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           ) : (
-            "🚀"
+            <span aria-hidden="true" style={{ fontWeight: 700, color: "var(--brand-accent)" }}>
+              {(name || "P").charAt(0).toUpperCase()}
+            </span>
           )}
         </div>
 
@@ -96,7 +91,7 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
         </div>
 
         {/* Status Badge */}
-        <span className={`badge ${stateBadge.className}`}>{stateBadge.label}</span>
+        <ProjectStatusBadge status={displayState(project)} />
       </div>
 
       {/* Description */}
@@ -164,7 +159,8 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
             gap: "4px",
           }}
         >
-          View Details →
+          View Details
+          <ArrowRight size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
         </span>
       </div>
     </Link>

@@ -108,8 +108,6 @@ export interface ProfileInput {
   projectId: string;
   name: string;
   description: string;
-  founderBio?: string;
-  logoUrl?: string;
   pitchDeckUrl?: string;
   websiteUrl?: string;
   category?: string;
@@ -268,8 +266,6 @@ export interface LaunchDraftInput {
   chainId: number;
   name: string;
   description: string;
-  founderBio?: string;
-  logoUrl?: string;
   websiteUrl?: string;
   pitchDeckUrl?: string;
   category?: string;
