@@ -9,6 +9,7 @@ import {
   type ProjectDto,
   type TransparencyDto,
 } from "@/lib/api";
+import { exactTime, formatAge } from "@/lib/timeAgo";
 
 const REFRESH_MS = 60_000;
 const MUTED = { fontSize: "13px", color: "var(--text-muted)" } as const;
@@ -39,6 +40,7 @@ export function formatBps(bps: number): string {
 
 export function TransparencyPanel({ project }: { project: ProjectDto }) {
   const [data, setData] = useState<TransparencyDto | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
     let controller = new AbortController();
@@ -46,7 +48,10 @@ export function TransparencyPanel({ project }: { project: ProjectDto }) {
       controller.abort();
       controller = new AbortController();
       getProjectTransparency(project.id, controller.signal)
-        .then(setData)
+        .then((d) => {
+          setNow(Date.now());
+          setData(d);
+        })
         .catch(() => undefined);
     };
     run();
@@ -84,9 +89,10 @@ export function TransparencyPanel({ project }: { project: ProjectDto }) {
       </p>
       <p style={{ fontSize: "14px", marginBottom: "8px" }}>{STATE_LINES[state]}</p>
       {wallet}
-      <p style={MUTED}>
-        Last checked: {data.lastCheckedAt ? new Date(data.lastCheckedAt).toLocaleString() : "never"}
+      <p style={MUTED} title={exactTime(data.lastCheckedAt)}>
+        Last checked: {formatAge(data.lastCheckedAt, now)}
       </p>
+      <p style={MUTED}>The check refreshes about every 15 minutes (configurable).</p>
       {data.observedNative != null && data.routedNative != null && (
         <p style={{ fontSize: "14px", marginTop: "8px" }}>
           Observed {formatNative(data.observedNative, data.chainId)} vs routed{" "}

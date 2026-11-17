@@ -10,6 +10,7 @@ import { ABIS } from "@/lib/contracts";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { chainName } from "@/config/chains";
 import { FOUNDER_COMPLIANCE_TEXT } from "@/lib/founderCompliance";
+import { exactTime, formatAge } from "@/lib/timeAgo";
 import {
   fetchOwnRepos,
   fetchProjectRevenue,
@@ -66,12 +67,15 @@ function progressPercent(raised: string, goal: string): number {
 
 function ComplianceBlock({ project }: { project: ProjectDto }) {
   const [data, setData] = useState<TransparencyDto | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
     const controller = new AbortController();
     getProjectTransparency(project.id, controller.signal)
       .then((d) => {
-        if (!controller.signal.aborted) setData(d);
+        if (controller.signal.aborted) return;
+        setNow(Date.now());
+        setData(d);
       })
       .catch(() => undefined);
     return () => controller.abort();
@@ -97,7 +101,10 @@ function ComplianceBlock({ project }: { project: ProjectDto }) {
           Shortfall {formatBps(data.shortfallBps)} (tolerance {formatBps(data.toleranceBps)})
         </p>
       )}
-      <p style={MUTED}>Last checked: {data.lastCheckedAt ? new Date(data.lastCheckedAt).toLocaleString() : "never"}</p>
+      <p style={MUTED} title={exactTime(data.lastCheckedAt)}>
+        Last checked: {formatAge(data.lastCheckedAt, now)}
+      </p>
+      <p style={MUTED}>The check refreshes about every 15 minutes (configurable).</p>
       {state === "WARNED" && (
         <p style={MUTED}>
           The indexer might be behind, so ignore the warning if you have already routed the revenue. This check runs

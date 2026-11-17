@@ -700,17 +700,6 @@ export interface RepoDto {
   createdAt: string;
 }
 
-/** Returns null when the founder has no repository yet (404). */
-export async function fetchOwnRepo(signal?: AbortSignal): Promise<RepoDto | null> {
-  try {
-    const data = await apiFetch<{ repo: RepoDto }>("/founders/me/repo", { signal });
-    return data.repo;
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return null;
-    throw err;
-  }
-}
-
 export interface OwnRepoDto {
   id: string;
   fullName: string;

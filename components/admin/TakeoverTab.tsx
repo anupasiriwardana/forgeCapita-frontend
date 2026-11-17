@@ -366,12 +366,14 @@ function CaseDetail({ id, role, onChanged }: { id: string; role: UserRole; onCha
 export function TakeoverTab({ role }: { role: UserRole }) {
   const [offset, setOffset] = useState(0);
   const [status, setStatus] = useState<TakeoverStatus | "">("");
+  const [chainId, setChainId] = useState<number | "">("");
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = useCallback(
-    (signal: AbortSignal) => listTakeoverCases({ status: status || undefined, limit: ADMIN_PAGE_SIZE, offset }, signal),
-    [status, offset],
+    (signal: AbortSignal) =>
+      listTakeoverCases({ status: status || undefined, chainId: chainId || undefined, limit: ADMIN_PAGE_SIZE, offset }, signal),
+    [status, chainId, offset],
   );
   const { page, error, loading } = useAdminList(load, reloadKey);
   const items = page?.items ?? [];
@@ -398,6 +400,21 @@ export function TakeoverTab({ role }: { role: UserRole }) {
           <option value="">all statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          className="input-field"
+          style={{ width: "180px" }}
+          value={chainId}
+          onChange={(e) => {
+            setChainId(SUPPORTED_CHAINS.find((c) => String(c.id) === e.target.value)?.id ?? "");
+            setOffset(0);
+          }}
+          aria-label="Filter by chain"
+        >
+          <option value="">all chains</option>
+          {SUPPORTED_CHAINS.map((c) => (
+            <option key={c.id} value={c.id}>{chainName(c.id)}</option>
           ))}
         </select>
         <button type="button" className="btn-secondary" onClick={refresh}>
