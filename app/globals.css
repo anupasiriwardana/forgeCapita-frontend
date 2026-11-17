@@ -434,3 +434,91 @@ textarea.input-field { resize: vertical; min-height: 100px; }
     order: -1;
   }
 }
+
+/* App shell */
+.shell-topbar {
+  background: rgba(5, 7, 15, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.shell-link {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  color: rgba(241,245,249,0.7);
+  border: 1px solid transparent;
+}
+.shell-link:hover { color: #a78bfa; }
+.shell-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: rgba(5, 7, 15, 0.95);
+  border-right: 1px solid rgba(255,255,255,0.07);
+  transition: width 0.15s;
+}
+.shell-sidebar.shell-collapsed { width: 64px; }
+.shell-brand { height: 64px; display: flex; align-items: center; padding: 0 16px; overflow: hidden; }
+.shell-sidebar.shell-collapsed .shell-brand-text { display: none; }
+.shell-group-label {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(241,245,249,0.45);
+}
+.shell-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 2px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  color: rgba(241,245,249,0.7);
+}
+.shell-item:hover { color: #a78bfa; }
+.shell-item:focus-visible, .shell-link:focus-visible, .shell-hamburger:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+.shell-item-active {
+  color: #a78bfa;
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+.shell-bottom {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.shell-bottom > div { padding: 4px 12px; }
+.shell-content { margin-left: 240px; transition: margin-left 0.15s; }
+.shell-content.shell-content-collapsed { margin-left: 64px; }
+.shell-hamburger { display: none; }
+@media (max-width: 767px) {
+  .shell-sidebar { transform: translateX(-100%); width: 240px !important; transition: transform 0.2s; }
+  .shell-sidebar.shell-open { transform: translateX(0); }
+  .shell-content, .shell-content.shell-content-collapsed { margin-left: 0; }
+  .shell-hamburger { display: inline-flex; }
+  .shell-backdrop { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,0.5); }
+  .shell-collapse-btn { display: none; }
+}

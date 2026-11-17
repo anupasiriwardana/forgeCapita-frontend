@@ -319,6 +319,14 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [ ] **FE-107** (added 2026-11-08) Review the new transitive @x402/* and @solana/* packages (from wallet connector peer/optional deps): confirm they are unused/tree-shaken and check bundle size.
 - [ ] **FE-108** (added 2026-11-08) Note: `use-sync-external-store` peer warning with React 19 (valtio 1.13.2 via WalletConnect) is a warning only; revisit when WalletConnect updates.
 
+## Phase 8: Navigation and information architecture redesign (WS-18, added 2026-11-17)
+
+- [x] **FE-154** (WS-18.1; code-done 2026-11-17, runtime not verified. Implemented as one `components/shell/AppShell.tsx` from `app/layout.tsx` instead of route groups; landing after the shell's Sign in click: investor/founder -> /portfolio, staff/admin -> /admin; Navbar.tsx deleted; top-bar 'How it works' / 'About' links arrive with WS-18.2) App shell: `(public)` and `(app)` route groups, slim public top bar (logo = home, Projects / How it works / About) + footer, role-aware sidebar (lucide icons, collapses to icons, mobile drawer, address + role badge + sign out at the bottom), sign-in landing on /portfolio. No content moves, no URL changes. Replaces components/Navbar.tsx.
+- [ ] **FE-155** (WS-18.2) Public landing, /projects marketplace, /how-it-works, /about, /legal, FAQ at the bottom of the landing page; includes former FE-152 slice 17.3b glyphs.
+- [ ] **FE-156** (WS-18.3) Admin split into /admin/* routes under a shared layout.
+- [ ] **FE-157** (WS-18.4) Founder split into /founder/* routes, Launch project at /founder/launch, /launches under the founder area.
+- [ ] **FE-158** (WS-18.5) Merged investor Portfolio (overview on top) plus p2p and milestones glyphs (former FE-152 slice 17.3c).
+
 ## Extra features (post-MVP, not required for MVP)
 
 Items the user explicitly deferred. They keep their IDs and text; do not select them for a step unless the user asks.

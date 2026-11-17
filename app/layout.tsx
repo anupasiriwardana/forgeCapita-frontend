@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Providers } from "@/components/web3/Providers";
-import { Navbar } from "@/components/Navbar";
+import { AppShell } from "@/components/shell/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -30,8 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           />
 
           <div className="page-wrapper">
-            <Navbar />
-            <main>{children}</main>
+            <AppShell>{children}</AppShell>
           </div>
         </Providers>
       </body>
