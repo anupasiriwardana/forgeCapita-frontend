@@ -13,6 +13,9 @@ import { parseEther } from "viem";
 import { getFeeOverrides } from "@/lib/fees";
 import { ApiError, getProject, formatEth, fundingProgress, shortAddr, type ProjectDto } from "@/lib/api";
 import Link from "next/link";
+import { AlertTriangle, ArrowLeft, ArrowRight, Coins, FileText, Globe, Link2, Plug, SearchX, Vote, Zap } from "lucide-react";
+import { StatusIcon } from "@/components/ui/StatusIcon";
+import { ProjectStatusBadge } from "@/components/ProjectStatusBadge";
 import { Suspense } from "react";
 import { chainCurrency, chainName } from "@/config/chains";
 import { ReportProblem } from "@/components/ComplaintDialog";
@@ -32,15 +35,6 @@ import {
   type FundingPhase,
   type FundingPhaseInput,
 } from "@/lib/projectState";
-
-const STATE_BADGE: Record<ProjectDto["state"], { label: string; className: string }> = {
-  FUNDING: { label: "🟢 Funding", className: "badge-active" },
-  ACTIVE: { label: "🟢 Active", className: "badge-active" },
-  COMPLETED: { label: "✅ Completed", className: "badge-brand" },
-  FAILED: { label: "⚫ Failed", className: "badge-inactive" },
-  CANCELLED: { label: "⚫ Cancelled", className: "badge-inactive" },
-  SHUTDOWN: { label: "⚫ Shut down", className: "badge-inactive" },
-};
 
 function formatDate(seconds: bigint): string {
   return new Date(Number(seconds) * 1000).toLocaleString();
@@ -106,12 +100,13 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
   return (
     <div className="glass-card" style={{ padding: "28px" }}>
       <h2 style={{ fontSize: "20px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px" }}>
-        💰 Fund This Project
+        <Coins size={20} aria-hidden="true" />
+        Fund This Project
       </h2>
 
       {!isConnected ? (
         <div className="alert alert-warning">
-          <span>🔌</span>
+          <Plug size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
           <span>Connect your wallet to fund this project.</span>
         </div>
       ) : (
@@ -119,7 +114,7 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
           <ProfileRequiredNotice />
           {wrongChain && (
             <div className="alert alert-warning" style={{ marginBottom: "16px" }}>
-              <span>⚠️</span>
+              <AlertTriangle size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
               <span>Switch your wallet to this project&apos;s network (chain {project.chainId}) to fund it.</span>
             </div>
           )}
@@ -141,7 +136,7 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
               disabled={txStatus === "pending" || !ethAmount || wrongChain || !writeAllowed}
               style={{ flexShrink: 0, padding: "12px 20px" }}
             >
-              {txStatus === "pending" ? <span className="spinner" style={{ width: "16px", height: "16px" }} /> : "Fund ⚡"}
+              {txStatus === "pending" ? <span className="spinner" style={{ width: "16px", height: "16px" }} /> : <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>Fund<Zap size={16} aria-hidden="true" /></span>}
             </button>
           </div>
 
@@ -162,13 +157,13 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
 
           {txStatus === "success" && (
             <div className="alert alert-success">
-              <span>✅</span>
+              <StatusIcon state="done" />
               <span>Funding transaction submitted! Tokens will be claimable after funding closes.</span>
             </div>
           )}
           {txStatus === "error" && (
             <div className="alert alert-error">
-              <span>⚠️</span>
+              <StatusIcon state="warning" label="Error" />
               <span>{txError}</span>
             </div>
           )}
@@ -237,13 +232,14 @@ function ProjectDetailInner({ id }: { id: string }) {
   if (!project) {
     return (
       <div style={{ textAlign: "center", padding: "80px 24px" }}>
-        <div style={{ fontSize: "56px", marginBottom: "16px" }}>🔍</div>
+        <div style={{ marginBottom: "16px", color: "var(--text-muted)" }}><SearchX size={48} aria-hidden="true" /></div>
         <h2 style={{ fontSize: "22px", marginBottom: "8px" }}>Project Not Found</h2>
         <p style={{ color: "var(--text-muted)", marginBottom: "24px" }}>
           This project does not exist in the on-chain registry yet.
         </p>
-        <Link href="/" className="btn-secondary" style={{ display: "inline-flex" }}>
-          ← Back to Marketplace
+        <Link href="/projects" className="btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          <ArrowLeft size={16} aria-hidden="true" />
+          Back to Marketplace
         </Link>
       </div>
     );
@@ -269,8 +265,9 @@ function ProjectDetailInner({ id }: { id: string }) {
     <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "48px 24px" }}>
       {/* Breadcrumb */}
       <div className="fade-in-up" style={{ marginBottom: "24px" }}>
-        <Link href="/" style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>
-          ← Marketplace
+        <Link href="/projects" style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          <ArrowLeft size={16} aria-hidden="true" />
+          Marketplace
         </Link>
         <span style={{ color: "var(--text-muted)", margin: "0 8px", fontSize: "14px" }}>/</span>
         <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{name || shortAddr(project.escrowAddress)}</span>
@@ -309,20 +306,20 @@ function ProjectDetailInner({ id }: { id: string }) {
               <div>
                 <h1 style={{ fontSize: "28px", margin: "0 0 8px" }}>{name || "Unnamed Project"}</h1>
                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-                  <span className={`badge ${STATE_BADGE[shownState].className}`}>
-                    {STATE_BADGE[shownState].label}
-                  </span>
+                  <ProjectStatusBadge status={shownState} />
                   {phaseText && (
                     <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{phaseText}</span>
                   )}
                   {profile?.websiteUrl && (
                     <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer" className="badge badge-brand" style={{ textDecoration: "none" }}>
-                      🌐 Website
+                      <Globe size={14} aria-hidden="true" />
+                      Website
                     </a>
                   )}
                   {profile?.pitchDeckUrl && (
                     <a href={profile.pitchDeckUrl} target="_blank" rel="noopener noreferrer" className="badge badge-pending" style={{ textDecoration: "none" }}>
-                      📄 Pitch Deck
+                      <FileText size={14} aria-hidden="true" />
+                      Pitch Deck
                     </a>
                   )}
                 </div>
@@ -380,7 +377,7 @@ function ProjectDetailInner({ id }: { id: string }) {
 
           {/* Contract Info */}
           <div className="glass-card fade-in-up fade-in-up-2" style={{ padding: "24px", marginBottom: "24px" }}>
-            <h2 style={{ fontSize: "16px", marginBottom: "16px" }}>⛓️ Contract Details</h2>
+            <h2 style={{ fontSize: "16px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}><Link2 size={16} aria-hidden="true" />Contract Details</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px" }}>
                 <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Escrow Address</span>
@@ -416,13 +413,13 @@ function ProjectDetailInner({ id }: { id: string }) {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <span style={{ fontSize: "24px" }}>🗳️</span>
+              <span style={{ color: "var(--brand-accent)", display: "inline-flex" }}><Vote size={24} aria-hidden="true" /></span>
               <div>
                 <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>Milestone Governance</div>
                 <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Vote on milestones and release funds</div>
               </div>
             </div>
-            <span style={{ color: "var(--brand-accent)", fontSize: "18px" }}>→</span>
+            <ArrowRight size={20} aria-hidden="true" style={{ color: "var(--brand-accent)" }} />
           </Link>
 
           <div style={{ marginTop: "24px" }}>

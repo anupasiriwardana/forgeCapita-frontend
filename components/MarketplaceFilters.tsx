@@ -25,7 +25,7 @@ export function MarketplaceFilters({ current }: { current: Filters }) {
 
   function apply(patch: Partial<Filters>): void {
     const qs = toQueryString({ ...current, ...patch, page: 1 });
-    router.replace(qs ? `/?${qs}` : "/", { scroll: false });
+    router.replace(qs ? `/projects?${qs}` : "/projects", { scroll: false });
   }
 
   useEffect(() => {

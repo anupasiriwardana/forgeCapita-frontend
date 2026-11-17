@@ -455,7 +455,7 @@ function MilestonesContent({ id }: { id: string }) {
     <div style={{ maxWidth: "760px", margin: "0 auto", padding: "48px 24px" }}>
       {/* Breadcrumb */}
       <div className="fade-in-up" style={{ marginBottom: "24px" }}>
-        <Link href="/" style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>← Marketplace</Link>
+        <Link href="/projects" style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>← Marketplace</Link>
         <span style={{ color: "var(--text-muted)", margin: "0 8px", fontSize: "14px" }}>/</span>
         <Link href={`/projects/${encodeURIComponent(id)}`} style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>Project</Link>
         <span style={{ color: "var(--text-muted)", margin: "0 8px", fontSize: "14px" }}>/</span>

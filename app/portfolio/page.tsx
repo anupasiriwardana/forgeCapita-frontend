@@ -299,7 +299,7 @@ export default function PortfolioPage() {
 
       {isConnected && !error && positions !== null && positions.length === 0 && (
         <p style={{ color: "var(--text-muted)" }}>
-          No positions yet. <Link href="/">Browse projects</Link>
+          No positions yet. <Link href="/projects">Browse projects</Link>
         </p>
       )}
 

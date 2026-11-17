@@ -43,7 +43,7 @@ function buildGroups(role: string): NavGroup[] {
   }
   const main: NavItem[] = [
     { href: "/portfolio", label: "Portfolio", icon: Wallet },
-    { href: "/", label: "Marketplace", icon: LayoutGrid },
+    { href: "/projects", label: "Marketplace", icon: LayoutGrid },
     { href: "/p2p", label: "P2P Market", icon: ArrowLeftRight },
   ];
   if (role === "investor") main.push({ href: "/apply", label: "Become a founder", icon: Rocket });
@@ -63,7 +63,9 @@ function buildGroups(role: string): NavGroup[] {
 }
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/" || (pathname.startsWith("/projects/") && !pathname.startsWith("/projects/create"));
+  if (href === "/projects") {
+    return pathname === "/projects" || (pathname.startsWith("/projects/") && !pathname.startsWith("/projects/create"));
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
