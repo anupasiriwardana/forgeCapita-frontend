@@ -33,7 +33,7 @@ export function AuditLogTab() {
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Audit log</h2>
+      <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>Audit log</h1>
       <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
         <input
           className="input-field"

@@ -88,3 +88,25 @@ export const ROW_STYLE: React.CSSProperties = {
   borderBottom: "1px solid var(--border)",
   fontSize: "13px",
 };
+
+export function SafeLink({ href }: { href: string }) {
+  if (!href.startsWith("https://")) return <span>{href}</span>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)", wordBreak: "break-all" }}>
+      {href}
+    </a>
+  );
+}
+
+export function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: "10px" }}>
+      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{label}</div>
+      <div style={{ fontSize: "14px", wordBreak: "break-word" }}>{children}</div>
+    </div>
+  );
+}
+
+export function badgeClass(status: string): string {
+  return status === "approved" ? "badge-active" : status === "pending" ? "badge-pending" : "badge-inactive";
+}

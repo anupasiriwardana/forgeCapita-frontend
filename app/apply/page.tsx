@@ -198,7 +198,7 @@ export default function ApplyPage() {
   } else if (role === "staff" || role === "admin") {
     content = (
       <div className="alert alert-warning">
-        Applications are for investors and founders. Review them in <Link href="/admin">Admin</Link>.
+        Applications are for investors and founders. Review them in <Link href="/admin/applications">Admin</Link>.
       </div>
     );
   } else if (fetchedFor !== userId) {

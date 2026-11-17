@@ -40,7 +40,7 @@ export function LaunchDraftsTab() {
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Launch drafts</h2>
+      <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>Launch drafts</h1>
       <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "12px" }}>
         Pending drafts hold the founder&apos;s shadow wallet until cancelled or confirmed.
       </p>

@@ -56,7 +56,7 @@ export function SessionControls() {
   useEffect(() => {
     if (!landing || !user || handledRef.current) return;
     handledRef.current = true;
-    router.push(user.role === "staff" || user.role === "admin" ? "/admin" : "/portfolio");
+    router.push(user.role === "staff" || user.role === "admin" ? "/admin/applications" : "/portfolio");
   }, [landing, user, router]);
 
   async function handleSignIn(): Promise<void> {

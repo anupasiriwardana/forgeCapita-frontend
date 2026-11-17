@@ -252,7 +252,7 @@ export function PlatformFeesTab() {
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "8px" }}>Platform fees</h2>
+      <h1 style={{ fontSize: "22px", marginBottom: "8px" }}>Platform fees</h1>
       <p style={{ ...MUTED, marginBottom: "16px" }}>
         The 1% revenue platform fee accrues in each project&apos;s revenue router. The 5% funding fee and the 1% P2P fee are
         sent automatically.

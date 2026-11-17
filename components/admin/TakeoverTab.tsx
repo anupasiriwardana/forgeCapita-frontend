@@ -381,7 +381,7 @@ export function TakeoverTab({ role }: { role: UserRole }) {
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Takeover</h2>
+      <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>Takeover</h1>
       <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "12px" }}>
         Advisory votes on replacing a project developer. Staff prepare cases; admins open and close them.
       </p>

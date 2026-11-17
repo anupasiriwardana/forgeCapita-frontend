@@ -325,7 +325,7 @@ Typography: Inter or Geist, monospace for addresses and hashes.
 - [x] **FE-154** (WS-18.1; code-done 2026-11-17, runtime not verified. Implemented as one `components/shell/AppShell.tsx` from `app/layout.tsx` instead of route groups; landing after the shell's Sign in click: investor/founder -> /portfolio, staff/admin -> /admin; Navbar.tsx deleted; top-bar 'How it works' / 'About' links arrive with WS-18.2) App shell: `(public)` and `(app)` route groups, slim public top bar (logo = home, Projects / How it works / About) + footer, role-aware sidebar (lucide icons, collapses to icons, mobile drawer, address + role badge + sign out at the bottom), sign-in landing on /portfolio. No content moves, no URL changes. Replaces components/Navbar.tsx.
 - [x] **FE-155** (WS-18.2) Public landing, /projects marketplace, /how-it-works, /about, /legal, FAQ at the bottom of the landing page; includes former FE-152 slice 17.3b glyphs.
   - CODE-DONE 2026-11-17 (tracker code read, tsc/eslint ok); awaiting user test; browser, details/summary styling (chevron does not rotate), mobile and build NOT verified. /legal carries a draft / not lawyer-reviewed banner.
-- [ ] **FE-156** (WS-18.3) Admin split into /admin/* routes under a shared layout.
+- [x] **FE-156** (WS-18.3) Admin split into /admin/* routes under a shared layout. (code-done 2026-11-17, awaiting-review; browser and build NOT verified)
 - [ ] **FE-157** (WS-18.4) Founder split into /founder/* routes, Launch project at /founder/launch, /launches under the founder area.
 - [ ] **FE-158** (WS-18.5) Merged investor Portfolio (overview on top) plus p2p and milestones glyphs (former FE-152 slice 17.3c).
 

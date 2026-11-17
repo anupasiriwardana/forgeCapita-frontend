@@ -5,8 +5,16 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
+  Banknote,
   ChevronsLeft,
   ChevronsRight,
+  FileText,
+  FilePenLine,
+  MessageSquareWarning,
+  Radio,
+  ScrollText,
+  UserCheck,
+  Users,
   LayoutDashboard,
   LayoutGrid,
   ListChecks,
@@ -34,12 +42,42 @@ interface NavGroup {
 
 const PROFILE: NavItem = { href: "/profile", label: "Profile", icon: User };
 
+function adminGroups(role: string): NavGroup[] {
+  const people: NavItem[] = [
+    { href: "/admin/applications", label: "Applications", icon: FileText },
+    { href: "/admin/wallets", label: "Shadow wallets", icon: Wallet },
+  ];
+  if (role === "admin") people.push({ href: "/admin/users", label: "Users", icon: Users });
+  return [
+    { label: "People", items: people },
+    {
+      label: "Launches",
+      items: [
+        { href: "/admin/drafts", label: "Launch drafts", icon: FilePenLine },
+        { href: "/admin/takeover", label: "Takeover", icon: UserCheck },
+      ],
+    },
+    {
+      label: "Money",
+      items: [
+        { href: "/admin/compliance", label: "Compliance", icon: ShieldCheck },
+        { href: "/admin/fees", label: "Platform fees", icon: Banknote },
+        { href: "/admin/relay", label: "Relay", icon: Radio },
+      ],
+    },
+    {
+      label: "Oversight",
+      items: [
+        { href: "/admin/audit", label: "Audit log", icon: ScrollText },
+        { href: "/admin/complaints", label: "Complaints", icon: MessageSquareWarning },
+      ],
+    },
+  ];
+}
+
 function buildGroups(role: string): NavGroup[] {
   if (role === "staff" || role === "admin") {
-    return [
-      { label: "Admin", items: [{ href: "/admin", label: "Admin console", icon: ShieldCheck }] },
-      { label: null, items: [PROFILE] },
-    ];
+    return [...adminGroups(role), { label: null, items: [PROFILE] }];
   }
   const main: NavItem[] = [
     { href: "/portfolio", label: "Portfolio", icon: Wallet },

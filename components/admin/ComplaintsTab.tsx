@@ -92,7 +92,7 @@ export function ComplaintsTab() {
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Complaints</h2>
+      <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>Complaints</h1>
       <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "12px" }}>
         Investor reports about projects. Visible to staff and the reporter only. Notes you add are shown to the reporter.
       </p>

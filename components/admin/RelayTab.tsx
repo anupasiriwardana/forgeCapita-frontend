@@ -111,7 +111,7 @@ export function RelayTab() {
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Relay</h2>
+      <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>Relay</h1>
       <RelayerStatusStrip reloadKey={reloadKey} />
       <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
         <select

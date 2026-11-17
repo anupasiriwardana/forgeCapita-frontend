@@ -104,7 +104,7 @@ export function ComplianceTab() {
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Compliance</h2>
+      <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>Compliance</h1>
       <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "12px" }}>
         Revenue audit cases comparing observed inflows with revenue routed to the protocol.
       </p>
