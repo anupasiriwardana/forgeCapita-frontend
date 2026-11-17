@@ -84,6 +84,11 @@ function badgeClass(status: string): string {
   return status === "approved" ? "badge-active" : status === "pending" ? "badge-pending" : "badge-inactive";
 }
 
+function aboutExcerpt(a: ApplicationDto): string {
+  const text = a.about ?? a.summary ?? "";
+  return text.length > 80 ? `${text.slice(0, 80)}…` : text;
+}
+
 function ApplicationsSection({ selfAddress }: { selfAddress: string }) {
   const [tab, setTab] = useState<ApplicationStatus | "all">("pending");
   const [offset, setOffset] = useState(0);
@@ -263,7 +268,10 @@ function ApplicationsSection({ selfAddress }: { selfAddress: string }) {
               fontSize: "14px",
             }}
           >
-            <span>{a.projectName}</span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {a.projectName ? `${a.projectName}: ` : ""}
+              {aboutExcerpt(a)}
+            </span>
             <span>{shortAddr(a.walletAddress)}</span>
             <span><span className={`badge ${badgeClass(a.status)}`}>{a.status}</span></span>
             <span style={{ color: "var(--text-secondary)" }}>{new Date(a.createdAt).toLocaleString()}</span>
@@ -278,19 +286,33 @@ function ApplicationsSection({ selfAddress }: { selfAddress: string }) {
             <p style={{ color: "var(--text-secondary)" }}>Loading…</p>
           ) : (
             <>
-              <h3 style={{ fontSize: "18px", marginBottom: "12px" }}>{detail.projectName}</h3>
+              <h3 style={{ fontSize: "18px", marginBottom: "12px" }}>Founder application</h3>
               <Row label="Status">{detail.status}</Row>
               <Row label="Wallet">{detail.walletAddress}</Row>
-              <Row label="Summary"><span style={{ whiteSpace: "pre-wrap" }}>{detail.summary}</span></Row>
-              <Row label="Website"><SafeLink href={detail.websiteUrl} /></Row>
-              <Row label="Pitch deck"><SafeLink href={detail.pitchDeckUrl} /></Row>
-              {detail.repoUrl && <Row label="Repository"><SafeLink href={detail.repoUrl} /></Row>}
-              {detail.contact && <Row label="Contact">{detail.contact}</Row>}
+              {detail.about && <Row label="About"><span style={{ whiteSpace: "pre-wrap" }}>{detail.about}</span></Row>}
+              <Row label="Resume">
+                {detail.resumeUrl ? <SafeLink href={detail.resumeUrl} /> : "No resume link (legacy application)"}
+              </Row>
+              {detail.linkedinUrl && <Row label="LinkedIn"><SafeLink href={detail.linkedinUrl} /></Row>}
+              {detail.githubUrl && <Row label="GitHub"><SafeLink href={detail.githubUrl} /></Row>}
+              {detail.portfolioUrl && <Row label="Portfolio"><SafeLink href={detail.portfolioUrl} /></Row>}
+              {detail.otherLinks?.map((link) => <Row key={link} label="Other link"><SafeLink href={link} /></Row>)}
               <Row label="Submitted">{new Date(detail.createdAt).toLocaleString()}</Row>
               <Row label="KYC documents link">
                 {detail.kycDocsUrl ? <SafeLink href={detail.kycDocsUrl} /> : "No documents link (submitted before this field existed)"}
               </Row>
               {detail.kycNote && <Row label="Applicant note"><span style={{ whiteSpace: "pre-wrap" }}>{detail.kycNote}</span></Row>}
+              {(detail.projectName || detail.summary || detail.websiteUrl || detail.pitchDeckUrl || detail.repoUrl || detail.contact) && (
+                <div style={{ marginBottom: "10px" }}>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px" }}>Legacy project details</div>
+                  {detail.projectName && <Row label="Project name">{detail.projectName}</Row>}
+                  {detail.summary && <Row label="Summary"><span style={{ whiteSpace: "pre-wrap" }}>{detail.summary}</span></Row>}
+                  {detail.websiteUrl && <Row label="Website"><SafeLink href={detail.websiteUrl} /></Row>}
+                  {detail.pitchDeckUrl && <Row label="Pitch deck"><SafeLink href={detail.pitchDeckUrl} /></Row>}
+                  {detail.repoUrl && <Row label="Repository"><SafeLink href={detail.repoUrl} /></Row>}
+                  {detail.contact && <Row label="Contact">{detail.contact}</Row>}
+                </div>
+              )}
               <div style={{ marginBottom: "10px" }}>
                 <button type="button" className="btn-secondary" disabled={profileLoading} onClick={() => viewProfile(detail.walletAddress)}>
                   {profileLoading ? "Loading…" : "View applicant profile"}

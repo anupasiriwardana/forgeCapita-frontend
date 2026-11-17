@@ -471,12 +471,18 @@ export type UserRole = ManagedRole | "admin";
 export interface ApplicationDto {
   id: string;
   walletAddress: string;
-  projectName: string;
-  summary: string;
-  websiteUrl: string;
-  pitchDeckUrl: string;
-  repoUrl: string | null;
-  contact: string | null;
+  about: string | null;
+  linkedinUrl: string | null;
+  githubUrl: string | null;
+  portfolioUrl: string | null;
+  otherLinks: string[] | null;
+  /** Legacy project fields: only set on applications submitted before the redesign. */
+  projectName?: string | null;
+  summary?: string | null;
+  websiteUrl?: string | null;
+  pitchDeckUrl?: string | null;
+  repoUrl?: string | null;
+  contact?: string | null;
   status: ApplicationStatus;
   reviewNote: string | null;
   reviewedAt: string | null;
@@ -487,6 +493,7 @@ export interface ApplicationDto {
   reviewedBy?: string | null;
   kycVerifiedBy?: string | null;
   /** Staff DTO only; never present for the applicant. */
+  resumeUrl?: string | null;
   kycDocsUrl?: string | null;
   kycNote?: string | null;
 }
@@ -519,12 +526,12 @@ export interface Page<T> {
 }
 
 export interface ApplicationInput {
-  projectName: string;
-  summary: string;
-  websiteUrl: string;
-  pitchDeckUrl: string;
-  repoUrl?: string;
-  contact?: string;
+  resumeUrl: string;
+  about: string;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  portfolioUrl?: string;
+  otherLinks?: string[];
   kycDocsUrl: string;
   kycNote?: string;
 }
@@ -542,9 +549,10 @@ export async function submitApplication(
   body: ApplicationInput,
   signal?: AbortSignal,
 ): Promise<ApplicationDto> {
-  const clean: Record<string, string> = {};
+  const clean: Record<string, string | string[]> = {};
   for (const [key, value] of Object.entries(body)) {
     if (typeof value === "string" && value !== "") clean[key] = value;
+    else if (Array.isArray(value) && value.length > 0) clean[key] = value;
   }
   const data = await apiFetch<{ application: ApplicationDto }>("/applications", {
     method: "POST",
