@@ -4,6 +4,8 @@ import { useState, Suspense } from "react";
 import { useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWriteContract, useAccount, useChainId, useConfig, usePublicClient } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
+import { ArrowLeftRight, Inbox, Plug, X } from "lucide-react";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import { isAddress, parseEther, parseUnits, parseEventLogs, formatUnits, type PublicClient, type TransactionReceipt } from "viem";
 import { fetchActiveListings, fetchRecentTrades, formatEth, shortAddr, type P2PListing } from "@/lib/api";
 import { formatTokenAmount } from "@/lib/format";
@@ -162,18 +164,21 @@ function CreateListingModal({
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-content">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-          <h2 style={{ fontSize: "20px", margin: 0 }}>💱 Create Listing</h2>
+          <h2 style={{ fontSize: "20px", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+            <ArrowLeftRight size={20} aria-hidden="true" /> Create Listing
+          </h2>
           <button
             onClick={onClose}
-            style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: "22px", cursor: "pointer", padding: "4px" }}
+            aria-label="Close"
+            style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", display: "flex" }}
           >
-            ×
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
 
         {txStatus === "success" ? (
           <div className="alert alert-success">
-            <span>✅</span>
+            <StatusIcon state="done" label="Success" />
             <span>Listing created and visible now.</span>
           </div>
         ) : (
@@ -246,7 +251,7 @@ function CreateListingModal({
 
               {txStatus === "error" && (
                 <div className="alert alert-error">
-                  <span>⚠️</span>
+                  <StatusIcon state="warning" label="Warning" />
                   <span style={{ fontSize: "13px" }}>{txError}</span>
                 </div>
               )}
@@ -465,7 +470,7 @@ function P2PContent() {
       {/* Header */}
       <div className="fade-in-up" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "48px", flexWrap: "wrap", gap: "20px" }}>
         <div>
-          <span className="section-tag">💱 Secondary Market</span>
+          <span className="section-tag"><ArrowLeftRight size={14} aria-hidden="true" /> Secondary Market</span>
           <h1 style={{ fontSize: "36px", margin: "0 0 12px" }}>
             P2P <span className="gradient-text-teal">Token Exchange</span>
           </h1>
@@ -519,19 +524,21 @@ function P2PContent() {
       {/* Wallet/Error alerts */}
       {!isConnected && (
         <div className="alert alert-warning fade-in-up" style={{ marginBottom: "24px" }}>
-          <span>🔌</span> Connect your wallet to buy tokens or create listings.
+          <Plug size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Connect your wallet to buy tokens or create listings.
         </div>
       )}
       {buyError && (
         <div className="alert alert-error fade-in-up" style={{ marginBottom: "24px" }}>
-          <span>⚠️</span> {buyError}
+          <StatusIcon state="warning" label="Warning" /> {buyError}
         </div>
       )}
 
       {/* Listings grid */}
       {listings.length === 0 ? (
         <div style={{ textAlign: "center", padding: "80px 24px" }}>
-          <div style={{ fontSize: "56px", marginBottom: "16px" }}>📭</div>
+          <div style={{ marginBottom: "16px", color: "var(--text-muted)" }}>
+            <Inbox size={48} aria-hidden="true" />
+          </div>
           <h2 style={{ fontSize: "22px", marginBottom: "8px" }}>No Active Listings</h2>
           <p style={{ color: "var(--text-muted)", marginBottom: "24px" }}>
             Be the first to list project tokens on the secondary market.

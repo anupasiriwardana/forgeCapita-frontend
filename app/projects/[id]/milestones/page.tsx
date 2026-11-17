@@ -18,6 +18,8 @@ import {
   type RelayFailure,
 } from "@/lib/relay";
 import Link from "next/link";
+import { ArrowLeft, Check, CheckCircle2, Clock, Info, Plug, Target, ThumbsDown, ThumbsUp, Vote } from "lucide-react";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import { barWidthPct, formatVotes, pctOfSupply } from "@/lib/format";
 
 function MilestoneCard({
@@ -159,11 +161,15 @@ function MilestoneCard({
     ? "var(--amber)"
     : "var(--text-muted)";
 
-  const statusLabel = milestone.isExecuted
-    ? "Executed ✓"
-    : milestone.isVotingOpen
-    ? "Voting Open"
-    : "Pending";
+  const statusLabel = milestone.isExecuted ? (
+    <>
+      <CheckCircle2 size={14} aria-hidden="true" style={{ verticalAlign: "text-bottom" }} /> Executed
+    </>
+  ) : milestone.isVotingOpen ? (
+    "Voting Open"
+  ) : (
+    "Pending"
+  );
 
   return (
     <div
@@ -195,7 +201,14 @@ function MilestoneCard({
               color: statusColor,
             }}
           >
-            {milestone.isExecuted ? "✓" : milestone.milestoneIndex + 1}
+            {milestone.isExecuted ? (
+              <>
+                <Check size={16} aria-hidden="true" />
+                <span className="sr-only">Executed</span>
+              </>
+            ) : (
+              milestone.milestoneIndex + 1
+            )}
           </div>
           <div>
             <div style={{ fontWeight: 700, fontSize: "15px", color: "var(--text-primary)" }}>
@@ -263,15 +276,15 @@ function MilestoneCard({
         <div>
           {!isConnected ? (
             <div className="alert alert-warning" style={{ fontSize: "13px" }}>
-              <span>🔌</span> Connect wallet to vote
+              <Plug size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Connect wallet to vote
             </div>
           ) : voteStatus === "success" || relayConfirmed || hasVoted ? (
             <div className="alert alert-success" style={{ fontSize: "13px" }}>
-              <span>✅</span> Vote submitted successfully!
+              <StatusIcon state="done" label="Success" /> Vote submitted successfully!
             </div>
           ) : !canVote ? (
             <div className="alert alert-info" style={{ fontSize: "13px" }}>
-              <span>ℹ️</span>{" "}
+              <Info size={16} aria-hidden="true" style={{ flexShrink: 0 }} />{" "}
               {cancelled
                 ? "This project is cancelled."
                 : isDeveloperWallet
@@ -288,7 +301,13 @@ function MilestoneCard({
                   onClick={() => void handleGaslessVote(true)}
                   disabled={!user || relayActive || voteStatus === "pending" || isConfirming}
                 >
-                  {relayBusy && lastSupport ? "Preparing..." : "👍 Vote Yes (gasless)"}
+                  {relayBusy && lastSupport ? (
+                    "Preparing..."
+                  ) : (
+                    <>
+                      <ThumbsUp size={16} aria-hidden="true" style={{ verticalAlign: "text-bottom" }} /> Vote Yes (gasless)
+                    </>
+                  )}
                 </button>
                 <button
                   className="btn-danger"
@@ -296,7 +315,13 @@ function MilestoneCard({
                   onClick={() => void handleGaslessVote(false)}
                   disabled={!user || relayActive || voteStatus === "pending" || isConfirming}
                 >
-                  {relayBusy && !lastSupport ? "Preparing..." : "👎 Vote No (gasless)"}
+                  {relayBusy && !lastSupport ? (
+                    "Preparing..."
+                  ) : (
+                    <>
+                      <ThumbsDown size={16} aria-hidden="true" style={{ verticalAlign: "text-bottom" }} /> Vote No (gasless)
+                    </>
+                  )}
                 </button>
               </div>
               <div style={{ fontSize: "12px", color: "var(--text-muted)", margin: "12px 0 6px" }}>Pay gas yourself</div>
@@ -334,7 +359,7 @@ function MilestoneCard({
           />
           {voteStatus === "error" && (
             <div className="alert alert-error" style={{ marginTop: "8px", fontSize: "13px" }}>
-              <span>⚠️</span> {voteError}
+              <StatusIcon state="warning" label="Warning" /> {voteError}
             </div>
           )}
         </div>
@@ -342,13 +367,13 @@ function MilestoneCard({
 
       {milestone.isExecuted && (
         <div className="alert alert-success" style={{ fontSize: "13px" }}>
-          <span>✅</span> Milestone executed — funds released to developer
+          <StatusIcon state="done" label="Success" /> Milestone executed — funds released to developer
         </div>
       )}
 
       {!milestone.isVotingOpen && !milestone.isExecuted && (
         <div className="alert alert-info" style={{ fontSize: "13px" }}>
-          <span>⏳</span> Voting not yet open for this milestone
+          <Clock size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Voting not yet open for this milestone
         </div>
       )}
     </div>
@@ -455,7 +480,7 @@ function MilestonesContent({ id }: { id: string }) {
     <div style={{ maxWidth: "760px", margin: "0 auto", padding: "48px 24px" }}>
       {/* Breadcrumb */}
       <div className="fade-in-up" style={{ marginBottom: "24px" }}>
-        <Link href="/projects" style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>← Marketplace</Link>
+        <Link href="/projects" style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px", display: "inline-flex", alignItems: "center", gap: "4px" }}><ArrowLeft size={14} aria-hidden="true" /> Marketplace</Link>
         <span style={{ color: "var(--text-muted)", margin: "0 8px", fontSize: "14px" }}>/</span>
         <Link href={`/projects/${encodeURIComponent(id)}`} style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>Project</Link>
         <span style={{ color: "var(--text-muted)", margin: "0 8px", fontSize: "14px" }}>/</span>
@@ -464,7 +489,7 @@ function MilestonesContent({ id }: { id: string }) {
 
       {/* Header */}
       <div className="fade-in-up" style={{ marginBottom: "40px" }}>
-        <span className="section-tag">🗳️ Governance</span>
+        <span className="section-tag"><Vote size={14} aria-hidden="true" /> Governance</span>
         <h1 style={{ fontSize: "32px", margin: "0 0 12px" }}>Milestone Voting</h1>
         <p style={{ color: "var(--text-secondary)", fontSize: "15px", lineHeight: 1.6 }}>
           Review milestone progress and vote to release or withhold funds. Your tokens represent your voting power.
@@ -473,7 +498,7 @@ function MilestonesContent({ id }: { id: string }) {
 
       {/* Info Banner */}
       <div className="alert alert-info fade-in-up" style={{ marginBottom: "32px" }}>
-        <span style={{ fontSize: "16px", flexShrink: 0 }}>ℹ️</span>
+        <Info size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
         <div style={{ fontSize: "13px" }}>
           <strong>How voting works:</strong> Once a milestone is open, token holders can vote Yes or No. If a milestone passes quorum, the developer receives the allocated funds. Failed milestones trigger a refund.
         </div>
@@ -482,7 +507,9 @@ function MilestonesContent({ id }: { id: string }) {
       {/* Milestones List */}
       {milestones.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px 24px" }}>
-          <div style={{ fontSize: "48px", marginBottom: "16px" }}>🎯</div>
+          <div style={{ marginBottom: "16px", color: "var(--text-muted)" }}>
+            <Target size={48} aria-hidden="true" />
+          </div>
           <h3 style={{ fontSize: "18px", marginBottom: "8px", color: "var(--text-primary)" }}>No Milestones Found</h3>
           <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>
             Milestones are indexed by Ponder once the project is funded and closed.

@@ -216,7 +216,8 @@ function ProjectDetailInner({ id }: { id: string }) {
       try {
         return await getProject(id);
       } catch (err) {
-        if (err instanceof ApiError && err.status === 404) return null;
+        // 400 means the id is malformed (e.g. a removed route like /projects/create): same page as a missing project.
+        if (err instanceof ApiError && (err.status === 404 || err.status === 400)) return null;
         throw err;
       }
     },

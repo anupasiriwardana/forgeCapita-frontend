@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAccount, useConfig, useReadContracts } from "wagmi";
 import { formatUnits } from "viem";
+import { Plug } from "lucide-react";
+import { StatusIcon } from "@/components/ui/StatusIcon";
 import {
   fetchInvestorPositions,
   formatEth,
@@ -32,6 +34,14 @@ function formatToken(wei: string): string {
   const [whole = "0", frac = ""] = formatUnits(BigInt(wei), 18).split(".");
   const trimmed = frac.slice(0, 4).replace(/0+$/, "");
   return trimmed ? `${whole}.${trimmed}` : whole;
+}
+
+interface ChainTotals {
+  chainId: number;
+  net: bigint;
+  claimed: bigint;
+  claimable: bigint;
+  claimableKnown: boolean;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -78,7 +88,7 @@ function GaslessRequests() {
   }, []);
 
   return (
-    <section style={{ marginTop: "40px" }}>
+    <section id="gasless-requests" style={{ marginTop: "40px" }}>
       <h2 style={{ fontSize: "20px", marginBottom: "16px" }}>Gasless requests</h2>
 
       {!signedIn && (
@@ -89,7 +99,8 @@ function GaslessRequests() {
 
       {signedIn && error && (
         <div className="alert alert-error" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <span>⚠️ {error}</span>
+          <StatusIcon state="warning" label="Warning" />
+          <span>{error}</span>
           <button className="btn-secondary" onClick={retry}>Retry</button>
         </div>
       )}
@@ -137,6 +148,7 @@ function GaslessRequests() {
 export default function PortfolioPage() {
   const { address, isConnected } = useAccount();
   const config = useConfig();
+  const { role } = useAuth();
   const [positions, setPositions] = useState<InvestorPosition[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
   const [distributors, setDistributors] = useState<Record<string, Addr>>({});
@@ -271,6 +283,39 @@ export default function PortfolioPage() {
     return end.result > BigInt(nowSeconds) ? end.result : null;
   }
 
+  function refundAvailableOf(p: InvestorPosition): boolean {
+    const project = projects[p.projectId];
+    return (
+      BigInt(p.invested) - BigInt(p.refunded) > ZERO &&
+      project !== undefined &&
+      refundsOpenFor(BigInt(nowSeconds), phaseInputOf(project))
+    );
+  }
+
+  // Per-chain totals (different chains use different currencies, so never summed across chains).
+  const chainTotals = new Map<number, ChainTotals>();
+  let refundCount = 0;
+  let openVoteCount = 0;
+  (positions ?? []).forEach((p, index) => {
+    const totals = chainTotals.get(p.chainId) ?? {
+      chainId: p.chainId,
+      net: ZERO,
+      claimed: ZERO,
+      claimable: ZERO,
+      claimableKnown: true,
+    };
+    totals.net += BigInt(p.invested) - BigInt(p.refunded);
+    totals.claimed += BigInt(p.yieldClaimed);
+    const claimable = claimableOf(index);
+    if (claimable === null) totals.claimableKnown = false;
+    else totals.claimable += claimable;
+    chainTotals.set(p.chainId, totals);
+    if (refundAvailableOf(p)) refundCount++;
+    if (openVoteEndOf(index) !== null) openVoteCount++;
+  });
+  const summaryChains = Array.from(chainTotals.values());
+  const founderLink = role === "founder";
+
   return (
     <div style={{ maxWidth: "960px", margin: "0 auto", padding: "40px 24px" }}>
       <h1 style={{ fontSize: "28px", marginBottom: "24px" }}>Portfolio</h1>
@@ -282,13 +327,14 @@ export default function PortfolioPage() {
 
       {!isConnected && (
         <div className="alert alert-warning">
-          <span>🔌</span> Connect your wallet to see your positions.
+          <Plug size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Connect your wallet to see your positions.
         </div>
       )}
 
       {isConnected && error && (
         <div className="alert alert-error" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <span>⚠️ {error}</span>
+          <StatusIcon state="warning" label="Warning" />
+          <span>{error}</span>
           <button className="btn-secondary" onClick={retry}>Retry</button>
         </div>
       )}
@@ -304,17 +350,53 @@ export default function PortfolioPage() {
       )}
 
       {isConnected && !error && positions !== null && positions.length > 0 && (
+        <section aria-labelledby="portfolio-summary" style={{ marginBottom: "24px" }}>
+          <h2 id="portfolio-summary" style={{ fontSize: "20px", marginBottom: "12px" }}>Summary</h2>
+          <div className="glass-card" style={{ padding: "20px" }}>
+            <div style={{ fontSize: "15px", fontWeight: 600, marginBottom: "12px" }}>
+              Positions: {positions.length}
+              {summaryChains.length > 1 ? ` across ${summaryChains.length} chains` : ""}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {summaryChains.map((c) => (
+                <div key={c.chainId}>
+                  <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "6px" }}>{chainName(c.chainId)}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
+                    <Stat label="Net invested" value={`${formatEth(c.net.toString())} ${chainCurrency(c.chainId)}`} />
+                    <Stat
+                      label="Claimable yield"
+                      value={c.claimableKnown ? `${formatEth(c.claimable.toString())} ${chainCurrency(c.chainId)}` : DASH}
+                    />
+                    <Stat label="Yield claimed" value={`${formatEth(c.claimed.toString())} ${chainCurrency(c.chainId)}`} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {(refundCount > 0 || openVoteCount > 0) && (
+              <div style={{ marginTop: "12px", display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "13px" }}>
+                {refundCount > 0 && <span>Refunds available: {refundCount}</span>}
+                {openVoteCount > 0 && <span>Open votes: {openVoteCount}</span>}
+              </div>
+            )}
+            <div style={{ marginTop: "16px", display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "14px" }}>
+              <Link href="/projects">Browse projects</Link>
+              <Link href="/p2p">P2P market</Link>
+              <a href="#gasless-requests">Gasless requests</a>
+              <a href="#my-complaints">My complaints</a>
+              {founderLink && <Link href="/founder/projects">Founder projects</Link>}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {isConnected && !error && positions !== null && positions.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           {positions.map((p, index) => {
             const net = BigInt(p.invested) - BigInt(p.refunded);
             const name = names[p.projectId] || p.tokenSymbol || shortAddr(p.escrowAddress);
             const claimable = claimableOf(index);
             const href = `/projects/${encodeURIComponent(p.projectId)}`;
-            const project = projects[p.projectId];
-            const refundAvailable =
-              net > ZERO &&
-              project !== undefined &&
-              refundsOpenFor(BigInt(nowSeconds), phaseInputOf(project));
+            const refundAvailable = refundAvailableOf(p);
             const voteEnd = openVoteEndOf(index);
             return (
               <div key={p.projectId} className="glass-card" style={{ padding: "20px" }}>
@@ -360,7 +442,9 @@ export default function PortfolioPage() {
       )}
 
       <GaslessRequests />
-      <MyComplaints />
+      <div id="my-complaints">
+        <MyComplaints />
+      </div>
     </div>
   );
 }
