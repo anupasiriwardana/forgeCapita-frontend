@@ -473,7 +473,7 @@ export function TakeoverTab({ role }: { role: UserRole }) {
       listTakeoverCases({ status: status || undefined, chainId: chainId || undefined, limit: ADMIN_PAGE_SIZE, offset }, signal),
     [status, chainId, offset],
   );
-  const { page, error, loading } = useAdminList(load, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(load, reloadKey);
   const items = page?.items ?? [];
   const refresh = (): void => setReloadKey((k) => k + 1);
 
@@ -539,6 +539,7 @@ export function TakeoverTab({ role }: { role: UserRole }) {
       </Card>
       <AdminListCard
         error={error}
+        requestId={requestId}
         errorTitle="Could not load takeover cases"
         onRetry={refresh}
         hasData={page !== null}

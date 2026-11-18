@@ -26,6 +26,10 @@ import { toast } from "@/lib/toast";
 
 const MAX_ATTEMPTS = 8;
 const RETRY_DELAY_MS = 4000;
+
+/** A save failure whose message is already safe to show. */
+class ProfileSaveError extends Error {}
+
 const MAX_URL = 2048;
 const CATEGORY_REGEX = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
@@ -129,11 +133,11 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
         return;
       } catch (err) {
         // Only safe, mapped messages leave this function; raw errors never reach the UI.
-        if (!(err instanceof ApiError)) throw new Error("Profile save failed.");
-        if (err.status !== 404) throw new Error(describeFounderError(err));
+        if (!(err instanceof ApiError)) throw new ProfileSaveError("Profile save failed.");
+        if (err.status !== 404) throw new ProfileSaveError(describeFounderError(err));
         if (attempt >= MAX_ATTEMPTS) {
           setSaveNote("");
-          throw new Error("Your project is not ready yet. Try again shortly.");
+          throw new ProfileSaveError("Your project is not ready yet. Try again shortly.");
         }
         setSaveNote(`Waiting for your project to appear (${attempt}/${MAX_ATTEMPTS})`);
         await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
@@ -162,13 +166,16 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
     setErrorMsg("");
     try {
       await saveWithRetry(input);
-      toast.success("Profile saved.");
-      await queryClient.invalidateQueries({ queryKey: ["project", project.id] });
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Profile save failed.");
-    } finally {
+      // Only the mapped save messages are shown; anything else falls back to a generic text.
+      setErrorMsg(err instanceof ProfileSaveError ? err.message : "Profile save failed.");
       setSaving(false);
+      return;
     }
+    toast.success("Profile saved.");
+    setSaving(false);
+    // A failed refresh only means the page shows the old values until the next refetch; never an error after a save.
+    void queryClient.invalidateQueries({ queryKey: ["project", project.id] }).catch(() => undefined);
   }
 
   const walletChecksOk = eligibility !== null && walletChecksPass(eligibility);

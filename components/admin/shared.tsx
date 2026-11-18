@@ -9,7 +9,12 @@ import { InlineAlert } from "@/components/ui/InlineAlert";
 import { SegmentedControl, type SegmentOption } from "@/components/ui/SegmentedControl";
 import type { StatusTone } from "@/components/ui/StatusPill";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { describeFounderError, type Page } from "@/lib/api";
+import { ApiError, describeFounderError, type Page } from "@/lib/api";
+
+/** The server's request id of a failed call, shown as "Ref: ..." so staff can quote it. */
+export function errorRequestId(err: unknown): string | undefined {
+  return err instanceof ApiError ? err.requestId : undefined;
+}
 import { exactTime, formatAge } from "@/lib/timeAgo";
 
 export const ADMIN_PAGE_SIZE = 20;
@@ -29,13 +34,14 @@ interface Result<T> {
   reloadKey: number;
   page: Page<T> | null;
   error: string;
+  requestId?: string;
 }
 
 /** Loads a page when `load` (memoised by the caller) or `reloadKey` changes; `load === null` skips the fetch. */
 export function useAdminList<T>(
   load: ((signal: AbortSignal) => Promise<Page<T>>) | null,
   reloadKey: number,
-): { page: Page<T> | null; error: string; loading: boolean } {
+): { page: Page<T> | null; error: string; requestId?: string; loading: boolean } {
   const [result, setResult] = useState<Result<T> | null>(null);
 
   useEffect(() => {
@@ -53,6 +59,7 @@ export function useAdminList<T>(
             reloadKey,
             page: prev?.page ?? null,
             error: describeFounderError(err, "Failed to load"),
+            requestId: errorRequestId(err),
           }));
         }
       });
@@ -60,7 +67,12 @@ export function useAdminList<T>(
   }, [load, reloadKey]);
 
   const loading = load !== null && (result === null || result.load !== load || result.reloadKey !== reloadKey);
-  return { page: result?.page ?? null, error: loading ? "" : (result?.error ?? ""), loading };
+  return {
+    page: result?.page ?? null,
+    error: loading ? "" : (result?.error ?? ""),
+    requestId: loading ? undefined : result?.requestId,
+    loading,
+  };
 }
 
 /** Prev / Next pager with an "x-y of total" summary; same paging maths as before the redesign. */
@@ -113,6 +125,7 @@ export function AdminPageHeader({ title, description, actions }: { title: string
  */
 export function AdminListCard({
   error,
+  requestId,
   errorTitle,
   onRetry,
   hasData,
@@ -120,6 +133,7 @@ export function AdminListCard({
   children,
 }: {
   error: string;
+  requestId?: string;
   errorTitle: string;
   onRetry: () => void;
   hasData: boolean;
@@ -131,10 +145,20 @@ export function AdminListCard({
       {error && hasData && (
         <InlineAlert tone="danger" className="panel-gap">
           {error}
+          {requestId && (
+            <>
+              {" "}
+              <span className="mono">Ref: {requestId}</span>
+            </>
+          )}
         </InlineAlert>
       )}
       <Card className="admin-table-card">
-        {error && !hasData ? <ErrorState title={errorTitle} message={error} onRetry={onRetry} /> : children}
+        {error && !hasData ? (
+          <ErrorState title={errorTitle} message={error} requestId={requestId} onRetry={onRetry} />
+        ) : (
+          children
+        )}
         {hasData && footer}
       </Card>
     </>

@@ -105,7 +105,7 @@ export function ComplianceTab() {
       ),
     [offset, state, chain],
   );
-  const { page, error, loading } = useAdminList(load, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(load, reloadKey);
   const items = page?.items ?? [];
 
   const openDialog = (kind: ActionKind, item: ComplianceCaseDto): void => {
@@ -244,6 +244,7 @@ export function ComplianceTab() {
       )}
       <AdminListCard
         error={error}
+        requestId={requestId}
         errorTitle="Could not load compliance cases"
         onRetry={refresh}
         hasData={page !== null}

@@ -18,7 +18,7 @@ import {
   type UserRole,
 } from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { ADMIN_PAGE_SIZE as PAGE_SIZE, AdminListCard, AdminPageHeader, AdminPager as Pager, RelativeTime, statusLabel } from "./shared";
+import { ADMIN_PAGE_SIZE as PAGE_SIZE, AdminListCard, AdminPageHeader, errorRequestId, AdminPager as Pager, RelativeTime, statusLabel } from "./shared";
 
 const PREFIX_REGEX = /^0x[0-9a-f]{0,40}$/;
 const ROLE_FILTERS: (UserRole | "all")[] = ["all", "founder", "staff", "investor", "admin"];
@@ -38,6 +38,7 @@ export function UsersTab() {
   const [items, setItems] = useState<AdminUserDto[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
+  const [errorRef, setErrorRef] = useState<string | undefined>(undefined);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [hasData, setHasData] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -59,12 +60,14 @@ export function UsersTab() {
         setItems(page.items);
         setTotal(page.total);
         setError("");
+        setErrorRef(undefined);
         setHasData(true);
         setLoadedKey(listKey);
       })
       .catch((err: unknown) => {
         if (signal.aborted) return;
         setError(describeApiError(err, "Failed to load users"));
+        setErrorRef(errorRequestId(err));
         setLoadedKey(listKey);
       });
     return () => controller.abort();
@@ -158,6 +161,7 @@ export function UsersTab() {
       </Card>
       <AdminListCard
         error={error}
+        requestId={errorRef}
         errorTitle="Could not load users"
         onRetry={refresh}
         hasData={hasData}

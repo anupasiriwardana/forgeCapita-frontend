@@ -10,6 +10,7 @@ import { useAuth } from "@/components/web3/AuthProvider";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { chainName } from "@/config/chains";
+import { WALLET_CANCELLED_MESSAGE } from "@/lib/walletErrors";
 
 const SUPPORTED_CHAIN_IDS: ReadonlyArray<number> = [421614, 97];
 
@@ -76,7 +77,11 @@ export function SessionControls(): React.ReactElement {
         </Button>
       )}
       {error && !user && (
-        <span role="alert" className="shell-session-error">
+        // A cancelled signature is the user's own choice: a calm note, not a red alert.
+        <span
+          role={error === WALLET_CANCELLED_MESSAGE ? "status" : "alert"}
+          className={error === WALLET_CANCELLED_MESSAGE ? "shell-session-note" : "shell-session-error"}
+        >
           {error}
         </span>
       )}

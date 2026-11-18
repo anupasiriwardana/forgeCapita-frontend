@@ -69,7 +69,7 @@ export function AuditLogTab() {
       ),
     [offset, action, target],
   );
-  const { page, error, loading } = useAdminList(valid ? load : null, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(valid ? load : null, reloadKey);
   const items = page?.items ?? [];
 
   return (
@@ -122,6 +122,7 @@ export function AuditLogTab() {
       </Card>
       <AdminListCard
         error={error}
+        requestId={requestId}
         errorTitle="Could not load the audit log"
         onRetry={() => setReloadKey((k) => k + 1)}
         hasData={page !== null}

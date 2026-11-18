@@ -69,7 +69,7 @@ export function ComplaintsTab() {
       listAdminComplaints({ limit: ADMIN_PAGE_SIZE, offset, status: status || undefined }, signal),
     [offset, status],
   );
-  const { page, error, loading } = useAdminList(load, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(load, reloadKey);
   const items = page?.items ?? [];
   const selected = openId ? (items.find((c) => c.id === openId) ?? null) : null;
 
@@ -153,6 +153,7 @@ export function ComplaintsTab() {
       )}
       <AdminListCard
         error={error}
+        requestId={requestId}
         errorTitle="Could not load complaints"
         onRetry={refresh}
         hasData={page !== null}

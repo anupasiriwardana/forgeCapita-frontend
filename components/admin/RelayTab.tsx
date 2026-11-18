@@ -205,7 +205,7 @@ export function RelayTab() {
       ),
     [offset, kind, status, chain, systemOnly],
   );
-  const { page, error, loading } = useAdminList(load, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(load, reloadKey);
   const items = page?.items ?? [];
 
   return (
@@ -271,6 +271,7 @@ export function RelayTab() {
       </Card>
       <AdminListCard
         error={error}
+        requestId={requestId}
         errorTitle="Could not load relay requests"
         onRetry={() => setReloadKey((k) => k + 1)}
         hasData={page !== null}

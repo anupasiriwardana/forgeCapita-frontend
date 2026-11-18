@@ -72,7 +72,7 @@ export function LaunchDraftsTab() {
       ),
     [offset, status, chain],
   );
-  const { page, error, loading } = useAdminList(load, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(load, reloadKey);
   const items = page?.items ?? [];
 
   return (
@@ -112,6 +112,7 @@ export function LaunchDraftsTab() {
       </Card>
       <AdminListCard
         error={error}
+        requestId={requestId}
         errorTitle="Could not load launch drafts"
         onRetry={() => setReloadKey((k) => k + 1)}
         hasData={page !== null}
