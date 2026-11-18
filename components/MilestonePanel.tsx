@@ -3,14 +3,19 @@
 import { useEffect, useState } from "react";
 import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
-import { StatusIcon } from "@/components/ui/StatusIcon";
+import { Flag } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { StatusPill, type StatusTone } from "@/components/ui/StatusPill";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { toast } from "@/lib/toast";
+import { toastTxError, txErrorMessage } from "@/lib/walletErrors";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatNative, type ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
 import { formatVotes, pctOfSupply } from "@/lib/format";
 import { EXPLORER_URLS } from "@/config/chains";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
 
 type Addr = `0x${string}`;
@@ -28,15 +33,6 @@ const MUTED = {
   marginBottom: 0,
   marginLeft: 0,
 } as const;
-
-function errMessage(err: unknown): string {
-  if (typeof err === "object" && err !== null) {
-    const e = err as { shortMessage?: unknown; message?: unknown };
-    if (typeof e.shortMessage === "string") return e.shortMessage;
-    if (typeof e.message === "string") return e.message;
-  }
-  return "Transaction failed";
-}
 
 function formatDate(seconds: bigint): string {
   return new Date(Number(seconds) * 1000).toLocaleString();
@@ -149,9 +145,15 @@ export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; n
 
   if (completed) {
     return (
-      <div className="glass-card" style={{ padding: "20px 28px", marginBottom: "24px" }}>
-        <p style={MUTED}>Milestones: Completed</p>
-      </div>
+      <Card>
+        <CardBody style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <span className="panel-title" style={{ fontWeight: 600 }}>
+            <Flag size={16} aria-hidden="true" />
+            Current milestone
+          </span>
+          <StatusPill tone="success">All milestones completed</StatusPill>
+        </CardBody>
+      </Card>
     );
   }
 
@@ -207,6 +209,7 @@ export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; n
     setResult(null);
     try {
       if (walletChainId !== chainId) {
+        toast.error("Switch your wallet to this project's network.");
         setResult({ ok: false, text: "Switch your wallet to this project's network." });
         return;
       }
@@ -217,16 +220,21 @@ export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; n
           : await writeContractAsync({ address: escrow, abi: ABIS.escrow, functionName, chainId, ...fees });
       const receipt = await waitForTransactionReceipt(config, { hash, chainId });
       if (receipt.status !== "success") {
+        toast.error("Transaction reverted.");
         setResult({ ok: false, text: "Transaction reverted.", hash });
         return;
       }
+      toast.success(functionName === "startMilestone" ? "Milestone vote started." : "Milestone transaction confirmed.", {
+        description: "The indexer and milestones page may take a little while to catch up.",
+      });
       setResult({
         ok: true,
         text: "Transaction confirmed. This panel is updated now; the indexer and milestones page may take a little while to catch up.",
         hash,
       });
     } catch (err) {
-      setResult({ ok: false, text: errMessage(err) });
+      toastTxError(err);
+      setResult({ ok: false, text: txErrorMessage(err) });
     } finally {
       setBusy(false);
       setConfirm(null);
@@ -243,108 +251,141 @@ export function MilestonePanel({ project, nowSeconds }: { project: ProjectDto; n
   const txHash = result?.hash;
   const txHref = txHash && TX_HASH_REGEX.test(txHash) && explorer ? `${explorer}/tx/${txHash}` : null;
 
+  let statusTone: StatusTone = "neutral";
+  if (cancelled || failedVote) statusTone = "danger";
+  else if (approved) statusTone = frozen ? "warning" : "success";
+  else if (votingOpen) statusTone = "warning";
+
   return (
-    <div className="glass-card" style={{ padding: "28px", marginBottom: "24px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>Milestone {hasMilestone ? number.toString() : ""}</h2>
-      <p style={{ fontSize: "14px", fontWeight: 600, margin: "0 0 8px" }}>{status}</p>
-      {hasMilestone && (
-        <div style={{ fontSize: "13px", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }}>
-          <span>{description}</span>
-          <span>Unlocks {unlockPct.toString()}% of net funds (about {releaseText})</span>
-          {voteReady && (
-            <>
-              <span>Yes: {formatVotes(yes)} ({pctOfSupply(yes, publicSupply)}% of public supply, needs more than 50% to execute early)</span>
-              <span>No: {formatVotes(no)} ({pctOfSupply(no, publicSupply)}% of public supply)</span>
-              <span>Fast track: more than {formatVotes(publicSupply / BigInt(2))} Yes (50% of the public supply)</span>
-              <span>Quorum: {formatVotes((publicSupply * BigInt(20)) / BigInt(100))} total votes (20% of the public supply), turnout {pctOfSupply(yes + no, publicSupply)}%</span>
-              <span>Voting ends {formatDate(votingEnd)} ({daysLeft(votingEnd, nowBig)})</span>
-            </>
-          )}
-        </div>
-      )}
-
-      {!votingOpen && (
-        <div style={{ marginBottom: "16px" }}>
-          {isDeveloper ? (
-            <>
-              <p style={{ ...MUTED, marginBottom: "8px" }}>You pay the network fee.</p>
-              {startReason ? (
-                <p style={MUTED}>{startReason}</p>
-              ) : (
-                <button type="button" className="btn-primary" style={{ width: "100%" }} disabled={busy || !isConnected} onClick={() => setConfirm("start")}>
-                  {busy ? "Waiting for confirmation..." : "Start milestone vote"}
-                </button>
-              )}
-            </>
-          ) : (
-            !cancelled && hasMilestone && <p style={MUTED}>The developer has not started this milestone&apos;s vote yet.</p>
-          )}
-        </div>
-      )}
-
-      {showExecute && (
-        <div>
-          {showExecuteButton && <p style={{ ...MUTED, marginBottom: "8px" }}>You pay the network fee.</p>}
-          {executeBlocked && <p style={{ ...MUTED, marginBottom: "8px" }}>{executeBlocked}</p>}
-          {waitingForDeveloper && <p style={MUTED}>Approved: waiting for the developer to execute this milestone.</p>}
-          {showExecuteButton && (
-            <button
-              type="button"
-              className={failedVote ? "btn-danger" : "btn-primary"}
-              style={{ width: "100%" }}
-              disabled={busy || !isConnected || wrongChain || !voteReady || executeBlocked !== null}
-              onClick={() => setConfirm("execute")}
-            >
-              {busy ? "Waiting for confirmation..." : executeLabel}
-            </button>
-          )}
-          {showExecuteButton && isConnected && wrongChain && (
-            <p style={{ ...MUTED, marginTop: "8px" }}>Switch your wallet to this project&apos;s network.</p>
-          )}
-        </div>
-      )}
-
-      <ConfirmDialog
-        open={confirm === "start"}
-        title="Start milestone vote?"
-        confirmLabel="Start milestone vote"
-        busy={busy}
-        onConfirm={() => void send("startMilestone")}
-        onCancel={() => setConfirm(null)}
-      >
-        This starts a 28-day voting period for milestone {number.toString()} (&quot;{description}&quot;). Investors vote with staked tokens; the developer cannot vote.
-        It is approved immediately if more than 50% of the public supply votes yes, otherwise after 28 days if at least 20% voted and yes outnumbers no. This cannot be undone.
-      </ConfirmDialog>
-      <ConfirmDialog
-        open={confirm === "execute"}
-        tone={failedVote ? "danger" : "default"}
-        title={failedVote ? "Finalise failed vote?" : "Execute milestone?"}
-        confirmLabel={executeLabel}
-        busy={busy}
-        onConfirm={() => void send("executeMilestone")}
-        onCancel={() => setConfirm(null)}
-      >
-        {failedVote
-          ? "The vote ended without approval. Executing now will CANCEL the project and open refunds for investors; the developer receives nothing for this milestone. This cannot be undone."
-          : `This pays about ${releaseText} to the developer wallet (a small part may repay sponsored gas). If this is the final milestone it also unlocks the developer's token vesting. This cannot be undone.`}
-      </ConfirmDialog>
-
-      {result && (
-        <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
-          <StatusIcon state={result.ok ? "done" : "warning"} />
-          <span>
-            {result.text}
-            {txHref && txHash && (
-              <>
-                {" "}
-                <a href={txHref} target="_blank" rel="noopener noreferrer">
-                  {txHash.slice(0, 10)}…{txHash.slice(-6)}
-                </a>
-              </>
-            )}
+    <Card>
+      <CardHeader
+        title={
+          <span className="panel-title">
+            <Flag size={16} aria-hidden="true" />
+            {hasMilestone ? `Milestone ${number.toString()}` : "Current milestone"}
           </span>
-        </div>
-      )}
-    </div>
+        }
+        actions={<StatusPill tone={statusTone}>{status}</StatusPill>}
+      />
+      <CardBody>
+        {hasMilestone && (
+          <>
+            {description && <p className="desc-text" style={{ fontSize: 14, marginBottom: 12 }}>{description}</p>}
+            <div className="kv-list">
+              <div className="kv-row">
+                <span>Unlocks</span>
+                <span className="num">
+                  {unlockPct.toString()}% of net funds (about {releaseText})
+                </span>
+              </div>
+              {voteReady && (
+                <>
+                  <div className="kv-row">
+                    <span>Yes</span>
+                    <span className="num">{formatVotes(yes)} ({pctOfSupply(yes, publicSupply)}% of public supply)</span>
+                  </div>
+                  <div className="kv-row">
+                    <span>No</span>
+                    <span className="num">{formatVotes(no)} ({pctOfSupply(no, publicSupply)}% of public supply)</span>
+                  </div>
+                  <div className="kv-row">
+                    <span>Fast track</span>
+                    <span className="num">more than {formatVotes(publicSupply / BigInt(2))} Yes (50% of the public supply)</span>
+                  </div>
+                  <div className="kv-row">
+                    <span>Quorum</span>
+                    <span className="num">
+                      {formatVotes((publicSupply * BigInt(20)) / BigInt(100))} total votes (20%), turnout {pctOfSupply(yes + no, publicSupply)}%
+                    </span>
+                  </div>
+                  <div className="kv-row">
+                    <span>Voting ends</span>
+                    <span className="num">{formatDate(votingEnd)} ({daysLeft(votingEnd, nowBig)})</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+
+        {!votingOpen && (
+          <div className={hasMilestone ? "panel-section stack-sm" : "stack-sm"}>
+            {isDeveloper ? (
+              <>
+                <p style={MUTED}>You pay the network fee.</p>
+                {startReason ? (
+                  <p style={MUTED}>{startReason}</p>
+                ) : (
+                  <Button className="btn-block" loading={busy} disabled={!isConnected} onClick={() => setConfirm("start")}>
+                    Start milestone vote
+                  </Button>
+                )}
+              </>
+            ) : (
+              !cancelled && hasMilestone && <p style={MUTED}>The developer has not started this milestone&apos;s vote yet.</p>
+            )}
+          </div>
+        )}
+
+        {showExecute && (
+          <div className="panel-section stack-sm">
+            {showExecuteButton && <p style={MUTED}>You pay the network fee.</p>}
+            {executeBlocked && <p style={MUTED}>{executeBlocked}</p>}
+            {waitingForDeveloper && <p style={MUTED}>Approved: waiting for the developer to execute this milestone.</p>}
+            {showExecuteButton && (
+              <Button
+                variant={failedVote ? "danger" : "primary"}
+                className="btn-block"
+                loading={busy}
+                disabled={!isConnected || wrongChain || !voteReady || executeBlocked !== null}
+                onClick={() => setConfirm("execute")}
+              >
+                {executeLabel}
+              </Button>
+            )}
+            {showExecuteButton && isConnected && wrongChain && (
+              <p style={MUTED}>Switch your wallet to this project&apos;s network.</p>
+            )}
+          </div>
+        )}
+
+        <ConfirmDialog
+          open={confirm === "start"}
+          onOpenChange={(open) => { if (!open) setConfirm(null); }}
+          title="Start milestone vote?"
+          body={
+            <>
+              This starts a 28-day voting period for milestone {number.toString()} (&quot;{description}&quot;). Investors vote with staked tokens; the developer cannot vote.
+              It is approved immediately if more than 50% of the public supply votes yes, otherwise after 28 days if at least 20% voted and yes outnumbers no. This cannot be undone.
+            </>
+          }
+          confirmLabel="Start milestone vote"
+          tone="danger"
+          onConfirm={() => send("startMilestone")}
+        />
+        <ConfirmDialog
+          open={confirm === "execute"}
+          onOpenChange={(open) => { if (!open) setConfirm(null); }}
+          tone="danger"
+          title={failedVote ? "Finalise failed vote?" : "Execute milestone?"}
+          body={
+            failedVote
+              ? "The vote ended without approval. Executing now will CANCEL the project and open refunds for investors; the developer receives nothing for this milestone. This cannot be undone."
+              : `This pays about ${releaseText} to the developer wallet (a small part may repay sponsored gas). If this is the final milestone it also unlocks the developer's token vesting. This cannot be undone.`
+          }
+          confirmLabel={executeLabel}
+          onConfirm={() => send("executeMilestone")}
+        />
+
+        {txHref && txHash && (
+          <p className="tx-status">
+            Last transaction{result && !result.ok ? " (failed)" : ""}:{" "}
+            <a href={txHref} target="_blank" rel="noopener noreferrer" className="mono">
+              {txHash.slice(0, 10)}…{txHash.slice(-6)}
+            </a>
+          </p>
+        )}
+      </CardBody>
+    </Card>
   );
 }

@@ -8,3 +8,12 @@ export function explorerTxUrl(chainId: number, hash: string): string | null {
   if (!base || !base.startsWith("https://")) return null;
   return `${base}/tx/${hash}`;
 }
+
+const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
+
+export function explorerAddressUrl(chainId: number, address: string): string | null {
+  if (!ADDRESS_REGEX.test(address)) return null;
+  const base = (EXPLORER_URLS as Record<number, string | undefined>)[chainId];
+  if (!base || !base.startsWith("https://")) return null;
+  return `${base}/address/${address}`;
+}

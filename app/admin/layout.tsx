@@ -1,25 +1,41 @@
 "use client";
 
+import { LogIn } from "lucide-react";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Spinner } from "@/components/ui/Spinner";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, role, loading, signIn } = useAuth();
   let content: React.ReactNode;
   if (loading && !user) {
-    content = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
-  } else if (!user) {
     content = (
-      <div className="alert alert-warning" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-        <span>Please sign in</span>
-        <button type="button" className="btn-secondary" onClick={() => void signIn()}>
-          Sign in
-        </button>
+      <div className="gate-loading" role="status">
+        <Spinner size={16} />
+        Loading…
       </div>
     );
+  } else if (!user) {
+    content = (
+      <Card className="gate-card">
+        <EmptyState
+          icon={<LogIn size={20} />}
+          title="Please sign in"
+          action={<Button onClick={() => void signIn()}>Sign in</Button>}
+        />
+      </Card>
+    );
   } else if (role !== "staff" && role !== "admin") {
-    content = <div className="alert alert-warning">Staff access only</div>;
+    content = (
+      <div className="gate-card">
+        <InlineAlert tone="warning">Staff access only</InlineAlert>
+      </div>
+    );
   } else {
     content = children;
   }
-  return <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "40px 24px" }}>{content}</div>;
+  return <div className="page-container">{content}</div>;
 }

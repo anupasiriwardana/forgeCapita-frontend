@@ -4,15 +4,25 @@ import { useEffect, useState } from "react";
 import {
   formatNative,
   getProjectTransparency,
-  shortAddr,
   type ComplianceState,
   type ProjectDto,
   type TransparencyDto,
 } from "@/lib/api";
 import { exactTime, formatAge } from "@/lib/timeAgo";
+import { ScanSearch } from "lucide-react";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Amount } from "@/components/ui/Amount";
+import { CardBody, CardHeader } from "@/components/ui/Card";
+import { StatusPill, type StatusTone } from "@/components/ui/StatusPill";
 
 const REFRESH_MS = 60_000;
-const MUTED = { fontSize: "13px", color: "var(--text-muted)" } as const;
+
+function complianceTone(state: ComplianceState | "not_checked"): StatusTone {
+  if (state === "OK" || state === "RESOLVED") return "success";
+  if (state === "SHUTDOWN") return "danger";
+  if (state === "WARNED" || state === "not_checked") return "warning";
+  return "neutral";
+}
 
 const STATE_LINES: Record<ComplianceState | "not_checked", string> = {
   OK: "Revenue routed to the protocol matches what the project's wallet received.",
@@ -64,52 +74,76 @@ export function TransparencyPanel({ project }: { project: ProjectDto }) {
 
   if (!data) return null;
 
+  const title = (
+    <span className="panel-title">
+      <ScanSearch size={16} aria-hidden="true" />
+      Revenue transparency
+    </span>
+  );
   const wallet = data.shadowWallet ? (
-    <p style={MUTED}>
-      Revenue wallet: <span title={data.shadowWallet}>{shortAddr(data.shadowWallet)}</span>
-    </p>
+    <div className="kv-row">
+      <span>Revenue wallet</span>
+      <AddressChip address={data.shadowWallet} />
+    </div>
   ) : null;
 
   if (data.auditStatus === "unaudited") {
     return (
-      <section className="glass-card" style={{ padding: "24px" }}>
-        <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>Revenue transparency</h3>
-        {data.note && <p style={MUTED}>{data.note}</p>}
-        {wallet}
+      <section className="ui-card">
+        <CardHeader title={title} as="h3" />
+        <CardBody>
+          {data.note && <p className="panel-note">{data.note}</p>}
+          {wallet && <div className="kv-list">{wallet}</div>}
+        </CardBody>
       </section>
     );
   }
 
   const state = data.complianceState ?? "not_checked";
   return (
-    <section className="glass-card" style={{ padding: "24px" }}>
-      <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>Revenue transparency</h3>
-      <p style={{ marginBottom: "8px" }}>
-        <span className={`badge ${complianceBadge(state)}`}>{state === "not_checked" ? "not checked" : state}</span>
-      </p>
-      <p style={{ fontSize: "14px", marginBottom: "8px" }}>{STATE_LINES[state]}</p>
-      {wallet}
-      <p style={MUTED} title={exactTime(data.lastCheckedAt)}>
-        Last checked: {formatAge(data.lastCheckedAt, now)}
-      </p>
-      <p style={MUTED}>The check refreshes about every 15 minutes (configurable).</p>
-      {data.observedNative != null && data.routedNative != null && (
-        <p style={{ fontSize: "14px", marginTop: "8px" }}>
-          Observed {formatNative(data.observedNative, data.chainId)} vs routed{" "}
-          {formatNative(data.routedNative, data.chainId)} (last {data.windowDays} days)
-        </p>
-      )}
-      {data.shortfallBps != null && (
-        <p style={MUTED}>
-          Shortfall {formatBps(data.shortfallBps)} (tolerance {formatBps(data.toleranceBps)})
-        </p>
-      )}
-      {state === "WARNED" && (
-        <p style={MUTED}>
-          This check uses indexed on-chain data, which can be a few minutes behind. A very recent payment may not be
-          counted yet.
-        </p>
-      )}
+    <section className="ui-card">
+      <CardHeader
+        title={title}
+        as="h3"
+        actions={<StatusPill tone={complianceTone(state)}>{state === "not_checked" ? "not checked" : state}</StatusPill>}
+      />
+      <CardBody>
+        <p style={{ fontSize: "14px", marginBottom: "12px" }}>{STATE_LINES[state]}</p>
+        <div className="kv-list">
+          {wallet}
+          <div className="kv-row">
+            <span>Last checked</span>
+            <span title={exactTime(data.lastCheckedAt)} className="num">{formatAge(data.lastCheckedAt, now)}</span>
+          </div>
+          {data.observedNative != null && data.routedNative != null && (
+            <>
+              <div className="kv-row">
+                <span>Observed (last {data.windowDays} days)</span>
+                <Amount value={formatNative(data.observedNative, data.chainId)} />
+              </div>
+              <div className="kv-row">
+                <span>Routed (last {data.windowDays} days)</span>
+                <Amount value={formatNative(data.routedNative, data.chainId)} />
+              </div>
+            </>
+          )}
+          {data.shortfallBps != null && (
+            <div className="kv-row">
+              <span>Shortfall</span>
+              <span className="num">
+                {formatBps(data.shortfallBps)} (tolerance {formatBps(data.toleranceBps)})
+              </span>
+            </div>
+          )}
+        </div>
+        <p className="panel-note" style={{ marginTop: 12, fontSize: 12 }}>The check refreshes about every 15 minutes (configurable).</p>
+        {state === "WARNED" && (
+          <p className="panel-note" style={{ marginTop: 6, fontSize: 12 }}>
+            This check uses indexed on-chain data, which can be a few minutes behind. A very recent payment may not be
+            counted yet.
+          </p>
+        )}
+      </CardBody>
     </section>
   );
 }

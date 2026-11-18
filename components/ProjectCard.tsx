@@ -1,23 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, CalendarClock, Flag } from "lucide-react";
+import { ProjectLogo } from "@/components/ProjectLogo";
 import { ProjectStatusBadge } from "@/components/ProjectStatusBadge";
+import { Amount } from "@/components/ui/Amount";
 import type { ProjectDto } from "@/lib/api";
-import { formatEth, fundingProgress, shortAddr } from "@/lib/api";
+import { formatEth, fundingProgress } from "@/lib/api";
 import { chainCurrency, chainName } from "@/config/chains";
 import { displayState } from "@/lib/projectState";
-
 
 interface ProjectCardProps {
   project: ProjectDto;
   index?: number;
 }
 
-export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
+/** Unix seconds as YYYY-MM-DD in UTC; deterministic on server and client, so no hydration mismatch. */
+function utcDate(seconds: string): string | null {
+  const ms = Number(seconds) * 1000;
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function ProgressInfo({ project }: { project: ProjectDto }): React.ReactElement | null {
+  if (project.state === "FUNDING") {
+    const deadline = utcDate(project.fundingDeadline);
+    if (!deadline) return null;
+    return (
+      <span className="project-card-info">
+        <CalendarClock size={14} aria-hidden="true" />
+        <span>
+          Ends <span className="num">{deadline}</span>
+          <span className="sr-only"> (funding deadline, UTC)</span>
+        </span>
+      </span>
+    );
+  }
+  if (project.state === "ACTIVE") {
+    return (
+      <span className="project-card-info">
+        <Flag size={14} aria-hidden="true" />
+        Milestone <span className="num">{project.currentMilestoneIndex + 1}</span> in progress
+      </span>
+    );
+  }
+  return null;
+}
+
+export function ProjectCard({ project, index = 0 }: ProjectCardProps): React.ReactElement {
   const progress = fundingProgress(project.totalRaised, project.fundingGoal);
-  const ethRaised = formatEth(project.totalRaised, 3);
-  const ethGoal = formatEth(project.fundingGoal, 3);
+  const currency = chainCurrency(project.chainId);
   const name = project.profile?.name ?? project.tokenName;
   const description = project.profile?.description;
   const logoUrl = project.profile?.logoUrl;
@@ -25,142 +57,53 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
   return (
     <Link
       href={`/projects/${encodeURIComponent(project.id)}`}
-      className="glass-card fade-in-up"
-      style={{
-        display: "block",
-        textDecoration: "none",
-        padding: "24px",
-        animationDelay: `${index * 0.07}s`,
-        cursor: "pointer",
-      }}
+      className="ui-card project-card fade-in-up"
+      style={{ animationDelay: `${Math.min(index, 5) * 0.03}s` }}
     >
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", marginBottom: "16px" }}>
-        {/* Logo */}
-        <div
-          style={{
-            width: "52px",
-            height: "52px",
-            borderRadius: "12px",
-            overflow: "hidden",
-            background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2))",
-            border: "1px solid rgba(99,102,241,0.3)",
-            flexShrink: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "22px",
-          }}
-        >
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoUrl}
-              alt={name}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
-          ) : (
-            <span aria-hidden="true" style={{ fontWeight: 700, color: "var(--brand-accent)" }}>
-              {(name || "P").charAt(0).toUpperCase()}
-            </span>
-          )}
-        </div>
-
-        {/* Title */}
+      <div className="project-card-head">
+        <ProjectLogo name={name} logoUrl={logoUrl} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h3
-            style={{
-              fontSize: "16px",
-              fontWeight: 700,
-              color: "var(--text-primary)",
-              margin: "0 0 4px",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {name || "Unnamed Project"}
-          </h3>
-          <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>
-            {shortAddr(project.escrowAddress)}
-          </span>
-          <span style={{ fontSize: "11px", color: "var(--teal)", fontWeight: 600, marginLeft: "8px" }}>
-            {chainName(project.chainId)}
-          </span>
+          <h3 className="project-card-title">{name || "Unnamed Project"}</h3>
+          <div className="project-card-meta">
+            {project.tokenSymbol && <span className="chip mono">{project.tokenSymbol}</span>}
+            <span className="chip">{chainName(project.chainId)}</span>
+          </div>
         </div>
-
-        {/* Status Badge */}
         <ProjectStatusBadge status={displayState(project)} />
       </div>
 
-      {/* Description */}
-      {description && (
-        <p
-          style={{
-            fontSize: "13px",
-            color: "var(--text-secondary)",
-            lineHeight: 1.6,
-            marginBottom: "20px",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          }}
-        >
-          {description}
-        </p>
-      )}
+      {description && <p className="project-card-desc">{description}</p>}
 
-      {/* Progress */}
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-          <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Funding Progress</span>
-          <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--brand-accent)" }}>{progress}%</span>
+      <div>
+        <div className="project-card-amounts">
+          <span>
+            <span className="sr-only">Raised </span>
+            <Amount value={formatEth(project.totalRaised, 3)} unit={currency} className="project-card-raised" />
+          </span>
+          <span className="project-card-goal">
+            of <Amount value={formatEth(project.fundingGoal, 3)} unit={currency} />
+          </span>
         </div>
-        <div className="progress-bar">
+        <div
+          className="progress-bar"
+          role="progressbar"
+          aria-label="Funding progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress}
+        >
           <div className="progress-fill" style={{ width: `${progress}%` }} />
         </div>
-      </div>
-
-      {/* Stats Row */}
-      <div style={{ display: "flex", gap: "12px" }}>
-        <div className="stat-card" style={{ flex: 1 }}>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Raised</div>
-          <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--emerald)" }}>{ethRaised} {chainCurrency(project.chainId)}</div>
-        </div>
-        <div className="stat-card" style={{ flex: 1 }}>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Goal</div>
-          <div style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>{ethGoal} {chainCurrency(project.chainId)}</div>
+        <div className="project-card-pct">
+          <span className="num" style={{ color: "var(--text)", fontWeight: 600 }}>{progress}%</span> funded
         </div>
       </div>
 
-      {/* Footer */}
-      <div
-        style={{
-          marginTop: "16px",
-          paddingTop: "14px",
-          borderTop: "1px solid var(--border)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-          Developer: {shortAddr(project.developer)}
-        </span>
-        <span
-          style={{
-            fontSize: "12px",
-            fontWeight: 600,
-            color: "var(--brand-accent)",
-            display: "flex",
-            alignItems: "center",
-            gap: "4px",
-          }}
-        >
-          View Details
-          <ArrowRight size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+      <div className="project-card-foot">
+        <ProgressInfo project={project} />
+        <span className="project-card-cta">
+          View project
+          <ArrowRight size={14} aria-hidden="true" />
         </span>
       </div>
     </Link>

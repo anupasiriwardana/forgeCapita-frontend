@@ -1,7 +1,11 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, ChevronRight, Circle } from "lucide-react";
+import { CheckCircle2, ChevronRight, Circle } from "lucide-react";
 import { EXPLORER_URLS } from "@/config/chains";
+import { Button } from "@/components/ui/Button";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Spinner } from "@/components/ui/Spinner";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { useAuth } from "@/components/web3/AuthProvider";
 import {
   canFallbackToSelfPay,
@@ -36,15 +40,19 @@ function txLink(chainId: number, hash: string | null): { href: string; text: str
 export function GaslessNotice() {
   const { user, loading, signIn, error } = useAuth();
   return (
-    <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>
-      <span className="section-tag" style={{ marginRight: "8px" }}>Gasless</span>
-      The platform pays the network fee for this action.
+    <div className="gasless-note">
+      <StatusPill tone="accent">Gasless</StatusPill>
+      <span>The platform pays the network fee for this action.</span>
       {!user && (
-        <div style={{ marginTop: "8px" }}>
-          <button type="button" className="btn-secondary" disabled={loading} onClick={() => void signIn()}>
+        <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <Button variant="secondary" size="sm" loading={loading} onClick={() => void signIn()}>
             Sign in to use gasless actions
-          </button>
-          {error && <span style={{ marginLeft: "8px", color: "var(--rose)" }}>{error}</span>}
+          </Button>
+          {error && (
+            <InlineAlert tone="danger" className="btn-block">
+              {error}
+            </InlineAlert>
+          )}
         </div>
       )}
     </div>
@@ -71,58 +79,60 @@ export function RelayStatus({ chainId, status, request, pollError, failure, onSe
   if (!status && !failure) return null;
 
   return (
-    <div style={{ marginTop: "12px", fontSize: "13px" }}>
+    <div style={{ fontSize: "13px" }}>
       {status && !failure && (
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-          {STEPS.map((s, i) => (
-            <span
-              key={s.status}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                color: shown ? "var(--text-muted)" : i <= current ? "var(--emerald)" : "var(--text-muted)",
-                fontWeight: i === current && inFlight ? 700 : 400,
-              }}
-            >
-              {i <= current && !shown ? (
-                <CheckCircle2 size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-              ) : (
-                <Circle size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
-              )}
-              {s.label}
-              {i < STEPS.length - 1 && <ChevronRight size={14} aria-hidden="true" style={{ flexShrink: 0 }} />}
-            </span>
-          ))}
-          {inFlight && status !== "CONFIRMED" && <span className="spinner" style={{ width: "12px", height: "12px" }} />}
-        </div>
+        <ol className="relay-steps" aria-label="Gasless request progress" style={{ listStyle: "none", padding: 0 }}>
+          {STEPS.map((s, i) => {
+            const reached = i <= current && !shown;
+            return (
+              <li
+                key={s.status}
+                className={`relay-step${reached ? " is-reached" : ""}${i === current && inFlight ? " is-current" : ""}`}
+                aria-current={i === current && inFlight ? "step" : undefined}
+              >
+                {reached ? (
+                  <CheckCircle2 size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                ) : (
+                  <Circle size={14} aria-hidden="true" style={{ flexShrink: 0 }} />
+                )}
+                {s.label}
+                {reached && <span className="sr-only"> (done)</span>}
+                {i < STEPS.length - 1 && <ChevronRight size={14} aria-hidden="true" style={{ flexShrink: 0, color: "var(--text-3)" }} />}
+              </li>
+            );
+          })}
+          {inFlight && status !== "CONFIRMED" && (
+            <li>
+              <Spinner size={12} label="Processing" />
+            </li>
+          )}
+        </ol>
       )}
       {link && (
-        <div style={{ marginTop: "6px" }}>
+        <p className="tx-status" style={{ marginTop: 6 }}>
           Transaction:{" "}
-          <a href={link.href} target="_blank" rel="noopener noreferrer">
+          <a href={link.href} target="_blank" rel="noopener noreferrer" className="mono">
             {link.text}
           </a>
-        </div>
+        </p>
       )}
       {pollError && !shown && status !== "CONFIRMED" && (
-        <div style={{ marginTop: "6px", color: "var(--text-muted)" }}>{pollError}</div>
+        <p className="panel-note" style={{ marginTop: 6 }}>{pollError}</p>
       )}
       {shown && (
-        <div className="alert alert-error" style={{ marginTop: "8px", fontSize: "13px" }}>
-          <AlertTriangle size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-          <span>
-            {shown.message}
-            {onSelfPay && canFallbackToSelfPay(shown.code) && (
-              <>
-                {" "}
-                <button type="button" className="btn-secondary" style={{ marginLeft: "8px" }} onClick={onSelfPay}>
-                  Pay gas yourself
-                </button>
-              </>
-            )}
-          </span>
-        </div>
+        <InlineAlert
+          tone="danger"
+          className="relay-failure"
+          action={
+            onSelfPay && canFallbackToSelfPay(shown.code) ? (
+              <Button variant="secondary" size="sm" onClick={onSelfPay}>
+                Pay gas yourself
+              </Button>
+            ) : undefined
+          }
+        >
+          {shown.message}
+        </InlineAlert>
       )}
     </div>
   );

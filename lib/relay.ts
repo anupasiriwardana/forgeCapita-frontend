@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiFetch } from "@/lib/api";
+import { isUserRejection } from "@/lib/walletErrors";
 
 export type RelayStatus = "QUEUED" | "SENDING" | "SENT" | "CONFIRMED" | "FAILED" | "EXPIRED";
 
@@ -87,16 +88,6 @@ export function isTerminalStatus(status: RelayStatus): boolean {
 /** Unix-seconds deadline for a signature requested now. */
 export function newSignatureDeadline(): number {
   return Math.floor(Date.now() / 1000) + SIGNATURE_VALIDITY_SECONDS;
-}
-
-function isUserRejection(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false;
-  const e = err as { name?: unknown; code?: unknown; message?: unknown };
-  return (
-    e.name === "UserRejectedRequestError" ||
-    e.code === 4001 ||
-    (typeof e.message === "string" && /user rejected|user denied/i.test(e.message))
-  );
 }
 
 /** Map any error thrown while preparing, signing or submitting a relay call to a safe message. */

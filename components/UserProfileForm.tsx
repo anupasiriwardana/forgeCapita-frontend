@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { LogIn } from "lucide-react";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Field, Input, Select } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { toast } from "@/lib/toast";
 import {
   ApiError,
   describeApiError,
@@ -148,6 +156,7 @@ export function UserProfileForm({ next }: { next: string }) {
     try {
       await saveMyProfile(toInput(form));
       setSaved(true);
+      toast.success("Profile saved.");
       await refreshSession();
       router.replace(next);
     } catch (err) {
@@ -158,75 +167,110 @@ export function UserProfileForm({ next }: { next: string }) {
     }
   }
 
-  if (!loaded) return <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
-
-  if (needsSignIn) {
+  if (!loaded) {
     return (
-      <div className="alert alert-warning">
-        <span>Sign in to complete your profile</span>
-        <button type="button" className="btn-secondary" onClick={() => void signIn()}>Sign in</button>
-      </div>
+      <Card aria-busy="true">
+        <CardBody className="stack-md">
+          <span className="sr-only" role="status">Loading…</span>
+          <Skeleton width="30%" height={16} />
+          <Skeleton height={40} />
+          <Skeleton height={40} />
+          <Skeleton height={40} />
+        </CardBody>
+      </Card>
     );
   }
 
-  const field = (id: keyof FormState, label: string, opts: FieldOptions) => (
-    <div>
-      <label className="label" htmlFor={id}>{label}</label>
-      <input
-        id={id}
-        className="input-field"
-        type={opts.type ?? "text"}
-        maxLength={opts.max}
-        autoComplete={opts.auto}
-        required={opts.required ?? true}
-        value={form[id]}
-        onChange={set(id)}
-      />
-      {opts.help && <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>{opts.help}</div>}
-    </div>
-  );
+  if (needsSignIn) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<LogIn size={20} />}
+          title="Sign in to complete your profile"
+          action={<Button onClick={() => void signIn()}>Sign in</Button>}
+        />
+      </Card>
+    );
+  }
+
+  const field = (id: keyof FormState, label: string, opts: FieldOptions) => {
+    const required = opts.required ?? true;
+    return (
+      <Field label={label} id={id} hint={opts.help} required={required}>
+        <Input
+          type={opts.type ?? "text"}
+          maxLength={opts.max}
+          autoComplete={opts.auto}
+          required={required}
+          value={form[id]}
+          onChange={set(id)}
+        />
+      </Field>
+    );
+  };
 
   return (
-    <form onSubmit={(e) => void onSubmit(e)} className="glass-card" style={{ padding: "24px", display: "grid", gap: "16px" }}>
-      {loadError && <div role="alert" className="alert alert-error">{loadError}</div>}
-      {field("firstName", "First name", { max: 80, auto: "given-name" })}
-      {field("lastName", "Last name", { max: 80, auto: "family-name" })}
-      {field("email", "Email", { max: 254, type: "email", auto: "email", help: "Email is a contact address only; it is not verified." })}
-      {field("phone", "Phone", { max: 20, type: "tel", auto: "tel" })}
-      {field("addressLine1", "Address line 1", { max: 120, auto: "address-line1" })}
-      {field("addressLine2", "Address line 2 (optional)", { max: 120, auto: "address-line2", required: false })}
-      {field("city", "City", { max: 80, auto: "address-level2" })}
-      {field("region", "State / region (optional)", { max: 80, auto: "address-level1", required: false })}
-      {field("postalCode", "Postal code", { max: 20, auto: "postal-code" })}
-      <div>
-        <label className="label" htmlFor="country">Country</label>
-        <select id="country" className="input-field" required autoComplete="country" value={form.country} onChange={set("country")}>
-          <option value="">Select a country</option>
-          {countries.map((c) => (
-            <option key={c.code} value={c.code}>{c.name}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="label" htmlFor="dateOfBirth">Date of birth</label>
-        <input
-          id="dateOfBirth"
-          className="input-field"
-          type="date"
-          required
-          autoComplete="bday"
-          min="1900-01-02"
-          max={maxDob}
-          value={form.dateOfBirth}
-          onChange={set("dateOfBirth")}
-        />
-        <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>You must be 18 or older</div>
-      </div>
-      {error && <div role="alert" className="alert alert-error">{error}</div>}
-      {saved && !error && <div role="status" className="alert alert-success">Profile saved.</div>}
-      <button type="submit" className="btn-primary" disabled={saving || problems.length > 0} title={problems[0]}>
-        {saving ? "Saving…" : "Save profile"}
-      </button>
+    <form onSubmit={(e) => void onSubmit(e)}>
+      <Card>
+        <CardHeader title="Name and contact" />
+        <CardBody className="form-grid">
+          {loadError && <InlineAlert tone="danger">{loadError}</InlineAlert>}
+          <div className="form-grid form-grid-2">
+            {field("firstName", "First name", { max: 80, auto: "given-name" })}
+            {field("lastName", "Last name", { max: 80, auto: "family-name" })}
+          </div>
+          <div className="form-grid form-grid-2">
+            {field("email", "Email", { max: 254, type: "email", auto: "email", help: "Email is a contact address only; it is not verified." })}
+            {field("phone", "Phone", { max: 20, type: "tel", auto: "tel" })}
+          </div>
+        </CardBody>
+        <CardHeader title="Address" style={{ borderTop: "1px solid var(--border)" }} />
+        <CardBody className="form-grid">
+          {field("addressLine1", "Address line 1", { max: 120, auto: "address-line1" })}
+          {field("addressLine2", "Address line 2 (optional)", { max: 120, auto: "address-line2", required: false })}
+          <div className="form-grid form-grid-2">
+            {field("city", "City", { max: 80, auto: "address-level2" })}
+            {field("region", "State / region (optional)", { max: 80, auto: "address-level1", required: false })}
+          </div>
+          <div className="form-grid form-grid-2">
+            {field("postalCode", "Postal code", { max: 20, auto: "postal-code" })}
+            <Field label="Country" id="country" required>
+              <Select required autoComplete="country" value={form.country} onChange={set("country")}>
+                <option value="">Select a country</option>
+                {countries.map((c) => (
+                  <option key={c.code} value={c.code}>{c.name}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        </CardBody>
+        <CardHeader title="Date of birth" style={{ borderTop: "1px solid var(--border)" }} />
+        <CardBody>
+          <div className="form-grid form-grid-2">
+            <Field label="Date of birth" id="dateOfBirth" required hint="You must be 18 or older">
+              <Input
+                type="date"
+                required
+                autoComplete="bday"
+                min="1900-01-02"
+                max={maxDob}
+                value={form.dateOfBirth}
+                onChange={set("dateOfBirth")}
+              />
+            </Field>
+          </div>
+        </CardBody>
+        <CardFooter style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+            {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+            {saved && !error && <InlineAlert tone="success">Profile saved.</InlineAlert>}
+            {!error && !saved && problems.length > 0 && <p className="panel-note">{problems[0]}</p>}
+          </div>
+          <Button type="submit" loading={saving} disabled={problems.length > 0} title={problems[0]}>
+            {saving ? "Saving…" : "Save profile"}
+          </Button>
+        </CardFooter>
+      </Card>
     </form>
   );
 }

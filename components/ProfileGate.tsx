@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { ButtonLink } from "@/components/ui/Button";
+import { InlineAlert } from "@/components/ui/InlineAlert";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { isPublicReadRoute, isWriteRoute } from "@/lib/profileNav";
 
@@ -20,15 +21,16 @@ export function ProfileGate() {
 
   if (!gated || !isPublicReadRoute(pathname)) return null;
   return (
-    <div
-      role="alert"
-      className="alert alert-warning"
-      style={{ position: "fixed", left: "16px", right: "16px", bottom: "16px", zIndex: 50, justifyContent: "center" }}
+    <InlineAlert
+      tone="warning"
+      className="profile-gate-banner"
+      action={
+        <ButtonLink href="/profile" variant="secondary" size="sm">
+          Go to profile
+        </ButtonLink>
+      }
     >
-      <span>Complete your profile to continue using ForgeCapita.</span>
-      <Link href="/profile" style={{ textDecoration: "underline", fontWeight: 600 }}>
-        Go to profile
-      </Link>
-    </div>
+      Complete your profile to continue using ForgeCapita.
+    </InlineAlert>
   );
 }

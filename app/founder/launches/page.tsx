@@ -1,10 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Plus, RotateCw, Rocket } from "lucide-react";
 import { IndexerLagNote } from "@/components/IndexerLagNote";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { StatusPill, type StatusTone } from "@/components/ui/StatusPill";
 import { chainName } from "@/config/chains";
+import { toast } from "@/lib/toast";
 import {
   ApiError,
   cancelLaunchDraft,
@@ -16,74 +23,62 @@ import {
 
 const REFRESH_MS = 15_000;
 
-function badgeClass(status: string): string {
-  if (status === "applied") return "badge-active";
-  if (status === "pending" || status === "attached") return "badge-pending";
-  return "badge-inactive";
+function statusTone(status: string): StatusTone {
+  if (status === "applied") return "success";
+  if (status === "pending" || status === "attached") return "warning";
+  return "neutral";
 }
 
 function ProjectLink({ projectId, label }: { projectId: string | null; label: string }) {
   if (!projectId) return null;
   return (
-    <Link href={`/projects/${encodeURIComponent(projectId)}`} style={{ color: "var(--brand-accent)" }}>
+    <ButtonLink href={`/projects/${encodeURIComponent(projectId)}`} variant="ghost" size="sm">
       {label}
-    </Link>
+    </ButtonLink>
   );
 }
 
-function Explanation({
-  draft,
-  busy,
-  onCancel,
-}: {
-  draft: MyLaunchDraftDto;
-  busy: boolean;
-  onCancel: () => void;
-}) {
+function Explanation({ draft }: { draft: MyLaunchDraftDto }) {
   switch (draft.status) {
     case "pending":
-      return (
-        <>
-          <p style={{ margin: "0 0 8px" }}>
-            Waiting for the launch transaction. If you rejected it or closed the page, cancel to free your shadow wallet.
-          </p>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={onCancel}>Cancel</button>
-        </>
-      );
+      return <>Waiting for the launch transaction. If you rejected it or closed the page, cancel to free your shadow wallet.</>;
     case "attached":
       return (
         <>
-          <p style={{ margin: 0 }}>
-            On-chain. Waiting for the indexer; your profile is saved and will be applied automatically.
-          </p>
+          On-chain. Waiting for the indexer; your profile is saved and will be applied automatically.
           {draft.projectId && (
-            <p style={{ fontSize: "12px", margin: "4px 0 0" }} title={draft.projectId}>
+            <div className="mono" style={{ marginTop: 4 }} title={draft.projectId}>
               Project id: {shortAddr(draft.projectId)}
-            </p>
+            </div>
           )}
-          <div style={{ marginTop: "4px" }}>
+          <div style={{ marginTop: 4 }}>
             <IndexerLagNote chainId={draft.chainId} />
           </div>
         </>
       );
     case "applied":
-      return (
-        <p style={{ margin: 0 }}>
-          Live <ProjectLink projectId={draft.projectId} label="View project" />
-        </p>
-      );
+      return <>Live</>;
     case "conflict":
-      return (
-        <p style={{ margin: 0 }}>
-          A profile already exists for this project; open the project page to edit it.{" "}
-          <ProjectLink projectId={draft.projectId} label="Open project" />
-        </p>
-      );
+      return <>A profile already exists for this project; open the project page to edit it.</>;
     case "cancelled":
-      return <p style={{ margin: 0 }}>Cancelled</p>;
+      return <>Cancelled</>;
     case "expired":
-      return <p style={{ margin: 0 }}>Expired</p>;
+      return <>Expired</>;
   }
+}
+
+function DraftActions({ draft, busy, onCancel }: { draft: MyLaunchDraftDto; busy: boolean; onCancel: () => void }) {
+  return (
+    <div className="row-actions">
+      {draft.status === "pending" && (
+        <Button variant="secondary" size="sm" loading={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+      )}
+      {draft.status === "applied" && <ProjectLink projectId={draft.projectId} label="View project" />}
+      {draft.status === "conflict" && <ProjectLink projectId={draft.projectId} label="Open project" />}
+    </div>
+  );
 }
 
 function LaunchList() {
@@ -122,6 +117,7 @@ function LaunchList() {
     setError("");
     try {
       await cancelLaunchDraft(id);
+      toast.success("Launch cancelled", { description: "The shadow wallet is free again." });
     } catch (err) {
       if (!(err instanceof ApiError && err.status === 409)) {
         setError(describeFounderError(err, "Could not cancel the draft"));
@@ -133,48 +129,91 @@ function LaunchList() {
     }
   }
 
+  const columns: ReadonlyArray<DataTableColumn<MyLaunchDraftDto>> = [
+    {
+      key: "name",
+      header: "Project",
+      cell: (d) => (
+        <div style={{ maxWidth: 420 }}>
+          <span className="cell-title">{d.name}</span>
+          <div className="cell-sub">
+            <Explanation draft={d} />
+          </div>
+        </div>
+      ),
+    },
+    { key: "chain", header: "Chain", cell: (d) => <span className="cell-sub" style={{ fontSize: 13 }}>{chainName(d.chainId)}</span> },
+    { key: "status", header: "Status", cell: (d) => <StatusPill tone={statusTone(d.status)}>{d.status}</StatusPill> },
+    {
+      key: "created",
+      header: "Created",
+      numeric: true,
+      cell: (d) => <span className="cell-sub" style={{ fontSize: 13 }}>{new Date(d.createdAt).toLocaleString()}</span>,
+    },
+    {
+      key: "actions",
+      header: <span className="sr-only">Actions</span>,
+      align: "right",
+      cell: (d) => <DraftActions draft={d} busy={busyId === d.id} onCancel={() => setCancelId(d.id)} />,
+    },
+  ];
+
   return (
     <>
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
-        <button type="button" className="btn-secondary" onClick={reload}>Refresh</button>
-        <Link href="/founder/launch" style={{ color: "var(--brand-accent)", alignSelf: "center" }}>Launch a project</Link>
+      <div className="page-title-row">
+        <div>
+          <h1>My launches</h1>
+          <p>Launch drafts you started, newest first. Active drafts refresh automatically.</p>
+        </div>
+        <div className="page-title-actions">
+          <Button variant="secondary" size="sm" onClick={reload} leftIcon={<RotateCw size={14} aria-hidden="true" />}>
+            Refresh
+          </Button>
+          <ButtonLink href="/founder/launch" size="sm" leftIcon={<Plus size={14} aria-hidden="true" />}>
+            Launch a project
+          </ButtonLink>
+        </div>
       </div>
-      {error && <div role="alert" className="alert alert-error" style={{ marginBottom: "16px" }}>{error}</div>}
-      {items === null && !error && <p style={{ color: "var(--text-secondary)" }}>Loading…</p>}
-      {items?.length === 0 && <p style={{ color: "var(--text-secondary)" }}>You have no launches yet.</p>}
-      {items?.map((draft) => (
-        <section key={draft.id} className="glass-card" style={{ padding: "20px", marginBottom: "16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "8px" }}>
-            <strong>{draft.name}</strong>
-            <span className={badgeClass(draft.status)}>{draft.status}</span>
-          </div>
-          <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "0 0 8px" }}>
-            {chainName(draft.chainId)} · {new Date(draft.createdAt).toLocaleString()}
-          </p>
-          <Explanation draft={draft} busy={busyId === draft.id} onCancel={() => setCancelId(draft.id)} />
-        </section>
-      ))}
+      {error && items !== null && (
+        <InlineAlert tone="danger" className="panel-gap">
+          {error}
+        </InlineAlert>
+      )}
+      <Card>
+        {error && items === null ? (
+          <ErrorState title="Could not load your launches" message={error} onRetry={reload} />
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={items ?? []}
+            rowKey={(d) => d.id}
+            caption="My launch drafts"
+            loading={items === null}
+            skeletonRows={3}
+            emptyTitle="You have no launches yet."
+            emptyText="Launch a project to see its draft and status here."
+            emptyAction={<ButtonLink href="/founder/launch" leftIcon={<Rocket size={14} aria-hidden="true" />}>Launch project</ButtonLink>}
+          />
+        )}
+      </Card>
       <ConfirmDialog
         open={cancelId !== null}
+        onOpenChange={(open) => {
+          if (!open) setCancelId(null);
+        }}
         title="Cancel this launch?"
+        body="Cancel this launch and free the shadow wallet? Only do this if the launch transaction was not sent."
         confirmLabel="Cancel launch"
         cancelLabel="Keep launch"
         tone="danger"
-        busy={busyId !== null}
-        onConfirm={() => cancelId && void cancel(cancelId)}
-        onCancel={() => setCancelId(null)}
-      >
-        Cancel this launch and free the shadow wallet? Only do this if the launch transaction was not sent.
-      </ConfirmDialog>
+        onConfirm={async () => {
+          if (cancelId) await cancel(cancelId);
+        }}
+      />
     </>
   );
 }
 
 export default function LaunchesPage() {
-  return (
-    <>
-      <h1 style={{ fontSize: "28px", marginBottom: "24px" }}>My launches</h1>
-      <LaunchList />
-    </>
-  );
+  return <LaunchList />;
 }

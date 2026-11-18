@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { LogIn, Plus, X } from "lucide-react";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Field, Input, Textarea } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Spinner } from "@/components/ui/Spinner";
+import { StatusPill, type StatusTone } from "@/components/ui/StatusPill";
+import { toast } from "@/lib/toast";
 import {
   describeApiError,
   fetchMyApplication,
@@ -18,12 +27,11 @@ const ABOUT_MIN = 50;
 const ABOUT_MAX = 1500;
 const MAX_OTHER_LINKS = 3;
 const NEED_LINK_MESSAGE = "Add at least one of LinkedIn, GitHub or portfolio";
-const HELPER_STYLE = { fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" } as const;
 
 function SafeLink({ href }: { href: string }) {
   if (!href.startsWith("https://")) return <span>{href}</span>;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)", wordBreak: "break-all" }}>
+    <a href={href} target="_blank" rel="noopener noreferrer" className="link-accent" style={{ wordBreak: "break-all" }}>
       {href}
     </a>
   );
@@ -31,23 +39,24 @@ function SafeLink({ href }: { href: string }) {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: "10px" }}>
-      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{label}</div>
-      <div style={{ fontSize: "14px" }}>{children}</div>
+    <div className="kv-row" style={{ display: "block" }}>
+      <div style={{ fontSize: 12 }}>{label}</div>
+      <div style={{ marginTop: 2, fontSize: 14, textAlign: "left", color: "var(--text)" }}>{children}</div>
     </div>
   );
 }
 
+function statusTone(status: string): StatusTone {
+  return status === "approved" ? "success" : status === "pending" ? "warning" : "neutral";
+}
+
 function StatusCard({ app }: { app: ApplicationDto }) {
-  const badge =
-    app.status === "approved" ? "badge-active" : app.status === "pending" ? "badge-pending" : "badge-inactive";
   return (
-    <div className="glass-card" style={{ padding: "24px", marginBottom: "24px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        <h2 style={{ fontSize: "20px" }}>{app.projectName ?? "Founder application"}</h2>
-        <span className={`badge ${badge}`}>{app.status}</span>
-      </div>
-      <Row label="Submitted">{new Date(app.createdAt).toLocaleString()}</Row>
+    <Card>
+      <CardHeader title={app.projectName ?? "Founder application"} actions={<StatusPill tone={statusTone(app.status)}>{app.status}</StatusPill>} />
+      <CardBody>
+        <div className="kv-list">
+      <Row label="Submitted"><span className="num">{new Date(app.createdAt).toLocaleString()}</span></Row>
       {app.kycVerifiedAt && <Row label="KYC">KYC verified</Row>}
       {app.reviewNote && <Row label="Review note">{app.reviewNote}</Row>}
       {app.about && <Row label="About you"><span style={{ whiteSpace: "pre-wrap" }}>{app.about}</span></Row>}
@@ -59,7 +68,9 @@ function StatusCard({ app }: { app: ApplicationDto }) {
       {app.websiteUrl && <Row label="Website"><SafeLink href={app.websiteUrl} /></Row>}
       {app.pitchDeckUrl && <Row label="Pitch deck"><SafeLink href={app.pitchDeckUrl} /></Row>}
       {app.repoUrl && <Row label="Repository"><SafeLink href={app.repoUrl} /></Row>}
-    </div>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -158,11 +169,14 @@ export default function ApplyPage() {
       };
       try {
         await submitApplication(body);
+        toast.success("Application submitted", { description: "Staff will review it." });
         setForm(EMPTY_FORM);
         setFetchedFor(undefined);
         setReloadKey((k) => k + 1);
       } catch (err) {
-        setFormError(describeApiError(err, "Could not submit the application"));
+        const message = describeApiError(err, "Could not submit the application");
+        setFormError(message);
+        toast.error(message);
       } finally {
         setSending(false);
       }
@@ -183,121 +197,160 @@ export default function ApplyPage() {
   const aboutLength = form.about.trim().length;
   const noProfileLink = !form.linkedinUrl.trim() && !form.githubUrl.trim() && !form.portfolioUrl.trim();
 
+  const loadingBlock = (
+    <div className="gate-loading" role="status">
+      <Spinner size={16} />
+      Loading…
+    </div>
+  );
+
   let content: React.ReactNode;
   if (loading && !user) {
-    content = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
+    content = loadingBlock;
   } else if (!user) {
     content = (
-      <div className="alert alert-warning" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-        <span>Please sign in to apply as a founder.</span>
-        <button type="button" className="btn-secondary" onClick={() => void signIn()}>
-          Sign in
-        </button>
-      </div>
+      <Card>
+        <EmptyState
+          icon={<LogIn size={20} />}
+          title="Please sign in to apply as a founder."
+          action={<Button onClick={() => void signIn()}>Sign in</Button>}
+        />
+      </Card>
     );
   } else if (role === "staff" || role === "admin") {
     content = (
-      <div className="alert alert-warning">
-        Applications are for investors and founders. Review them in <Link href="/admin/applications">Admin</Link>.
-      </div>
+      <InlineAlert tone="warning">
+        Applications are for investors and founders. Review them in <Link href="/admin/applications" className="link-accent">Admin</Link>.
+      </InlineAlert>
     );
   } else if (fetchedFor !== userId) {
-    content = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
+    content = loadingBlock;
   } else {
     const showForm = !loadError && (application === null || application.status === "rejected");
     content = (
-      <>
-        {loadError && <div role="alert" className="alert alert-error" style={{ marginBottom: "16px" }}>{loadError}</div>}
+      <div className="section-stack">
+        {loadError && <InlineAlert tone="danger">{loadError}</InlineAlert>}
+        {application?.status === "approved" && <InlineAlert tone="success">You are an approved founder.</InlineAlert>}
+        {application?.status === "pending" && <InlineAlert tone="warning">Your application is pending review.</InlineAlert>}
         {application && <StatusCard app={application} />}
-        {application?.status === "approved" && (
-          <div className="alert alert-success">You are an approved founder.</div>
-        )}
-        {application?.status === "pending" && (
-          <div className="alert alert-warning">Your application is pending review.</div>
-        )}
         {showForm && (
-          <form onSubmit={(e) => void onSubmit(e)} className="glass-card" style={{ padding: "24px", display: "grid", gap: "16px" }}>
-            {application?.status === "rejected" && (
-              <div className="alert alert-warning">Your application was rejected. You may re-apply.</div>
-            )}
-            <h2 style={{ fontSize: "18px" }}>About you</h2>
-            <div>
-              <label className="label" htmlFor="about">About you</label>
-              <textarea id="about" className="input-field" rows={5} maxLength={ABOUT_MAX} value={form.about} onChange={set("about")} required />
-              <div style={HELPER_STYLE}>
-                Tell us about your background and what you want to build. {aboutLength}/{ABOUT_MAX} characters (minimum {ABOUT_MIN}).
-              </div>
-            </div>
-            <h2 style={{ fontSize: "18px" }}>Resume</h2>
-            <div>
-              <label className="label" htmlFor="resumeUrl">Resume link</label>
-              <input id="resumeUrl" className="input-field" type="url" maxLength={500} placeholder="https://" value={form.resumeUrl} onChange={set("resumeUrl")} required />
-              <div style={HELPER_STYLE}>
-                Share a Google Drive or other storage link to a soft copy of your resume or CV. Set sharing so staff can open it.
-              </div>
-            </div>
-            <h2 style={{ fontSize: "18px" }}>Links</h2>
-            <div style={HELPER_STYLE}>Add at least one of LinkedIn, GitHub or portfolio.</div>
-            <div>
-              <label className="label" htmlFor="linkedinUrl">LinkedIn</label>
-              <input id="linkedinUrl" className="input-field" type="url" maxLength={300} placeholder="https://www.linkedin.com/in/your-name" value={form.linkedinUrl} onChange={set("linkedinUrl")} />
-            </div>
-            <div>
-              <label className="label" htmlFor="githubUrl">GitHub profile</label>
-              <input id="githubUrl" className="input-field" type="url" maxLength={300} placeholder="https://github.com/your-name" value={form.githubUrl} onChange={set("githubUrl")} />
-              <div style={HELPER_STYLE}>Your profile, not a repository.</div>
-            </div>
-            <div>
-              <label className="label" htmlFor="portfolioUrl">Portfolio</label>
-              <input id="portfolioUrl" className="input-field" type="url" maxLength={300} placeholder="https://" value={form.portfolioUrl} onChange={set("portfolioUrl")} />
-              <div style={HELPER_STYLE}>For example Behance, Dribbble or a personal site.</div>
-            </div>
-            {noProfileLink && <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>{NEED_LINK_MESSAGE}</div>}
-            <div>
-              <div className="label">Other links (optional, up to {MAX_OTHER_LINKS})</div>
-              {form.otherLinks.map((link, index) => (
-                <div key={index} style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
-                  <input
-                    className="input-field"
-                    type="url"
-                    maxLength={300}
-                    placeholder="https://"
-                    aria-label={`Other link ${index + 1}`}
-                    value={link}
-                    onChange={(e) => setOther(index, e.target.value)}
-                  />
-                  <button type="button" className="btn-secondary" onClick={() => removeOther(index)}>Remove</button>
-                </div>
-              ))}
-              {form.otherLinks.length < MAX_OTHER_LINKS && (
-                <button type="button" className="btn-secondary" onClick={addOther}>Add link</button>
+          <form onSubmit={(e) => void onSubmit(e)}>
+            <Card>
+              {application?.status === "rejected" && (
+                <CardBody style={{ paddingBottom: 0 }}>
+                  <InlineAlert tone="warning">Your application was rejected. You may re-apply.</InlineAlert>
+                </CardBody>
               )}
-            </div>
-            <h2 style={{ fontSize: "18px" }}>Identity documents (KYC)</h2>
-            <div>
-              <label className="label" htmlFor="kycDocsUrl">KYC documents link</label>
-              <input id="kycDocsUrl" className="input-field" type="url" maxLength={500} placeholder="https://" value={form.kycDocsUrl} onChange={set("kycDocsUrl")} required />
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
-                Share a Google Drive or other storage folder link with soft copies of your NIC and other required documents. Set sharing so staff can open it.
-              </div>
-            </div>
-            <div>
-              <label className="label" htmlFor="kycNote">Note for reviewer (optional)</label>
-              <textarea id="kycNote" className="input-field" rows={3} maxLength={500} value={form.kycNote} onChange={set("kycNote")} />
-            </div>
-            {formError && <div role="alert" className="alert alert-error">{formError}</div>}
-            <button type="submit" className="btn-primary" disabled={sending}>
-              {sending ? "Submitting…" : "Submit application"}
-            </button>
+              <CardHeader title="About you" />
+              <CardBody>
+                <Field
+                  label="About you"
+                  id="about"
+                  required
+                  hint={
+                    <>
+                      Tell us about your background and what you want to build.{" "}
+                      <span className="num">{aboutLength}/{ABOUT_MAX}</span> characters (minimum {ABOUT_MIN}).
+                    </>
+                  }
+                >
+                  <Textarea rows={5} maxLength={ABOUT_MAX} value={form.about} onChange={set("about")} required />
+                </Field>
+              </CardBody>
+
+              <CardHeader title="Resume" style={{ borderTop: "1px solid var(--border)" }} />
+              <CardBody>
+                <Field
+                  label="Resume link"
+                  id="resumeUrl"
+                  required
+                  hint="Share a Google Drive or other storage link to a soft copy of your resume or CV. Set sharing so staff can open it."
+                >
+                  <Input type="url" maxLength={500} placeholder="https://" value={form.resumeUrl} onChange={set("resumeUrl")} required />
+                </Field>
+              </CardBody>
+
+              <CardHeader title="Links" subtitle="Add at least one of LinkedIn, GitHub or portfolio." style={{ borderTop: "1px solid var(--border)" }} />
+              <CardBody className="form-grid">
+                <Field label="LinkedIn" id="linkedinUrl">
+                  <Input type="url" maxLength={300} placeholder="https://www.linkedin.com/in/your-name" value={form.linkedinUrl} onChange={set("linkedinUrl")} />
+                </Field>
+                <div className="form-grid form-grid-2">
+                  <Field label="GitHub profile" id="githubUrl" hint="Your profile, not a repository.">
+                    <Input type="url" maxLength={300} placeholder="https://github.com/your-name" value={form.githubUrl} onChange={set("githubUrl")} />
+                  </Field>
+                  <Field label="Portfolio" id="portfolioUrl" hint="For example Behance, Dribbble or a personal site.">
+                    <Input type="url" maxLength={300} placeholder="https://" value={form.portfolioUrl} onChange={set("portfolioUrl")} />
+                  </Field>
+                </div>
+                {noProfileLink && <InlineAlert tone="info">{NEED_LINK_MESSAGE}</InlineAlert>}
+                <div>
+                  <div className="label">Other links (optional, up to {MAX_OTHER_LINKS})</div>
+                  <div className="stack-sm">
+                    {form.otherLinks.map((link, index) => (
+                      <div key={index} className="input-row">
+                        <Input
+                          type="url"
+                          maxLength={300}
+                          placeholder="https://"
+                          aria-label={`Other link ${index + 1}`}
+                          value={link}
+                          onChange={(e) => setOther(index, e.target.value)}
+                        />
+                        <Button variant="ghost" className="icon-btn" style={{ height: 42, width: 42 }} aria-label={`Remove other link ${index + 1}`} onClick={() => removeOther(index)}>
+                          <X size={16} aria-hidden="true" />
+                        </Button>
+                      </div>
+                    ))}
+                    {form.otherLinks.length < MAX_OTHER_LINKS && (
+                      <div>
+                        <Button variant="secondary" size="sm" onClick={addOther} leftIcon={<Plus size={14} aria-hidden="true" />}>
+                          Add link
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardBody>
+
+              <CardHeader title="Identity documents (KYC)" style={{ borderTop: "1px solid var(--border)" }} />
+              <CardBody className="form-grid">
+                <Field
+                  label="KYC documents link"
+                  id="kycDocsUrl"
+                  required
+                  hint="Share a Google Drive or other storage folder link with soft copies of your NIC and other required documents. Set sharing so staff can open it."
+                >
+                  <Input type="url" maxLength={500} placeholder="https://" value={form.kycDocsUrl} onChange={set("kycDocsUrl")} required />
+                </Field>
+                <Field label="Note for reviewer (optional)" id="kycNote">
+                  <Textarea rows={3} maxLength={500} value={form.kycNote} onChange={set("kycNote")} />
+                </Field>
+              </CardBody>
+
+              <CardFooter style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+                  {formError && <InlineAlert tone="danger">{formError}</InlineAlert>}
+                </div>
+                <Button type="submit" loading={sending}>
+                  {sending ? "Submitting…" : "Submit application"}
+                </Button>
+              </CardFooter>
+            </Card>
           </form>
         )}
-      </>
+      </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: "720px", margin: "0 auto", padding: "40px 24px" }}>
-      <h1 style={{ fontSize: "28px", marginBottom: "24px" }}>Apply as a founder</h1>
+    <div className="page-container page-container-narrow">
+      <div className="page-title-row">
+        <div>
+          <h1>Apply as a founder</h1>
+          <p>Tell us about yourself and share your resume, profile links and KYC documents. Staff review every application.</p>
+        </div>
+      </div>
       {content}
     </div>
   );

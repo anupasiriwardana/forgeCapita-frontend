@@ -1,36 +1,64 @@
 import Link from "next/link";
+import { Zap } from "lucide-react";
 
-const LINKS: ReadonlyArray<{ href: string; label: string }> = [
+type FooterLink = { href: string; label: string };
+
+const PRODUCT: ReadonlyArray<FooterLink> = [
   { href: "/projects", label: "Projects" },
   { href: "/how-it-works", label: "How it works" },
+];
+
+const COMPANY: ReadonlyArray<FooterLink> = [
   { href: "/about", label: "About" },
   { href: "/legal", label: "Legal" },
   { href: "/#faq", label: "FAQ" },
 ];
 
-export function Footer() {
+const NETWORKS: ReadonlyArray<string> = ["Arbitrum Sepolia", "BSC Testnet"];
+
+function LinkColumn({ title, links }: { title: string; links: ReadonlyArray<FooterLink> }): React.ReactElement {
   return (
-    <footer
-      style={{
-        borderTop: "1px solid rgba(255,255,255,0.07)",
-        padding: "24px",
-        textAlign: "center",
-        fontSize: "13px",
-        color: "rgba(241,245,249,0.5)",
-      }}
-    >
-      <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, color: "#a78bfa", marginBottom: "4px" }}>
-        ForgeCapita
-      </div>
-      <nav aria-label="Footer" style={{ display: "flex", justifyContent: "center", gap: "16px", flexWrap: "wrap", margin: "8px 0" }}>
-        {LINKS.map(({ href, label }) => (
-          <Link key={href} href={href} style={{ color: "inherit", textDecoration: "none" }}>
-            {label}
-          </Link>
+    <nav aria-label={title}>
+      <h2 className="site-footer-heading">{title}</h2>
+      <ul className="site-footer-list">
+        {links.map(({ href, label }) => (
+          <li key={href}>
+            <Link href={href}>{label}</Link>
+          </li>
         ))}
-      </nav>
-      <div>Running on Arbitrum Sepolia and BSC Testnet. Testnet funds only, no real value.</div>
-      <div style={{ marginTop: "4px" }}>Copyright ForgeCapita. All rights reserved.</div>
+      </ul>
+    </nav>
+  );
+}
+
+export function Footer(): React.ReactElement {
+  return (
+    <footer className="site-footer">
+      <div className="site-footer-inner">
+        <div className="site-footer-grid">
+          <div className="site-footer-brand">
+            <div className="brand-link">
+              <span className="brand-mark" aria-hidden="true">
+                <Zap size={18} />
+              </span>
+              <span className="shell-brand-text">ForgeCapita</span>
+            </div>
+            <p>Milestone-governed crowdfunding and revenue sharing for software startups.</p>
+            <p>Running on testnets only. Testnet funds have no real value.</p>
+          </div>
+          <LinkColumn title="Product" links={PRODUCT} />
+          <LinkColumn title="Company" links={COMPANY} />
+          <div>
+            <h2 className="site-footer-heading">Networks</h2>
+            <ul className="site-footer-list">
+              {NETWORKS.map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div className="site-footer-bottom">Copyright ForgeCapita. All rights reserved.</div>
+      </div>
     </footer>
   );
 }

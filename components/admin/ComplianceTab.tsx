@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useId, useState } from "react";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useCallback, useState } from "react";
+import { RotateCw } from "lucide-react";
+import { Amount } from "@/components/ui/Amount";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { Field, Select, Textarea } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { chainName } from "@/config/chains";
 import {
   ApiError,
-  describeApiError,
   formatNative,
   listAdminCompliance,
   resolveComplianceCase,
@@ -15,12 +23,21 @@ import {
   type ComplianceCaseDto,
   type ComplianceState,
 } from "@/lib/api";
+import { toast } from "@/lib/toast";
 import { complianceBadge, formatBps } from "@/components/TransparencyPanel";
-import { ADMIN_PAGE_SIZE, AdminPager, ListState, ROW_STYLE, useAdminList } from "./shared";
+import {
+  ADMIN_PAGE_SIZE,
+  AdminListCard,
+  AdminPageHeader,
+  AdminPager,
+  RelativeTime,
+  StatusFilter,
+  toneFromBadge,
+  useAdminList,
+} from "./shared";
 
 const STATES: ComplianceState[] = ["OK", "WARNED", "ESCALATED", "RESOLVED", "SHUTDOWN"];
 const CHAINS = [421614, 97];
-const COLUMNS = "1.3fr 1fr 0.9fr 1.8fr 0.8fr 1.2fr 1.6fr 1.4fr";
 const NOTE_MAX = 500;
 
 type ActionKind = "resolve" | "shutdown";
@@ -38,6 +55,34 @@ function fmtTime(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString() : "-";
 }
 
+function fmtDay(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "-";
+}
+
+/** Compact "Oct 19 - Nov 18" window with the full date-time range in a tooltip; the resolution note is clipped below. */
+function WindowCell({ item }: { item: ComplianceCaseDto }) {
+  const full = `${fmtTime(item.windowStart)} to ${fmtTime(item.windowEnd)}`;
+  return (
+    <div>
+      {item.windowStart || item.windowEnd ? (
+        <Tooltip content={full}>
+          <span tabIndex={0} className="admin-time num">
+            {fmtDay(item.windowStart)} - {fmtDay(item.windowEnd)}
+            <span className="sr-only"> ({full})</span>
+          </span>
+        </Tooltip>
+      ) : (
+        <span className="cell-sub">-</span>
+      )}
+      {item.resolutionNote && (
+        <span className="cell-sub cell-clip" style={{ maxWidth: 200 }} title={item.resolutionNote}>
+          {item.resolutionNote}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function ComplianceTab() {
   const [offset, setOffset] = useState(0);
   const [state, setState] = useState<ComplianceState | "">("");
@@ -45,9 +90,7 @@ export function ComplianceTab() {
   const [reloadKey, setReloadKey] = useState(0);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState("");
-  const noteId = useId();
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(
     (signal: AbortSignal) =>
@@ -67,159 +110,176 @@ export function ComplianceTab() {
 
   const openDialog = (kind: ActionKind, item: ComplianceCaseDto): void => {
     setNote("");
-    setActionError("");
+    setNotice("");
     setPending({ kind, item });
   };
 
-  const closeDialog = (): void => {
-    setPending(null);
-    setNote("");
-    setActionError("");
-  };
+  const trimmed = note.trim();
 
   const submit = async (): Promise<void> => {
-    const trimmed = note.trim();
-    if (!pending || busy || trimmed === "") return;
-    setBusy(true);
-    setActionError("");
+    if (!pending || trimmed === "") return;
+    const { kind, item } = pending;
     try {
-      const act = pending.kind === "shutdown" ? shutdownComplianceCase : resolveComplianceCase;
-      await act(pending.item.projectId, trimmed);
-      closeDialog();
+      const act = kind === "shutdown" ? shutdownComplianceCase : resolveComplianceCase;
+      await act(item.projectId, trimmed);
+      toast.success(kind === "shutdown" ? "Project shut down" : "Case resolved");
       setReloadKey((k) => k + 1);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        closeDialog();
         setReloadKey((k) => k + 1);
-        setActionError("Case is no longer open; list refreshed");
-      } else {
-        setActionError(describeApiError(err, "Action failed"));
+        setNotice("Case is no longer open; list refreshed");
+        return;
       }
-    } finally {
-      setBusy(false);
+      throw err;
     }
   };
 
   const isShutdown = pending?.kind === "shutdown";
+  const refresh = () => setReloadKey((k) => k + 1);
+
+  const columns: ReadonlyArray<DataTableColumn<ComplianceCaseDto>> = [
+    {
+      key: "project",
+      header: "Project",
+      cell: (c) => (
+        <Link href={`/projects/${encodeURIComponent(c.projectId)}`} className="link-accent mono" style={{ fontSize: 12 }} title={c.projectId}>
+          {shortProject(c.projectId)}
+        </Link>
+      ),
+    },
+    { key: "chain", header: "Network", cell: (c) => <span className="cell-sub" style={{ fontSize: 13 }}>{chainName(c.chainId)}</span> },
+    { key: "state", header: "State", cell: (c) => <StatusPill tone={toneFromBadge(complianceBadge(c.state))}>{c.state}</StatusPill> },
+    {
+      key: "amounts",
+      header: "Observed / routed",
+      align: "right",
+      cell: (c) =>
+        c.observedNative != null && c.routedNative != null ? (
+          <>
+            <div className="cell-nowrap">
+              <Amount value={formatNative(c.observedNative, c.chainId)} />
+            </div>
+            <div className="cell-nowrap admin-muted">
+              / <Amount value={formatNative(c.routedNative, c.chainId)} />
+            </div>
+          </>
+        ) : (
+          <span className="cell-sub">-</span>
+        ),
+    },
+    {
+      key: "shortfall",
+      header: "Shortfall",
+      align: "right",
+      numeric: true,
+      cell: (c) => (c.shortfallBps != null ? <Amount value={formatBps(c.shortfallBps)} /> : <span className="cell-sub">-</span>),
+    },
+    { key: "checked", header: "Last checked", numeric: true, cell: (c) => <RelativeTime iso={c.lastCheckedAt} /> },
+    {
+      key: "window",
+      header: "Window",
+      cell: (c) => <WindowCell item={c} />,
+    },
+    {
+      key: "actions",
+      header: <span className="sr-only">Actions</span>,
+      align: "right",
+      cell: (c) => (
+        <div className="row-actions">
+          {(c.state === "WARNED" || c.state === "ESCALATED") && (
+            <Button variant="secondary" size="sm" onClick={() => openDialog("resolve", c)}>
+              Resolve
+            </Button>
+          )}
+          {c.state === "ESCALATED" && (
+            <Button variant="danger" size="sm" onClick={() => openDialog("shutdown", c)}>
+              Shut down
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <section>
-      <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>Compliance</h1>
-      <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "12px" }}>
-        Revenue audit cases comparing observed inflows with revenue routed to the protocol.
-      </p>
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
-        <select
-          className="input-field"
-          style={{ width: "160px" }}
+      <AdminPageHeader
+        title="Compliance"
+        description="Revenue audit cases comparing observed inflows with revenue routed to the protocol."
+        actions={
+          <Button variant="secondary" size="sm" onClick={refresh} leftIcon={<RotateCw size={14} aria-hidden="true" />}>
+            Refresh
+          </Button>
+        }
+      />
+      <Card className="admin-toolbar">
+        <StatusFilter
+          options={STATES}
           value={state}
-          onChange={(e) => {
-            setState(STATES.find((s) => s === e.target.value) ?? "");
+          label="State"
+          onChange={(value) => {
+            setState(value);
             setOffset(0);
           }}
-          aria-label="Filter by state"
-        >
-          <option value="">all states</option>
-          {STATES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <select
-          className="input-field"
-          style={{ width: "180px" }}
-          value={chain}
-          onChange={(e) => {
-            setChain(CHAINS.map(String).find((c) => c === e.target.value) ?? "");
-            setOffset(0);
-          }}
-          aria-label="Filter by network"
-        >
-          <option value="">all networks</option>
-          {CHAINS.map((c) => (
-            <option key={c} value={String(c)}>{chainName(c)}</option>
-          ))}
-        </select>
-        <button type="button" className="btn-secondary" onClick={() => setReloadKey((k) => k + 1)}>
-          Refresh
-        </button>
-      </div>
-      <div className="glass-card" style={{ padding: "8px" }}>
-        <ListState loading={loading} error={error} empty={items.length === 0} emptyText="No compliance cases." />
-        {items.map((c) => (
-          <div key={c.id} style={{ ...ROW_STYLE, gridTemplateColumns: COLUMNS }}>
-            <span title={c.projectId}>
-              <Link href={`/projects/${encodeURIComponent(c.projectId)}`} style={{ color: "var(--brand-accent)" }}>
-                {shortProject(c.projectId)}
-              </Link>
-            </span>
-            <span>{chainName(c.chainId)}</span>
-            <span><span className={`badge ${complianceBadge(c.state)}`}>{c.state}</span></span>
-            <span>
-              {c.observedNative != null && c.routedNative != null
-                ? `${formatNative(c.observedNative, c.chainId)} / ${formatNative(c.routedNative, c.chainId)}`
-                : "-"}
-            </span>
-            <span>{c.shortfallBps != null ? formatBps(c.shortfallBps) : "-"}</span>
-            <span style={{ color: "var(--text-secondary)" }}>{fmtTime(c.lastCheckedAt)}</span>
-            <span style={{ color: "var(--text-secondary)", wordBreak: "break-word" }}>
-              {fmtTime(c.windowStart)} to {fmtTime(c.windowEnd)}
-              {c.resolutionNote ? ` - ${c.resolutionNote}` : ""}
-            </span>
-            <span style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {(c.state === "WARNED" || c.state === "ESCALATED") && (
-                <button type="button" className="btn-secondary" onClick={() => openDialog("resolve", c)}>
-                  Resolve
-                </button>
-              )}
-              {c.state === "ESCALATED" && (
-                <button type="button" className="btn-danger" onClick={() => openDialog("shutdown", c)}>
-                  Shut down
-                </button>
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
-      <AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />
-      {pending === null && actionError && (
-        <p role="alert" style={{ color: "var(--rose)", fontSize: "13px", marginTop: "12px" }}>{actionError}</p>
+        />
+        <Field label="Network" className="toolbar-field">
+          <Select
+            value={chain}
+            onChange={(e) => {
+              setChain(CHAINS.map(String).find((c) => c === e.target.value) ?? "");
+              setOffset(0);
+            }}
+          >
+            <option value="">all networks</option>
+            {CHAINS.map((c) => (
+              <option key={c} value={String(c)}>{chainName(c)}</option>
+            ))}
+          </Select>
+        </Field>
+      </Card>
+      {notice && (
+        <InlineAlert tone="warning" className="panel-gap">
+          {notice}
+        </InlineAlert>
       )}
+      <AdminListCard
+        error={error}
+        errorTitle="Could not load compliance cases"
+        onRetry={refresh}
+        hasData={page !== null}
+        footer={<AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />}
+      >
+        <DataTable
+          columns={columns}
+          rows={items}
+          rowKey={(c) => c.id}
+          caption="Compliance cases"
+          loading={loading}
+          dense
+          stickyHeader
+          emptyTitle="No compliance cases."
+        />
+      </AdminListCard>
       <ConfirmDialog
         open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open) setPending(null);
+        }}
         title={isShutdown ? "Shut down project?" : "Resolve compliance case?"}
-        confirmLabel={isShutdown ? "Shut down" : "Resolve"}
-        tone={isShutdown ? "danger" : "default"}
-        busy={busy}
-        confirmDisabled={note.trim() === ""}
-        onConfirm={() => void submit()}
-        onCancel={closeDialog}
-      >
-        <p style={{ marginBottom: "12px" }}>
-          {isShutdown
+        body={
+          isShutdown
             ? "The shutdown is recorded in the audit log and cannot be undone through the UI or API."
-            : "This closes the case. If the shortfall persists, a new warning opens on the next check."}
-        </p>
-        <label htmlFor={noteId} style={{ display: "block", fontSize: "13px", marginBottom: "6px" }}>
-          Note (required)
-        </label>
-        <textarea
-          id={noteId}
-          className="input-field"
-          rows={3}
-          required
-          maxLength={NOTE_MAX}
-          value={note}
-          disabled={busy}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        {note.trim() === "" && (
-          <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "6px" }}>
-            A note is required to confirm.
-          </p>
-        )}
-        {actionError && (
-          <p role="alert" style={{ color: "var(--rose)", fontSize: "13px", marginTop: "8px" }}>{actionError}</p>
-        )}
+            : "This closes the case. If the shortfall persists, a new warning opens on the next check."
+        }
+        confirmLabel={isShutdown ? "Shut down" : "Resolve"}
+        tone={isShutdown ? "danger" : "primary"}
+        confirmDisabled={trimmed === ""}
+        onConfirm={submit}
+        errorFallback="Action failed"
+      >
+        <Field label="Note" required hint={trimmed === "" ? "A note is required to confirm." : `Up to ${NOTE_MAX} characters.`}>
+          <Textarea rows={3} maxLength={NOTE_MAX} value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
       </ConfirmDialog>
     </section>
   );

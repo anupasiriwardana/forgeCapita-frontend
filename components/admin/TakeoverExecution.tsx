@@ -3,26 +3,20 @@
 import { useState } from "react";
 import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { InlineAlert } from "@/components/ui/InlineAlert";
 import { chainName } from "@/config/chains";
 import { type TakeoverCaseDto, type TakeoverExecutionDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { explorerTxUrl } from "@/lib/explorer";
 import { getFeeOverrides } from "@/lib/fees";
+import { toast } from "@/lib/toast";
+import { isUserRejection, toastTxError, txErrorMessage } from "@/lib/walletErrors";
 
 type Addr = `0x${string}`;
 
 const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
-const MUTED = { fontSize: "13px", color: "var(--text-muted)" } as const;
-
-function errMessage(err: unknown): string {
-  if (typeof err === "object" && err !== null) {
-    const e = err as { shortMessage?: unknown; message?: unknown };
-    if (typeof e.shortMessage === "string") return e.shortMessage;
-    if (typeof e.message === "string") return e.message;
-  }
-  return "Transaction failed";
-}
 
 function asAddr(v: unknown): Addr | null {
   return typeof v === "string" && ADDRESS_REGEX.test(v) ? (v as Addr) : null;
@@ -32,7 +26,7 @@ function TxLink({ chainId, hash }: { chainId: number; hash: string | null }) {
   const url = hash ? explorerTxUrl(chainId, hash) : null;
   if (!url) return <span>{hash ?? "-"}</span>;
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)" }}>
+    <a href={url} target="_blank" rel="noopener noreferrer" className="link-accent">
       View transaction
     </a>
   );
@@ -123,13 +117,16 @@ export function TakeoverExecution({ c, onSent }: { c: TakeoverCaseDto; onSent: (
       });
       const receipt = await waitForTransactionReceipt(config, { hash, chainId });
       if (receipt.status !== "success") {
+        toast.error("Transaction failed (reverted).");
         setResult({ ok: false, text: "Transaction failed (reverted).", hash });
       } else {
+        toast.success("Nomination confirmed");
         setResult({ ok: true, text: "Nomination confirmed. The API sees the event after the indexer catches up (up to a minute).", hash });
         onSent();
       }
     } catch (err) {
-      setResult({ ok: false, text: errMessage(err) });
+      toastTxError(err);
+      if (!isUserRejection(err)) setResult({ ok: false, text: txErrorMessage(err) });
     } finally {
       setBusy(false);
       setConfirm(false);
@@ -139,53 +136,53 @@ export function TakeoverExecution({ c, onSent }: { c: TakeoverCaseDto; onSent: (
   const advisory = c.result === "failed" || c.result === "no_quorum";
 
   return (
-    <div style={{ marginBottom: "16px" }}>
-      <h4 style={{ fontSize: "14px", marginBottom: "6px" }}>On-chain execution</h4>
-      <div style={{ fontSize: "13px" }}>
+    <div className="admin-section">
+      <h3 className="admin-section-title">On-chain execution</h3>
+      <div style={{ fontSize: 13 }}>
         <StatusLine chainId={chainId} execution={execution} />
       </div>
-      <p style={MUTED}>The vote is advisory; result: {c.result ?? "-"}</p>
+      <p className="panel-note" style={{ marginTop: 4 }}>The vote is advisory; result: {c.result ?? "-"}</p>
       {advisory && (
-        <div className="alert alert-warning" style={{ margin: "8px 0" }}>
+        <InlineAlert tone="warning" className="admin-section-alert">
           The vote did not pass. Proposing a new developer anyway is allowed but goes against the community result.
-        </div>
+        </InlineAlert>
       )}
-      <button
-        type="button"
-        className="btn-primary"
-        disabled={busy || blocker !== null}
-        onClick={() => setConfirm(true)}
-      >
-        {busy ? "Waiting for confirmation..." : "Propose new developer"}
-      </button>
-      {blocker && <p style={{ ...MUTED, margin: "6px 0 0" }}>{blocker}</p>}
+      <div style={{ marginTop: 12 }}>
+        <Button loading={busy} disabled={blocker !== null} onClick={() => setConfirm(true)}>
+          {busy ? "Waiting for confirmation..." : "Propose new developer"}
+        </Button>
+      </div>
+      {blocker && <p className="panel-note" style={{ marginTop: 6 }}>{blocker}</p>}
       {result && (
-        <div role={result.ok ? "status" : "alert"} className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "10px" }}>
-          <span>
-            {result.text}
-            {result.hash && (
-              <>
-                {" "}
-                <TxLink chainId={chainId} hash={result.hash} />
-              </>
-            )}
-          </span>
-        </div>
+        <InlineAlert tone={result.ok ? "success" : "danger"} className="admin-section-alert">
+          {result.text}
+          {result.hash && (
+            <>
+              {" "}
+              <TxLink chainId={chainId} hash={result.hash} />
+            </>
+          )}
+        </InlineAlert>
       )}
       <ConfirmDialog
         open={confirm}
+        onOpenChange={(open) => {
+          if (!busy) setConfirm(open);
+        }}
         title="Propose a new developer?"
+        body={
+          <>
+            This sends an on-chain transaction from the guardian wallet that nominates{" "}
+            <span className="mono">{c.candidateWallet}</span> as the new developer. Nothing changes until the candidate
+            accepts; you can replace the nomination by proposing again. After acceptance the old developer loses developer
+            rights on this project and the escrow pays future milestones to the new developer. This cannot be undone except
+            by another proposal and acceptance.
+          </>
+        }
         confirmLabel="Send transaction"
         tone="danger"
-        busy={busy}
-        onConfirm={() => void propose()}
-        onCancel={() => setConfirm(false)}
-      >
-        This sends an on-chain transaction from the guardian wallet that nominates {c.candidateWallet} as the new
-        developer. Nothing changes until the candidate accepts; you can replace the nomination by proposing again. After
-        acceptance the old developer loses developer rights on this project and the escrow pays future milestones to the
-        new developer. This cannot be undone except by another proposal and acceptance.
-      </ConfirmDialog>
+        onConfirm={propose}
+      />
     </div>
   );
 }

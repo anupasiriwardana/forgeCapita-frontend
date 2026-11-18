@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { getAddress } from "viem";
 import { useAccount, useSignMessage } from "wagmi";
-import { isUserRejection } from "@/components/founder/isUserRejection";
+import { FileSignature } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardFooter, CardHeader } from "@/components/ui/Card";
+import { Field, Input } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { toast, toastErrorWithRef } from "@/lib/toast";
+import { isUserRejection, WALLET_CANCELLED_MESSAGE } from "@/lib/walletErrors";
 import {
   ApiError,
   acceptAgreement,
@@ -52,54 +59,78 @@ export function AgreementSection({ me, onChanged }: { me: FounderMeDto; onChange
         .replace("{issuedAt}", () => issuedAt);
       const signature = await signMessageAsync({ message });
       await acceptAgreement({ typedName: trimmed, issuedAt, signature });
+      toast.success("Agreement accepted");
       onChanged();
     } catch (err) {
-      if (isUserRejection(err)) setError("Signature request was rejected.");
+      let message: string | null = null;
+      if (isUserRejection(err)) toast.info(WALLET_CANCELLED_MESSAGE);
       else if (err instanceof ApiError && err.status === 409) onChanged();
       else if (err instanceof ApiError && err.status === 400 && /time window/i.test(err.message)) {
-        setError("Check your computer clock and try again");
-      } else setError(describeFounderError(err, "Could not accept the agreement"));
+        message = "Check your computer clock and try again";
+      } else message = describeFounderError(err, "Could not accept the agreement");
+      if (message) {
+        setError(message);
+        toastErrorWithRef(message, err);
+      }
     } finally {
       setBusy(false);
     }
   }
 
-  return (
-    <section id="agreement" className="glass-card" style={{ padding: "24px" }}>
-      {accepted ? (
-        <p>
+  if (accepted) {
+    return (
+      <section id="agreement">
+        <InlineAlert tone="success" title="Agreement accepted">
           Accepted v{accepted.version} on {new Date(accepted.acceptedAt).toLocaleString()}
-        </p>
-      ) : (
-        <>
-          <pre
-            className="whitespace-pre-wrap"
-            style={{ maxHeight: "320px", overflowY: "auto", fontSize: "13px", padding: "12px", border: "1px solid var(--border)", borderRadius: "8px" }}
-          >
-            {text ?? "Loading…"}
-          </pre>
-          <div style={{ marginTop: "12px" }}>
-            <label className="label" htmlFor="typedName">Type your full legal name</label>
-            <input
+        </InlineAlert>
+      </section>
+    );
+  }
+
+  return (
+    <section id="agreement">
+      <Card>
+        <CardHeader
+          title={
+            <span className="panel-title">
+              <FileSignature size={16} aria-hidden="true" />
+              Agreement text
+            </span>
+          }
+        />
+        <CardBody>
+          {text === null ? (
+            <div className="stack-sm" role="status">
+              <span className="sr-only">Loading…</span>
+              <Skeleton width="90%" />
+              <Skeleton width="80%" />
+              <Skeleton width="85%" />
+              <Skeleton width="60%" />
+            </div>
+          ) : (
+            <pre className="prose-scroll" tabIndex={0} aria-label="Agreement text">
+              {text}
+            </pre>
+          )}
+        </CardBody>
+        <CardFooter style={{ display: "block", padding: "16px 20px" }}>
+          <div className="stack-md content-narrow">
+            <Field
+              label="Type your full legal name"
               id="typedName"
-              className="input-field"
-              value={name}
-              maxLength={MAX_NAME}
-              onChange={(e) => setName(e.target.value)}
-            />
+              hint={`At least ${MIN_NAME} characters. Your wallet will ask you to sign the agreement.`}
+            >
+              <Input value={name} maxLength={MAX_NAME} autoComplete="name" onChange={(e) => setName(e.target.value)} />
+            </Field>
+            {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+            <div>
+              <Button loading={busy} disabled={trimmed.length < MIN_NAME || text === null} onClick={() => void submit()}>
+                {busy ? "Waiting…" : "Sign and accept"}
+              </Button>
+            </div>
           </div>
-          {error && <div role="alert" className="alert alert-error" style={{ marginTop: "12px" }}>{error}</div>}
-          <button
-            type="button"
-            className="btn-primary"
-            style={{ marginTop: "12px" }}
-            disabled={busy || trimmed.length < MIN_NAME || text === null}
-            onClick={() => void submit()}
-          >
-            {busy ? "Waiting…" : "Sign and accept"}
-          </button>
-        </>
-      )}
+        </CardFooter>
+      </Card>
     </section>
   );
 }

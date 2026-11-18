@@ -1,16 +1,37 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Rocket } from "lucide-react";
 import { FounderProjects } from "@/components/FounderProjects";
+import { ButtonLink } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusIcon } from "@/components/ui/StatusIcon";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { describeFounderError, fetchLaunchEligibility, type LaunchEligibilityDto } from "@/lib/api";
 
-function Check({ ok, label, href }: { ok: boolean; label: string; href: string }) {
+interface CheckProps {
+  ok: boolean;
+  label: string;
+  help: string;
+  href: string;
+  action: string;
+}
+
+function Check({ ok, label, help, href, action }: CheckProps) {
   return (
-    <li style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
+    <li className="check-row">
       <StatusIcon state={ok ? "done" : "error"} label={ok ? "Done" : "Not done"} />
-      {ok ? <span>{label}</span> : <Link href={href} style={{ color: "var(--brand-accent)" }}>{label}</Link>}
+      <div className="check-row-main">
+        <div className="check-row-title">{label}</div>
+        <div className="check-row-help">{help}</div>
+      </div>
+      {!ok && (
+        <ButtonLink href={href} variant="secondary" size="sm">
+          {action}
+        </ButtonLink>
+      )}
     </li>
   );
 }
@@ -36,31 +57,100 @@ export default function FounderProjectsPage() {
 
   let checklist: React.ReactNode;
   if (error) {
-    checklist = <div role="alert" className="alert alert-error">{error}</div>;
+    checklist = <InlineAlert tone="danger">{error}</InlineAlert>;
   } else if (!eligibility) {
-    checklist = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
+    checklist = (
+      <Card aria-busy="true">
+        <CardBody className="stack-md">
+          <span className="sr-only" role="status">Loading…</span>
+          <Skeleton width="40%" height={16} />
+          <Skeleton height={6} />
+          <Skeleton width="70%" />
+          <Skeleton width="60%" />
+        </CardBody>
+      </Card>
+    );
   } else {
     const { checks } = eligibility;
+    const doneCount = [checks.applicationApproved, checks.agreementAccepted, checks.shadowWalletAvailable, checks.repoProvisioned].filter(Boolean).length;
     checklist = (
-      <section className="glass-card" style={{ padding: "24px", marginBottom: "24px" }}>
-        <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>
-          Launch eligibility: {eligibility.eligible ? "ready" : "not ready"}
-        </h2>
-        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          <Check ok={checks.applicationApproved} label="Application approved" href="/apply" />
-          <Check ok={checks.agreementAccepted} label="Agreement accepted" href="/founder/agreement" />
-          <Check ok={checks.shadowWalletAvailable} label="Approved shadow wallet available" href="/founder/wallets" />
-          <Check ok={checks.repoProvisioned} label="Project repository" href="/founder/repository" />
-        </ul>
-      </section>
+      <Card>
+        <CardHeader
+          title={`Launch eligibility: ${eligibility.eligible ? "ready" : "not ready"}`}
+          subtitle="Complete all four checks before you launch a project."
+          actions={
+            eligibility.eligible ? (
+              <StatusPill tone="success">Ready</StatusPill>
+            ) : (
+              <StatusPill tone="warning">Not ready</StatusPill>
+            )
+          }
+        />
+        <CardBody>
+          <div className="checklist-progress" style={{ marginBottom: 16 }}>
+            <div
+              className="progress-bar"
+              role="progressbar"
+              aria-label="Launch checks done"
+              aria-valuemin={0}
+              aria-valuemax={4}
+              aria-valuenow={doneCount}
+            >
+              <div className="progress-fill" style={{ width: `${(doneCount * 25).toString()}%` }} />
+            </div>
+            <span className="checklist-count num">{doneCount} of 4 done</span>
+          </div>
+          <ul className="check-list">
+            <Check
+              ok={checks.applicationApproved}
+              label="Application approved"
+              help="Staff review your founder application and KYC documents."
+              href="/apply"
+              action="Apply"
+            />
+            <Check
+              ok={checks.agreementAccepted}
+              label="Agreement accepted"
+              help="Sign the revenue share agreement with your wallet."
+              href="/founder/agreement"
+              action="Sign it"
+            />
+            <Check
+              ok={checks.shadowWalletAvailable}
+              label="Approved shadow wallet available"
+              help="A dedicated revenue wallet, approved by staff, for one project."
+              href="/founder/wallets"
+              action="Request one"
+            />
+            <Check
+              ok={checks.repoProvisioned}
+              label="Project repository"
+              help="A ForgeCapita-created GitHub repository for your project code."
+              href="/founder/repository"
+              action="Request it"
+            />
+          </ul>
+        </CardBody>
+      </Card>
     );
   }
 
   return (
     <>
-      <h1 style={{ fontSize: "28px", marginBottom: "24px" }}>My projects</h1>
-      {checklist}
-      <FounderProjects />
+      <div className="page-title-row">
+        <div>
+          <h1>My projects</h1>
+          <p>Your launch checklist and the projects you run as developer.</p>
+        </div>
+        <div className="page-title-actions">
+          <ButtonLink href="/founder/launches" variant="secondary" size="sm">My launches</ButtonLink>
+          <ButtonLink href="/founder/launch" size="sm" leftIcon={<Rocket size={14} aria-hidden="true" />}>Launch project</ButtonLink>
+        </div>
+      </div>
+      <div className="section-stack">
+        {checklist}
+        <FounderProjects />
+      </div>
     </>
   );
 }

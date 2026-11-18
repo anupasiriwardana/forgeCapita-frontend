@@ -1,9 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { LogIn } from "lucide-react";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Spinner } from "@/components/ui/Spinner";
 
 const STAFF_ROUTES = ["/founder/launch", "/founder/launches"];
 
@@ -20,15 +25,21 @@ export default function FounderLayout({ children }: { children: React.ReactNode 
 
   let content: React.ReactNode;
   if (loading && !user) {
-    content = <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
+    content = (
+      <div className="gate-loading" role="status">
+        <Spinner size={16} />
+        Loading…
+      </div>
+    );
   } else if (!user) {
     content = (
-      <div className="alert alert-warning" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-        <span>Please sign in</span>
-        <button type="button" className="btn-secondary" onClick={() => void signIn()}>
-          Sign in
-        </button>
-      </div>
+      <Card className="gate-card">
+        <EmptyState
+          icon={<LogIn size={20} />}
+          title="Please sign in"
+          action={<Button onClick={() => void signIn()}>Sign in</Button>}
+        />
+      </Card>
     );
   } else if (role === "founder") {
     content = children;
@@ -36,15 +47,25 @@ export default function FounderLayout({ children }: { children: React.ReactNode 
     content = STAFF_ROUTES.includes(pathname) ? (
       children
     ) : (
-      <div className="alert alert-warning">Founder tools are for founder accounts; staff are not gated.</div>
+      <div className="gate-card">
+        <InlineAlert tone="warning">Founder tools are for founder accounts; staff are not gated.</InlineAlert>
+      </div>
     );
   } else {
     content = (
-      <div className="alert alert-warning">
-        You need an approved founder application first.{" "}
-        <Link href="/apply" style={{ color: "var(--brand-accent)" }}>Apply here</Link>
+      <div className="gate-card">
+        <InlineAlert
+          tone="warning"
+          action={
+            <ButtonLink href="/apply" variant="secondary" size="sm">
+              Apply here
+            </ButtonLink>
+          }
+        >
+          You need an approved founder application first.
+        </InlineAlert>
       </div>
     );
   }
-  return <div style={{ maxWidth: "760px", margin: "0 auto", padding: "40px 24px" }}>{content}</div>;
+  return <div className="page-container">{content}</div>;
 }

@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowRight, ChevronDown, Coins, SearchX, Sprout, Vote } from "lucide-react";
+import { ArrowRight, ChevronDown, Coins, Fuel, Network, ScanSearch, SearchX, ShieldCheck, Sprout, Vote } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { listProjects, type ProjectDto } from "@/lib/api";
 import { ProjectCard } from "@/components/ProjectCard";
+import { ButtonLink } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { StatCard } from "@/components/ui/StatCard";
+import { StatusPill } from "@/components/ui/StatusPill";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +38,29 @@ const STEPS: ReadonlyArray<{ title: string; text: string; Icon: LucideIcon }> = 
   },
 ];
 
+const TRUST: ReadonlyArray<{ title: string; text: string; Icon: LucideIcon }> = [
+  {
+    title: "Escrowed milestones",
+    text: "Raised funds sit in an escrow contract and are released one milestone at a time, never all up front.",
+    Icon: ShieldCheck,
+  },
+  {
+    title: "Staked voting",
+    text: "Voting weight is your staked balance, and a vote locks the stake until the poll closes.",
+    Icon: Vote,
+  },
+  {
+    title: "Revenue audit",
+    text: "Payments into each founder's approved wallets are compared with revenue routed on-chain, and gaps are escalated to staff.",
+    Icon: ScanSearch,
+  },
+  {
+    title: "Gasless actions",
+    text: "ForgeCapita sponsors gas for claiming tokens, staking, voting and executing a milestone.",
+    Icon: Fuel,
+  },
+];
+
 const FAQ: ReadonlyArray<{ q: string; a: string }> = [
   {
     q: "Is this live money?",
@@ -61,154 +88,177 @@ const FAQ: ReadonlyArray<{ q: string; a: string }> = [
   },
 ];
 
-function cardGrid(): React.CSSProperties {
-  return { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "24px" };
+interface FeaturedResult {
+  projects: ProjectDto[];
+  /** Total listed projects from the same call; null when the call failed. */
+  total: number | null;
 }
 
-const linkButton = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "8px",
-  textDecoration: "none",
-  padding: "12px 28px",
-  fontSize: "15px",
-  fontWeight: 600,
-} as const;
-
-async function FeaturedProjects() {
-  let projects: ProjectDto[] = [];
-  let failed = false;
+async function loadFeatured(): Promise<FeaturedResult> {
   try {
-    projects = (await listProjects({ limit: FEATURED_LIMIT, offset: 0 })).items;
+    const res = await listProjects({ limit: FEATURED_LIMIT, offset: 0 });
+    return { projects: res.items, total: res.total };
   } catch (err) {
-    failed = true;
     console.warn("[FeaturedProjects] Unable to load projects:", err);
+    return { projects: [], total: null };
   }
+}
 
+function FeaturedProjects({ projects, failed }: { projects: ProjectDto[]; failed: boolean }): React.ReactElement {
   if (projects.length > 0) {
     return (
-      <div style={cardGrid()}>
+      <div className="project-grid">
         {projects.map((project, i) => (
           <ProjectCard key={project.id} project={project} index={i} />
         ))}
       </div>
     );
   }
-
   return (
-    <div
-      style={{
-        textAlign: "center",
-        padding: "56px 24px",
-        background: "rgba(255, 255, 255, 0.02)",
-        borderRadius: "24px",
-        border: "1px dashed rgba(255, 255, 255, 0.12)",
-        maxWidth: "600px",
-        margin: "0 auto",
-      }}
-    >
-      <div style={{ marginBottom: "12px", color: "var(--text-muted)" }}>
-        {failed ? <SearchX size={40} aria-hidden="true" /> : <Sprout size={40} aria-hidden="true" />}
-      </div>
-      <h3 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "8px", color: "var(--text-primary)" }}>
-        {failed ? "Projects are unavailable right now" : "No projects yet"}
-      </h3>
-      <p style={{ color: "var(--text-secondary)", fontSize: "15px", lineHeight: 1.6, margin: 0 }}>
-        {failed
-          ? "We could not load projects. Please try again in a moment."
-          : "There are currently no projects. Approved founders can launch the first one."}
-      </p>
+    <Card>
+      <EmptyState
+        icon={failed ? <SearchX size={20} /> : <Sprout size={20} />}
+        title={failed ? "Projects are unavailable right now" : "No projects yet"}
+        text={
+          failed
+            ? "We could not load projects. Please try again in a moment."
+            : "There are currently no projects. Approved founders can launch the first one."
+        }
+      />
+    </Card>
+  );
+}
+
+function StatStrip({ total }: { total: number | null }): React.ReactElement {
+  return (
+    <div className="stat-strip">
+      {total !== null && <StatCard label="Projects listed" value={total} hint="Across both testnets" icon={<Sprout size={16} />} />}
+      <StatCard label="Networks" value={2} hint="Arbitrum Sepolia and BSC Testnet" icon={<Network size={16} />} />
+      <StatCard label="Revenue to stakers" value="75%" hint="Of customer payments, split on-chain" icon={<Coins size={16} />} />
+      <StatCard label="Platform fee" value="5%" hint="Only when a funding round succeeds" icon={<ShieldCheck size={16} />} />
     </div>
   );
 }
 
-export default function HomePage() {
+export default async function HomePage(): Promise<React.ReactElement> {
+  const { projects, total } = await loadFeatured();
   return (
-    <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 24px" }}>
-      <section className="fade-in-up" style={{ textAlign: "center", marginBottom: "72px" }}>
-        <span className="section-tag">Live on testnet</span>
-        <h1 style={{ fontSize: "clamp(36px, 5vw, 60px)", fontWeight: 900, margin: "0 0 20px", lineHeight: 1.1 }}>
-          Back the Future of <span className="gradient-text">Web3 SaaS</span>
+    <div className="page-container">
+      <section className="home-hero hero-glow fade-in-up" aria-labelledby="hero-heading">
+        <StatusPill tone="accent">Live on testnet</StatusPill>
+        <h1 id="hero-heading">
+          Back the future of <span className="text-accent">Web3 SaaS</span>
         </h1>
-        <p
-          style={{
-            fontSize: "18px",
-            color: "var(--text-secondary)",
-            maxWidth: "560px",
-            margin: "0 auto 32px",
-            lineHeight: 1.7,
-          }}
-        >
-          Milestone-gated crowdfunding where your investment is protected by governance. Fund, vote,
-          and share in the revenue.
+        <p className="home-hero-lead">
+          Milestone-gated crowdfunding where your investment is protected by governance. Fund, vote, and share in the
+          revenue.
         </p>
-        <div style={{ display: "flex", justifyContent: "center", gap: "16px", flexWrap: "wrap" }}>
-          <Link href="/projects" className="btn-primary" style={linkButton}>
+        <div className="home-actions">
+          <ButtonLink href="/projects" size="lg" rightIcon={<ArrowRight size={16} aria-hidden="true" />}>
             Browse projects
-            <ArrowRight size={16} aria-hidden="true" />
-          </Link>
-          <Link href="/how-it-works" className="btn-secondary" style={linkButton}>
+          </ButtonLink>
+          <ButtonLink href="/how-it-works" variant="secondary" size="lg">
             How it works
-          </Link>
+          </ButtonLink>
         </div>
+        <StatStrip total={total} />
       </section>
 
-      <section aria-labelledby="how-heading" style={{ marginBottom: "72px" }}>
-        <h2 id="how-heading" style={{ fontSize: "28px", fontWeight: 800, textAlign: "center", marginBottom: "28px" }}>
-          How it works
-        </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px" }}>
-          {STEPS.map(({ title, text, Icon }) => (
-            <div key={title} className="glass-card" style={{ padding: "24px" }}>
-              <div style={{ color: "var(--brand-accent)", marginBottom: "12px" }}>
-                <Icon size={20} aria-hidden="true" />
+      <section className="section" aria-labelledby="how-heading">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">Three steps</span>
+            <h2 id="how-heading">How it works</h2>
+            <p>Funding, governance and revenue sharing are enforced by smart contracts.</p>
+          </div>
+          <ButtonLink href="/how-it-works" variant="ghost" rightIcon={<ArrowRight size={16} aria-hidden="true" />}>
+            Full walkthrough
+          </ButtonLink>
+        </div>
+        <div className="feature-grid">
+          {STEPS.map(({ title, text, Icon }, i) => (
+            <Card key={title} className="feature-card">
+              <div className="feature-top">
+                <span className="feature-icon" aria-hidden="true">
+                  <Icon size={20} />
+                </span>
+                <span className="feature-step num">Step {i + 1}</span>
               </div>
-              <h3 style={{ fontSize: "18px", fontWeight: 700, margin: "0 0 8px" }}>{title}</h3>
-              <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.6, margin: 0 }}>{text}</p>
-            </div>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </Card>
           ))}
         </div>
       </section>
 
-      <section aria-labelledby="featured-heading" style={{ marginBottom: "72px" }}>
-        <h2 id="featured-heading" style={{ fontSize: "28px", fontWeight: 800, textAlign: "center", marginBottom: "28px" }}>
-          Featured projects
-        </h2>
-        <FeaturedProjects />
-        <div style={{ textAlign: "center", marginTop: "28px" }}>
-          <Link href="/projects" className="btn-secondary" style={{ ...linkButton, padding: "10px 20px", fontSize: "14px" }}>
+      <section className="section" aria-labelledby="featured-heading">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">Marketplace</span>
+            <h2 id="featured-heading">Featured projects</h2>
+          </div>
+          <ButtonLink href="/projects" variant="secondary" rightIcon={<ArrowRight size={16} aria-hidden="true" />}>
             View all projects
-            <ArrowRight size={16} aria-hidden="true" />
-          </Link>
+          </ButtonLink>
+        </div>
+        <FeaturedProjects projects={projects} failed={total === null} />
+      </section>
+
+      <section className="section" aria-labelledby="trust-heading">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">Safeguards</span>
+            <h2 id="trust-heading">Built for trust</h2>
+            <p>Backers keep leverage after they fund, and founders get a transparent path to the money.</p>
+          </div>
+        </div>
+        <div className="trust-grid">
+          {TRUST.map(({ title, text, Icon }) => (
+            <Card key={title} className="trust-item">
+              <span className="feature-icon feature-icon-sm" aria-hidden="true">
+                <Icon size={16} />
+              </span>
+              <div>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </div>
+            </Card>
+          ))}
         </div>
       </section>
 
-      <section id="faq" aria-labelledby="faq-heading" style={{ maxWidth: "800px", margin: "0 auto", scrollMarginTop: "80px" }}>
-        <h2 id="faq-heading" style={{ fontSize: "28px", fontWeight: 800, textAlign: "center", marginBottom: "28px" }}>
-          Frequently asked questions
-        </h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      <section id="faq" className="section faq-wrap" aria-labelledby="faq-heading">
+        <div className="section-head section-head-center">
+          <div>
+            <span className="eyebrow">FAQ</span>
+            <h2 id="faq-heading">Frequently asked questions</h2>
+          </div>
+        </div>
+        <div className="faq-list">
           {FAQ.map(({ q, a }) => (
-            <details key={q} className="glass-card" style={{ padding: "16px 20px" }}>
-              <summary
-                style={{
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: "16px",
-                  color: "var(--text-primary)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                  listStyle: "none",
-                }}
-              >
+            <details key={q} className="faq-item">
+              <summary>
                 {q}
-                <ChevronDown size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
+                <ChevronDown size={18} aria-hidden="true" />
               </summary>
-              <p style={{ color: "var(--text-secondary)", fontSize: "14px", lineHeight: 1.7, margin: "12px 0 0" }}>{a}</p>
+              <p>{a}</p>
             </details>
           ))}
+        </div>
+      </section>
+
+      <section className="cta-band" aria-labelledby="cta-heading">
+        <div>
+          <h2 id="cta-heading">Ready to back a milestone?</h2>
+          <p>Browse live testnet projects, fund the ones you believe in and vote on every release.</p>
+        </div>
+        <div className="home-actions">
+          <ButtonLink href="/projects" rightIcon={<ArrowRight size={16} aria-hidden="true" />}>
+            Browse projects
+          </ButtonLink>
+          <ButtonLink href="/about" variant="secondary">
+            About ForgeCapita
+          </ButtonLink>
         </div>
       </section>
     </div>

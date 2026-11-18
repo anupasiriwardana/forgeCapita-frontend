@@ -4,23 +4,57 @@ import { useState, Suspense } from "react";
 import { useSuspenseQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWriteContract, useAccount, useChainId, useConfig, usePublicClient } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
-import { ArrowLeftRight, Inbox, Plug, X } from "lucide-react";
-import { StatusIcon } from "@/components/ui/StatusIcon";
+import { ArrowLeftRight, Coins, Inbox, Network, Plus, ShoppingCart } from "lucide-react";
 import { isAddress, parseEther, parseUnits, parseEventLogs, formatUnits, type PublicClient, type TransactionReceipt } from "viem";
-import { fetchActiveListings, fetchRecentTrades, formatEth, shortAddr, type P2PListing } from "@/lib/api";
+import { fetchActiveListings, fetchRecentTrades, formatEth, shortAddr, type P2PListing, type P2PTrade } from "@/lib/api";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Amount } from "@/components/ui/Amount";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { Dialog, DialogContent } from "@/components/ui/Dialog";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Field, Input } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { SegmentedControl, type SegmentOption } from "@/components/ui/SegmentedControl";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
+import { StatCard } from "@/components/ui/StatCard";
+import { toast } from "@/lib/toast";
+import { isUserRejection, toastTxError, txErrorMessage, WALLET_CANCELLED_MESSAGE } from "@/lib/walletErrors";
+import { explorerAddressUrl } from "@/lib/explorer";
 import { formatTokenAmount } from "@/lib/format";
 import { TokenPicker } from "@/components/TokenPicker";
 import { P2PListingCard, PROTOCOL_FEE_BPS, splitPrice } from "@/components/P2PListingCard";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { IndexerLagNote } from "@/components/IndexerLagNote";
 import { explorerTxUrl } from "@/lib/explorer";
 import { ABIS, getContractConfig } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
-import { chainCurrency, chainName } from "@/config/chains";
+import { chainCurrency, chainName, SUPPORTED_CHAINS } from "@/config/chains";
 
 /** How long an optimistic entry may outlive the indexer before it is dropped. */
 const OPTIMISTIC_TTL_MS = 10 * 60 * 1000;
 const OPTIMISTIC_REFETCH_MS = 5000;
+const WEI_PER_TOKEN = BigInt(10) ** BigInt(18);
+
+type ChainFilter = "all" | `${number}`;
+
+/** Price in wei for one whole token (18 decimals), bigint math only; 0 when the amount is 0. */
+function pricePerToken(listing: P2PListing): bigint {
+  const amount = BigInt(listing.tokenAmount);
+  return amount > BigInt(0) ? (BigInt(listing.priceInETH) * WEI_PER_TOKEN) / amount : BigInt(0);
+}
+
+/** Live field check for a decimal input parsed to wei; null when empty or valid and above zero. */
+function decimalFieldError(input: string, parse: (value: string) => bigint): string | null {
+  if (input.trim() === "") return null;
+  try {
+    return parse(input.trim()) > BigInt(0) ? null : "Must be greater than zero.";
+  } catch {
+    return "Enter a valid number.";
+  }
+}
 
 type P2PConfig = NonNullable<ReturnType<typeof getContractConfig<"p2pExchange">>>;
 
@@ -151,126 +185,136 @@ function CreateListingModal({
       if (receipt.status !== "success") { failWith("Listing transaction failed (reverted)."); return; }
       await publishCreated(receipt.logs, p2p, publicClient, chainId, onCreated);
       setTxStatus("success");
-      setTimeout(() => { onSuccess(); onClose(); }, 2000);
+      toast.success("Listing created", { description: "It is visible in the market now." });
+      onSuccess();
+      onClose();
     } catch (err) {
-      const e = err as { shortMessage?: string; message?: string };
-      failWith(e.shortMessage ?? e.message ?? "Transaction failed");
+      if (isUserRejection(err)) {
+        setTxStatus("idle");
+        toast.info(WALLET_CANCELLED_MESSAGE);
+      } else {
+        failWith(txErrorMessage(err));
+      }
     } finally {
       setStep("");
     }
   }
 
+  const pending = txStatus === "pending";
+  const amountFieldError = decimalFieldError(tokenAmount, (v) => parseUnits(v, 18));
+  const priceFieldError = decimalFieldError(priceEth, (v) => parseEther(v));
+
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-content">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-          <h2 style={{ fontSize: "20px", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-            <ArrowLeftRight size={20} aria-hidden="true" /> Create Listing
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", display: "flex" }}
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </div>
-
-        {txStatus === "success" ? (
-          <div className="alert alert-success">
-            <StatusIcon state="done" label="Success" />
-            <span>Listing created and visible now.</span>
-          </div>
-        ) : (
-          <form onSubmit={handleCreate}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div>
-                <label className="label">Token</label>
-                {manualToken ? (
-                  <input
-                    className="input-field"
-                    value={tokenAddress}
-                    onChange={e => { setTokenAddress(e.target.value); setTokenBalance(null); }}
-                    placeholder="0x..."
-                    required
-                  />
-                ) : (
-                  <TokenPicker
-                    chainId={chainId}
-                    wallet={address}
-                    selected={tokenAddress}
-                    networkName={chainName(chainId)}
-                    onSelect={(addr, balance) => { setTokenAddress(addr); setTokenBalance(balance); }}
-                  />
-                )}
-                <button
-                  type="button"
-                  onClick={() => { setManualToken(m => !m); setTokenAddress(""); setTokenBalance(null); }}
-                  style={{ background: "none", border: "none", color: "var(--brand-accent)", cursor: "pointer", fontSize: "12px", padding: "6px 0" }}
-                >
-                  {manualToken ? "Pick from my tokens" : "Use another token address"}
-                </button>
-              </div>
-              <div>
-                <label className="label">Token Amount</label>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <input
-                    className="input-field"
-                    type="text"
-                    inputMode="decimal"
-                    value={tokenAmount}
-                    onChange={e => setTokenAmount(e.target.value)}
-                    placeholder="1000"
-                    required
-                  />
-                  {tokenBalance !== null && (
-                    <button type="button" className="btn-secondary" onClick={() => setTokenAmount(formatUnits(tokenBalance, 18))}>
-                      Max
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="label">Price in {chainCurrency(chainId)}</label>
-                <input
-                  className="input-field"
-                  type="number"
-                  min="0.000001"
-                  step="0.000001"
-                  value={priceEth}
-                  onChange={e => setPriceEth(e.target.value)}
-                  placeholder="0.05"
-                  required
+    <Dialog open onOpenChange={(open) => { if (!open && !pending) onClose(); }}>
+      <DialogContent
+        title={
+          <span className="panel-title">
+            <ArrowLeftRight size={18} aria-hidden="true" />
+            Create listing
+          </span>
+        }
+        description="List project tokens for a fixed total price. A 1% platform fee is taken from the price when the listing is filled."
+        maxWidth={520}
+        hideClose={pending}
+        preventDismiss={pending}
+      >
+        <form onSubmit={handleCreate} noValidate className="stack-md" style={{ gap: 16 }}>
+          <div>
+            {manualToken ? (
+              <Field label="Token contract address" required>
+                <Input
+                  className="mono"
+                  value={tokenAddress}
+                  onChange={e => { setTokenAddress(e.target.value); setTokenBalance(null); }}
+                  placeholder="0x..."
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={pending}
                 />
-                {receiveText && (
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "6px" }}>
-                    You receive about {receiveText} (price minus {PROTOCOL_FEE_BPS / 100}% fee)
-                  </div>
-                )}
-              </div>
-
-              {txStatus === "error" && (
-                <div className="alert alert-error">
-                  <StatusIcon state="warning" label="Warning" />
-                  <span style={{ fontSize: "13px" }}>{txError}</span>
-                </div>
+              </Field>
+            ) : (
+              <>
+                <span className="label">Token</span>
+                <TokenPicker
+                  chainId={chainId}
+                  wallet={address}
+                  selected={tokenAddress}
+                  networkName={chainName(chainId)}
+                  onSelect={(addr, balance) => { setTokenAddress(addr); setTokenBalance(balance); }}
+                />
+              </>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              style={{ marginTop: 6, paddingLeft: 0 }}
+              disabled={pending}
+              onClick={() => { setManualToken(m => !m); setTokenAddress(""); setTokenBalance(null); }}
+            >
+              {manualToken ? "Pick from my tokens" : "Use another token address"}
+            </Button>
+          </div>
+          <Field
+            label="Token amount"
+            required
+            error={amountFieldError ?? undefined}
+            hint={tokenBalance !== null ? <>Wallet balance: <span className="num">{formatTokenAmount(tokenBalance)}</span></> : undefined}
+          >
+            <div className="input-row">
+              <Input
+                type="text"
+                inputMode="decimal"
+                className="num"
+                value={tokenAmount}
+                onChange={e => setTokenAmount(e.target.value)}
+                placeholder="1000"
+                disabled={pending}
+              />
+              {tokenBalance !== null && (
+                <Button variant="secondary" disabled={pending} onClick={() => setTokenAmount(formatUnits(tokenBalance, 18))}>
+                  Max
+                </Button>
               )}
-
-              <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
-                <button type="button" className="btn-secondary" onClick={onClose} style={{ flex: 1 }}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" style={{ flex: 1 }} disabled={txStatus === "pending"}>
-                  {txStatus === "pending" ? (
-                    <><span className="spinner" style={{ width: "14px", height: "14px" }} /> {step || "Creating..."}</>
-                  ) : "Create Listing"}
-                </button>
-              </div>
             </div>
-          </form>
-        )}
-      </div>
-    </div>
+          </Field>
+          <Field
+            label={`Total price in ${chainCurrency(chainId)}`}
+            required
+            error={priceFieldError ?? undefined}
+            hint={receiveText ? `You receive about ${receiveText} (price minus ${PROTOCOL_FEE_BPS / 100}% fee)` : undefined}
+          >
+            <Input
+              type="number"
+              min="0.000001"
+              step="0.000001"
+              inputMode="decimal"
+              className="num"
+              value={priceEth}
+              onChange={e => setPriceEth(e.target.value)}
+              placeholder="0.05"
+              disabled={pending}
+            />
+          </Field>
+
+          {txStatus === "error" && <InlineAlert tone="danger">{txError}</InlineAlert>}
+          {pending && step && (
+            <p className="tx-status" role="status" style={{ marginTop: 0 }}>
+              <Spinner size={12} />
+              {step}: confirm in your wallet.
+            </p>
+          )}
+
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
+            <Button variant="secondary" onClick={onClose} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={pending} disabled={amountFieldError !== null || priceFieldError !== null}>
+              Create listing
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -282,53 +326,48 @@ function RecentTrades({ chainId }: { chainId: number }) {
     queryFn: () => fetchRecentTrades(20),
   });
 
+  const columns: ReadonlyArray<DataTableColumn<P2PTrade>> = [
+    { key: "date", header: "Date", numeric: true, cell: (t) => <span className="cell-sub" style={{ fontSize: 13 }}>{new Date(Number(t.timestamp) * 1000).toLocaleString()}</span> },
+    { key: "token", header: "Token", cell: (t) => <span className="mono" style={{ fontSize: 12 }}>{shortAddr(t.tokenAddress)}</span> },
+    { key: "amount", header: "Amount", align: "right", cell: (t) => <Amount value={formatTokenAmount(t.tokenAmount)} /> },
+    { key: "price", header: "Price", align: "right", cell: (t) => <Amount value={formatEth(t.pricePaid, 4)} unit={chainCurrency(t.chainId)} /> },
+    { key: "seller", header: "Seller", cell: (t) => <span className="mono" style={{ fontSize: 12 }}>{shortAddr(t.seller)}</span> },
+    { key: "buyer", header: "Buyer", cell: (t) => <span className="mono" style={{ fontSize: 12 }}>{shortAddr(t.buyer)}</span> },
+    {
+      key: "tx",
+      header: "Tx",
+      align: "right",
+      cell: (t) => {
+        const txUrl = explorerTxUrl(t.chainId, t.txHash);
+        return txUrl ? (
+          <a href={txUrl} target="_blank" rel="noopener noreferrer">View</a>
+        ) : (
+          "-"
+        );
+      },
+    },
+  ];
+
   return (
-    <section style={{ marginTop: "56px" }}>
-      <h2 style={{ fontSize: "22px", marginBottom: "12px" }}>Recent trades</h2>
-      <IndexerLagNote chainId={chainId} />
-      {isLoading ? (
-        <p style={{ color: "var(--text-muted)" }}>Loading trades...</p>
-      ) : !trades || trades.length === 0 ? (
-        <p style={{ color: "var(--text-muted)" }}>No trades yet</p>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "var(--text-muted)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                <th style={{ padding: "8px" }}>Date</th>
-                <th style={{ padding: "8px" }}>Token</th>
-                <th style={{ padding: "8px" }}>Amount</th>
-                <th style={{ padding: "8px" }}>Price</th>
-                <th style={{ padding: "8px" }}>Seller</th>
-                <th style={{ padding: "8px" }}>Buyer</th>
-                <th style={{ padding: "8px" }}>Tx</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trades.map((t) => {
-                const txUrl = explorerTxUrl(t.chainId, t.txHash);
-                return (
-                  <tr key={t.id} style={{ borderTop: "1px solid var(--border)" }}>
-                    <td style={{ padding: "8px" }}>{new Date(Number(t.timestamp) * 1000).toLocaleString()}</td>
-                    <td style={{ padding: "8px", fontFamily: "monospace" }}>{shortAddr(t.tokenAddress)}</td>
-                    <td style={{ padding: "8px" }}>{formatTokenAmount(t.tokenAmount)}</td>
-                    <td style={{ padding: "8px" }}>{formatEth(t.pricePaid, 4)} {chainCurrency(t.chainId)}</td>
-                    <td style={{ padding: "8px", fontFamily: "monospace" }}>{shortAddr(t.seller)}</td>
-                    <td style={{ padding: "8px", fontFamily: "monospace" }}>{shortAddr(t.buyer)}</td>
-                    <td style={{ padding: "8px" }}>
-                      {txUrl ? (
-                        <a href={txUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)" }}>View</a>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <section className="section-block" aria-labelledby="trades-heading">
+      <Card>
+        <CardHeader title={<span id="trades-heading">Recent trades</span>} />
+        <CardBody style={{ paddingLeft: 0, paddingRight: 0, paddingBottom: 4 }}>
+          <div style={{ padding: "0 20px" }}>
+            <IndexerLagNote chainId={chainId} />
+          </div>
+          <DataTable
+            columns={columns}
+            rows={trades ?? []}
+            rowKey={(t) => t.id}
+            caption="Recent trades"
+            loading={isLoading}
+            skeletonRows={3}
+            emptyTitle="No trades yet"
+            dense
+          />
+        </CardBody>
+      </Card>
     </section>
   );
 }
@@ -341,6 +380,8 @@ function P2PContent() {
   const config = useConfig();
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
+  const [buyTarget, setBuyTarget] = useState<P2PListing | null>(null);
+  const [chainFilter, setChainFilter] = useState<ChainFilter>("all");
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<P2PListing | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -389,15 +430,13 @@ function P2PContent() {
 
   const { writeContractAsync } = useWriteContract();
   const buyClient = usePublicClient();
-  const [buyError, setBuyError] = useState("");
 
   async function handleBuy(listing: P2PListing) {
-    if (!isConnected) { setBuyError("Connect your wallet to buy."); return; }
-    if (chainId !== listing.chainId) { setBuyError("Switch your wallet to this listing's network to buy."); return; }
+    if (!isConnected) { toast.error("Connect your wallet to buy."); return; }
+    if (chainId !== listing.chainId) { toast.error("Switch your wallet to this listing's network to buy."); return; }
     const p2p = getContractConfig(listing.chainId, "p2pExchange");
-    if (!p2p) { setBuyError("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
+    if (!p2p) { toast.error("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
     setBuyingId(listing.id);
-    setBuyError("");
     try {
       // listing.id is composite `<chainId>:<listingId>`; the contract takes the numeric part
       const listingNumericId = listing.id.split(":")[1] ?? "";
@@ -410,29 +449,26 @@ function P2PContent() {
         ...(await getFeeOverrides(buyClient)),
       });
       const receipt = await waitForTransactionReceipt(config, { hash });
-      if (receipt.status !== "success") { setBuyError("Purchase transaction failed (reverted)."); return; }
+      if (receipt.status !== "success") { toast.error("Purchase transaction failed (reverted)."); return; }
       markRemoved(listing.id);
+      toast.success("Purchase confirmed", { description: "The tokens are in your wallet." });
       queryClient.invalidateQueries({ queryKey: ["p2p-listings"] });
     } catch (err) {
-      setBuyError(err instanceof Error ? err.message : "Purchase failed");
+      toastTxError(err, "Purchase failed");
     } finally {
       setBuyingId(null);
     }
   }
 
-  async function handleCancelConfirmed() {
-    const listing = cancelTarget;
-    if (!listing) return;
-    setCancelTarget(null);
+  async function handleCancel(listing: P2PListing) {
     if (!isConnected || !address || address.toLowerCase() !== listing.seller.toLowerCase()) {
-      setBuyError("Only the seller can cancel this listing.");
+      toast.error("Only the seller can cancel this listing.");
       return;
     }
-    if (chainId !== listing.chainId) { setBuyError("Switch your wallet to this listing's network to cancel."); return; }
+    if (chainId !== listing.chainId) { toast.error("Switch your wallet to this listing's network to cancel."); return; }
     const p2p = getContractConfig(listing.chainId, "p2pExchange");
-    if (!p2p) { setBuyError("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
+    if (!p2p) { toast.error("Unsupported network. Switch to Arbitrum Sepolia or BSC Testnet."); return; }
     setCancellingId(listing.id);
-    setBuyError("");
     try {
       const listingNumericId = listing.id.split(":")[1] ?? "";
       const hash = await writeContractAsync({
@@ -443,12 +479,12 @@ function P2PContent() {
         ...(await getFeeOverrides(buyClient)),
       });
       const receipt = await waitForTransactionReceipt(config, { hash });
-      if (receipt.status !== "success") { setBuyError("Cancel transaction failed (reverted)."); return; }
+      if (receipt.status !== "success") { toast.error("Cancel transaction failed (reverted)."); return; }
       markRemoved(listing.id);
+      toast.success("Listing cancelled", { description: "The tokens returned to your wallet." });
       queryClient.invalidateQueries({ queryKey: ["p2p-listings"] });
     } catch (err) {
-      const e = err as { shortMessage?: string; message?: string };
-      setBuyError(e.shortMessage ?? e.message ?? "Cancel failed");
+      toastTxError(err, "Cancel failed");
     } finally {
       setCancellingId(null);
     }
@@ -465,120 +501,170 @@ function P2PContent() {
           .map(([id, v]) => `${formatTokenAmount(v)} ${chainCurrency(id)}`)
           .join(" + ");
 
-  return (
-    <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 24px" }}>
-      {/* Header */}
-      <div className="fade-in-up" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "48px", flexWrap: "wrap", gap: "20px" }}>
-        <div>
-          <span className="section-tag"><ArrowLeftRight size={14} aria-hidden="true" /> Secondary Market</span>
-          <h1 style={{ fontSize: "36px", margin: "0 0 12px" }}>
-            P2P <span className="gradient-text-teal">Token Exchange</span>
-          </h1>
-          <p style={{ color: "var(--text-secondary)", fontSize: "16px", lineHeight: 1.6, maxWidth: "480px" }}>
-            Buy and sell project equity tokens directly peer-to-peer. No intermediary, just smart contracts.
-          </p>
-        </div>
+  const chainOptions: ReadonlyArray<SegmentOption<ChainFilter>> = [
+    { value: "all", label: "All chains" },
+    ...SUPPORTED_CHAINS.map((c) => ({ value: String(c.id) as ChainFilter, label: chainName(c.id) })),
+  ];
+  const shown = chainFilter === "all" ? listings : listings.filter((l) => String(l.chainId) === chainFilter);
 
-        <button
-          className="btn-primary"
-          onClick={() => {
-            if (!isConnected) { setBuyError("Connect your wallet to create a listing."); return; }
-            setShowModal(true);
-          }}
-          style={{ alignSelf: "flex-start", padding: "14px 24px" }}
-        >
-          + Create Listing
-        </button>
-      </div>
+  function openCreate(): void {
+    if (!isConnected) { toast.error("Connect your wallet to create a listing."); return; }
+    setShowModal(true);
+  }
 
-      {/* Stats bar */}
-      <div
-        className="fade-in-up"
-        style={{
-          display: "flex",
-          gap: "24px",
-          marginBottom: "40px",
-          padding: "20px 24px",
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-lg)",
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Active Listings</div>
-          <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--text-primary)" }}>{listings.length}</div>
-        </div>
-        <div style={{ width: "1px", background: "var(--border)" }} />
-        <div>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Listed Value</div>
-          <div style={{ fontSize: "24px", fontWeight: 800, color: "var(--teal)" }}>{totalVolume}</div>
-        </div>
-        <div style={{ width: "1px", background: "var(--border)" }} />
-        <div>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Network</div>
-          <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--brand-accent)" }}>Arbitrum Sepolia &amp; BSC Testnet</div>
-        </div>
-      </div>
+  function renderAction(listing: P2PListing): React.ReactNode {
+    const isSeller = !!address && address.toLowerCase() === listing.seller.toLowerCase();
+    const isPending = buyingId === listing.id || cancellingId === listing.id;
+    if (!address) return <span className="cell-sub">Connect wallet</span>;
+    if (isSeller) {
+      return (
+        <Button variant="secondary" size="sm" loading={isPending} onClick={() => setCancelTarget(listing)}>
+          Cancel listing
+        </Button>
+      );
+    }
+    return (
+      <Button size="sm" loading={isPending} leftIcon={<ShoppingCart size={14} aria-hidden="true" />} onClick={() => setBuyTarget(listing)}>
+        Buy
+      </Button>
+    );
+  }
 
-      {/* Wallet/Error alerts */}
-      {!isConnected && (
-        <div className="alert alert-warning fade-in-up" style={{ marginBottom: "24px" }}>
-          <Plug size={16} aria-hidden="true" style={{ flexShrink: 0 }} /> Connect your wallet to buy tokens or create listings.
-        </div>
-      )}
-      {buyError && (
-        <div className="alert alert-error fade-in-up" style={{ marginBottom: "24px" }}>
-          <StatusIcon state="warning" label="Warning" /> {buyError}
-        </div>
-      )}
-
-      {/* Listings grid */}
-      {listings.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "80px 24px" }}>
-          <div style={{ marginBottom: "16px", color: "var(--text-muted)" }}>
-            <Inbox size={48} aria-hidden="true" />
+  const columns: ReadonlyArray<DataTableColumn<P2PListing>> = [
+    {
+      key: "token",
+      header: "Token",
+      cell: (l) => (
+        <div>
+          <AddressChip address={l.tokenAddress} href={explorerAddressUrl(l.chainId, l.tokenAddress) ?? undefined} />
+          <div className="cell-sub" style={{ marginTop: 2 }}>
+            {chainName(l.chainId)} - <span className="num">#{l.id.split(":")[1] ?? l.id}</span>
           </div>
-          <h2 style={{ fontSize: "22px", marginBottom: "8px" }}>No Active Listings</h2>
-          <p style={{ color: "var(--text-muted)", marginBottom: "24px" }}>
-            Be the first to list project tokens on the secondary market.
-          </p>
-          <button className="btn-primary" onClick={() => isConnected && setShowModal(true)}>
-            + Create First Listing
-          </button>
         </div>
+      ),
+    },
+    { key: "seller", header: "Seller", cell: (l) => <AddressChip address={l.seller} /> },
+    { key: "amount", header: "Amount", align: "right", cell: (l) => <Amount value={formatTokenAmount(l.tokenAmount)} /> },
+    {
+      key: "unit",
+      header: "Price per token",
+      align: "right",
+      cell: (l) => <Amount value={formatEth(pricePerToken(l).toString(), 6)} unit={chainCurrency(l.chainId)} />,
+    },
+    { key: "total", header: "Total", align: "right", cell: (l) => <Amount value={formatEth(l.priceInETH, 4)} unit={chainCurrency(l.chainId)} /> },
+    { key: "action", header: <span className="sr-only">Action</span>, align: "right", cell: renderAction },
+  ];
+
+  const buyFee = buyTarget ? splitPrice(BigInt(buyTarget.priceInETH)) : null;
+  const buyCurrency = buyTarget ? chainCurrency(buyTarget.chainId) : "";
+
+  return (
+    <div className="page-container">
+      <div className="page-title-row fade-in-up">
+        <div>
+          <span className="eyebrow">Secondary market</span>
+          <h1>P2P token exchange</h1>
+          <p>Buy and sell project equity tokens directly peer to peer. No intermediary, just smart contracts.</p>
+        </div>
+        <div className="page-title-actions">
+          <Button leftIcon={<Plus size={16} aria-hidden="true" />} onClick={openCreate}>
+            Create listing
+          </Button>
+        </div>
+      </div>
+
+      <section className="kpi-grid" aria-label="Market figures">
+        <StatCard label="Active listings" value={listings.length} icon={<ArrowLeftRight size={16} />} />
+        <StatCard label="Total listed value" value={totalVolume} icon={<Coins size={16} />} hint="Per chain, never summed across currencies" />
+        <StatCard label="Networks" value={2} hint="Arbitrum Sepolia and BSC Testnet" icon={<Network size={16} />} />
+      </section>
+
+      {!isConnected && (
+        <InlineAlert tone="warning" className="panel-gap">Connect your wallet to buy tokens or create listings.</InlineAlert>
+      )}
+
+      <div className="ui-card market-toolbar">
+        <div className="market-toolbar-group">
+          <SegmentedControl options={chainOptions} value={chainFilter} onChange={setChainFilter} label="Filter by chain" />
+        </div>
+        <span className="cell-sub num" role="status">
+          {shown.length} listing{shown.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {shown.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<Inbox size={20} />}
+            title={listings.length === 0 ? "No active listings" : "No listings on this chain"}
+            text={listings.length === 0 ? "Be the first to list project tokens on the secondary market." : "Try another chain filter."}
+            action={
+              listings.length === 0 ? (
+                <Button leftIcon={<Plus size={16} aria-hidden="true" />} onClick={openCreate}>
+                  Create first listing
+                </Button>
+              ) : undefined
+            }
+          />
+        </Card>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "24px" }}>
-          {listings.map((listing, i) => (
-            <P2PListingCard
-              key={listing.id}
-              listing={listing}
-              onBuy={handleBuy}
-              onCancel={(l) => setCancelTarget(l)}
-              viewer={address}
-              isPending={buyingId === listing.id || cancellingId === listing.id}
-              index={i}
-            />
-          ))}
+        <div className="table-switch">
+          <Card className="only-desktop">
+            <DataTable columns={columns} rows={shown} rowKey={(l) => l.id} caption="Active listings" />
+          </Card>
+          <div className="only-mobile">
+            <div className="mobile-cards">
+              {shown.map((listing) => (
+                <P2PListingCard
+                  key={listing.id}
+                  listing={listing}
+                  onBuy={(l) => setBuyTarget(l)}
+                  onCancel={(l) => setCancelTarget(l)}
+                  viewer={address}
+                  isPending={buyingId === listing.id || cancellingId === listing.id}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
       <RecentTrades chainId={chainId} />
 
       <ConfirmDialog
+        open={buyTarget !== null}
+        onOpenChange={(open) => { if (!open) setBuyTarget(null); }}
+        title="Buy these tokens?"
+        body={
+          buyTarget && buyFee ? (
+            <>
+              You pay <strong className="num">{formatEth(buyTarget.priceInETH, 6)} {buyCurrency}</strong> for{" "}
+              <span className="num">{formatTokenAmount(buyTarget.tokenAmount)}</span> tokens. The {PROTOCOL_FEE_BPS / 100}% platform fee (
+              <span className="num">{formatEth(buyFee.fee.toString(), 6)} {buyCurrency}</span>) is taken from the seller&apos;s proceeds. You also pay the network gas.
+            </>
+          ) : (
+            ""
+          )
+        }
+        confirmLabel="Buy tokens"
+        onConfirm={async () => {
+          if (buyTarget) await handleBuy(buyTarget);
+        }}
+      />
+
+      <ConfirmDialog
         open={cancelTarget !== null}
+        onOpenChange={(open) => { if (!open) setCancelTarget(null); }}
         title="Cancel this listing?"
+        body="The tokens in this listing return to your wallet. You pay the network gas for this transaction."
         confirmLabel="Cancel listing"
         cancelLabel="Keep listing"
         tone="danger"
-        busy={cancellingId !== null}
-        onConfirm={handleCancelConfirmed}
-        onCancel={() => setCancelTarget(null)}
-      >
-        The tokens in this listing return to your wallet. You pay the network gas for this transaction.
-      </ConfirmDialog>
+        onConfirm={async () => {
+          if (cancelTarget) await handleCancel(cancelTarget);
+        }}
+      />
 
-      {/* Modal */}
       {showModal && (
         <CreateListingModal
           onClose={() => setShowModal(false)}
@@ -594,12 +680,17 @@ export default function P2PPage() {
   return (
     <Suspense
       fallback={
-        <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 24px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "24px" }}>
+        <div className="page-container" role="status" aria-live="polite">
+          <span className="sr-only">Loading listings</span>
+          <Skeleton width="35%" height={28} style={{ marginBottom: 24 }} />
+          <div className="kpi-grid">
             {[1, 2, 3].map(i => (
-              <div key={i} className="glass-card" style={{ padding: "24px", height: "280px", opacity: 0.5 }} />
+              <StatCard key={i} label="Loading" value="" loading />
             ))}
           </div>
+          <Card>
+            <DataTable columns={[{ key: "a", header: "Token", cell: () => null }, { key: "b", header: "Amount", cell: () => null }, { key: "c", header: "Total", cell: () => null }]} rows={[]} rowKey={() => ""} caption="Loading listings" loading skeletonRows={4} />
+          </Card>
         </div>
       }
     >

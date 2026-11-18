@@ -15,8 +15,14 @@ import {
   type ProjectDto,
   type ShadowWalletDto,
 } from "@/lib/api";
+import { PenLine } from "lucide-react";
 import { ShadowWalletInfo } from "@/components/InfoDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { toast } from "@/lib/toast";
 
 const MAX_ATTEMPTS = 8;
 const RETRY_DELAY_MS = 4000;
@@ -89,7 +95,6 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
   const [saving, setSaving] = useState(false);
   const [saveNote, setSaveNote] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
 
   useEffect(() => {
     if (!allowed || !needsWallet) return;
@@ -123,7 +128,8 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
         setSaveNote("");
         return;
       } catch (err) {
-        if (!(err instanceof ApiError)) throw err;
+        // Only safe, mapped messages leave this function; raw errors never reach the UI.
+        if (!(err instanceof ApiError)) throw new Error("Profile save failed.");
         if (err.status !== 404) throw new Error(describeFounderError(err));
         if (attempt >= MAX_ATTEMPTS) {
           setSaveNote("");
@@ -154,10 +160,9 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
 
     setSaving(true);
     setErrorMsg("");
-    setSuccessMsg("");
     try {
       await saveWithRetry(input);
-      setSuccessMsg("Profile saved.");
+      toast.success("Profile saved.");
       await queryClient.invalidateQueries({ queryKey: ["project", project.id] });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Profile save failed.");
@@ -170,73 +175,75 @@ export function ProfileEditor({ project }: { project: ProjectDto }) {
   const walletBlocked = needsWallet && (gateError !== "" || !walletChecksOk || freeWallets.length === 0);
 
   return (
-    <div className="glass-card fade-in-up" style={{ padding: "24px", marginBottom: "24px" }}>
-      <h2 style={{ fontSize: "16px", marginBottom: "12px" }}>Project profile</h2>
-      {profile === null && (
-        <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginBottom: "16px" }}>
-          This project has no profile yet. Save it now to finish the launch.
-        </p>
-      )}
-      {errorMsg && <div role="alert" className="alert alert-error" style={{ marginBottom: "16px" }}>{errorMsg}</div>}
-      {successMsg && <div className="alert alert-success" style={{ marginBottom: "16px" }}>{successMsg}</div>}
-
-      <form onSubmit={(e) => void handleSubmit(e)}>
-        <label className="label" htmlFor="pe-name">Project name *</label>
-        <input id="pe-name" className="input-field" value={values.name} maxLength={120} required onChange={(e) => setField("name", e.target.value)} />
-
-        <div style={{ marginTop: "16px" }}>
-          <label className="label" htmlFor="pe-description">Description *</label>
-          <textarea id="pe-description" className="input-field" value={values.description} maxLength={5000} required style={{ minHeight: "90px" }} onChange={(e) => setField("description", e.target.value)} />
-        </div>
-
-        <div style={{ marginTop: "16px" }}>
-          <label className="label" htmlFor="pe-website">Website link</label>
-          <input id="pe-website" className="input-field" type="url" placeholder="https://..." value={values.websiteUrl} maxLength={MAX_URL} onChange={(e) => setField("websiteUrl", e.target.value)} />
-        </div>
-        <div style={{ marginTop: "16px" }}>
-          <label className="label" htmlFor="pe-deck">Pitch deck link</label>
-          <input id="pe-deck" className="input-field" type="url" placeholder="https://..." value={values.pitchDeckUrl} maxLength={MAX_URL} onChange={(e) => setField("pitchDeckUrl", e.target.value)} />
-        </div>
-        <div style={{ marginTop: "16px" }}>
-          <label className="label" htmlFor="pe-category">Category</label>
-          <input id="pe-category" className="input-field" placeholder="fintech" value={values.category} maxLength={32} onChange={(e) => setField("category", e.target.value)} />
-        </div>
-
-        {needsWallet && (
-          <div style={{ marginTop: "16px" }}>
-            {gateError && <div role="alert" className="alert alert-error">{gateError}</div>}
-            {!gateError && !eligibility && <p style={{ color: "var(--text-secondary)" }}>Checking your launch requirements...</p>}
-            {eligibility && !walletChecksOk && (
-              <p style={{ color: "var(--text-secondary)" }}>
-                Launch requirements are not met yet. See your <Link href="/founder/projects" style={{ color: "var(--brand-accent)" }}>founder requirements</Link>.
-              </p>
-            )}
-            {walletChecksOk && freeWallets.length === 0 && (
-              <p style={{ color: "var(--text-secondary)" }}>
-                You have no free shadow wallet. Request one on the <Link href="/founder/wallets" style={{ color: "var(--brand-accent)" }}>shadow wallets page</Link>.
-              </p>
-            )}
-            {walletChecksOk && freeWallets.length > 0 && (
-              <>
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <label className="label" htmlFor="pe-wallet">Shadow wallet *</label>
-                  <ShadowWalletInfo />
-                </div>
-                <select id="pe-wallet" className="input-field" value={shadowWalletId} onChange={(e) => setShadowWalletId(e.target.value)}>
-                  <option value="">Select a wallet</option>
-                  {freeWallets.map((w) => (
-                    <option key={w.id} value={w.id}>{shortAddr(w.address)}</option>
-                  ))}
-                </select>
-              </>
-            )}
+    <Card>
+      <CardHeader
+        title={
+          <span className="panel-title">
+            <PenLine size={16} aria-hidden="true" />
+            Project profile
+          </span>
+        }
+        subtitle={profile === null ? "This project has no profile yet. Save it now to finish the launch." : undefined}
+      />
+      <CardBody>
+        <form onSubmit={(e) => void handleSubmit(e)} className="form-grid">
+          {errorMsg && <InlineAlert tone="danger">{errorMsg}</InlineAlert>}
+          <Field label="Project name" required id="pe-name">
+            <Input value={values.name} maxLength={120} required onChange={(e) => setField("name", e.target.value)} />
+          </Field>
+          <Field label="Description" required id="pe-description">
+            <Textarea value={values.description} maxLength={5000} required style={{ minHeight: "90px" }} onChange={(e) => setField("description", e.target.value)} />
+          </Field>
+          <div className="form-grid form-grid-2">
+            <Field label="Website link" id="pe-website">
+              <Input type="url" placeholder="https://..." value={values.websiteUrl} maxLength={MAX_URL} onChange={(e) => setField("websiteUrl", e.target.value)} />
+            </Field>
+            <Field label="Pitch deck link" id="pe-deck">
+              <Input type="url" placeholder="https://..." value={values.pitchDeckUrl} maxLength={MAX_URL} onChange={(e) => setField("pitchDeckUrl", e.target.value)} />
+            </Field>
           </div>
-        )}
+          <Field label="Category" id="pe-category" hint="Lowercase letters, digits or hyphens.">
+            <Input placeholder="fintech" value={values.category} maxLength={32} onChange={(e) => setField("category", e.target.value)} />
+          </Field>
 
-        <button type="submit" className="btn-primary" style={{ marginTop: "20px" }} disabled={saving || walletBlocked}>
-          {saving ? (saveNote || "Saving...") : profile === null ? "Save profile" : "Update profile"}
-        </button>
-      </form>
-    </div>
+          {needsWallet && (
+            <div className="stack-sm">
+              {gateError && <InlineAlert tone="danger">{gateError}</InlineAlert>}
+              {!gateError && !eligibility && <p className="panel-note" role="status">Checking your launch requirements...</p>}
+              {eligibility && !walletChecksOk && (
+                <InlineAlert tone="warning">
+                  Launch requirements are not met yet. See your <Link href="/founder/projects" className="link-accent">founder requirements</Link>.
+                </InlineAlert>
+              )}
+              {walletChecksOk && freeWallets.length === 0 && (
+                <InlineAlert tone="warning">
+                  You have no free shadow wallet. Request one on the <Link href="/founder/wallets" className="link-accent">shadow wallets page</Link>.
+                </InlineAlert>
+              )}
+              {walletChecksOk && freeWallets.length > 0 && (
+                <div>
+                  <div className="label-row">
+                    <label className="label" htmlFor="pe-wallet">Shadow wallet *</label>
+                    <ShadowWalletInfo />
+                  </div>
+                  <Select id="pe-wallet" value={shadowWalletId} onChange={(e) => setShadowWalletId(e.target.value)}>
+                    <option value="">Select a wallet</option>
+                    {freeWallets.map((w) => (
+                      <option key={w.id} value={w.id}>{shortAddr(w.address)}</option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <Button type="submit" loading={saving} disabled={walletBlocked}>
+              {saving ? (saveNote || "Saving...") : profile === null ? "Save profile" : "Update profile"}
+            </Button>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
   );
 }

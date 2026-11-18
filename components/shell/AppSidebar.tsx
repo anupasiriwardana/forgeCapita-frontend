@@ -1,117 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, type ReactElement } from "react";
 import { usePathname } from "next/navigation";
-import {
-  ArrowLeftRight,
-  Banknote,
-  ChevronsLeft,
-  ChevronsRight,
-  Coins,
-  FileText,
-  FilePenLine,
-  FolderKanban,
-  GitBranch,
-  MessageSquareWarning,
-  Radio,
-  ScrollText,
-  UserCheck,
-  Users,
-  LayoutGrid,
-  ListChecks,
-  LogOut,
-  Rocket,
-  ShieldCheck,
-  User,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronsLeft, ChevronsRight, LogOut } from "lucide-react";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { shortAddr } from "@/lib/api";
 import { BrandLink } from "@/components/shell/TopBarParts";
+import { buildGroups, isActive, type NavItem } from "@/components/shell/navConfig";
+import { Button } from "@/components/ui/Button";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { cx } from "@/components/ui/cx";
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: LucideIcon;
+/** Two hex characters after 0x, used as avatar initials. */
+function addressInitials(address: string): string {
+  const hex = address.startsWith("0x") ? address.slice(2) : address;
+  return hex.slice(0, 2).toUpperCase() || "FC";
 }
 
-interface NavGroup {
-  label: string | null;
-  items: NavItem[];
+function roleLabel(role: string): string {
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
-const PROFILE: NavItem = { href: "/profile", label: "Profile", icon: User };
-
-function adminGroups(role: string): NavGroup[] {
-  const people: NavItem[] = [
-    { href: "/admin/applications", label: "Applications", icon: FileText },
-    { href: "/admin/wallets", label: "Shadow wallets", icon: Wallet },
-  ];
-  if (role === "admin") people.push({ href: "/admin/users", label: "Users", icon: Users });
-  return [
-    { label: "People", items: people },
-    {
-      label: "Launches",
-      items: [
-        { href: "/admin/drafts", label: "Launch drafts", icon: FilePenLine },
-        { href: "/admin/takeover", label: "Takeover", icon: UserCheck },
-      ],
-    },
-    {
-      label: "Money",
-      items: [
-        { href: "/admin/compliance", label: "Compliance", icon: ShieldCheck },
-        { href: "/admin/fees", label: "Platform fees", icon: Banknote },
-        { href: "/admin/relay", label: "Relay", icon: Radio },
-      ],
-    },
-    {
-      label: "Oversight",
-      items: [
-        { href: "/admin/audit", label: "Audit log", icon: ScrollText },
-        { href: "/admin/complaints", label: "Complaints", icon: MessageSquareWarning },
-      ],
-    },
-  ];
+/** Wraps a control in a right-side tooltip only while the sidebar is collapsed. */
+function CompactTip({ compact, label, children }: { compact: boolean; label: string; children: ReactElement }): ReactElement {
+  return compact ? (
+    <Tooltip content={label} side="right">
+      {children}
+    </Tooltip>
+  ) : (
+    children
+  );
 }
 
-function buildGroups(role: string): NavGroup[] {
-  if (role === "staff" || role === "admin") {
-    return [...adminGroups(role), { label: null, items: [PROFILE] }];
-  }
-  const main: NavItem[] = [
-    { href: "/portfolio", label: "Portfolio", icon: Wallet },
-    { href: "/projects", label: "Marketplace", icon: LayoutGrid },
-    { href: "/p2p", label: "P2P Market", icon: ArrowLeftRight },
-  ];
-  if (role === "investor") main.push({ href: "/apply", label: "Become a founder", icon: Rocket });
-  main.push(PROFILE);
-  const groups: NavGroup[] = [{ label: null, items: main }];
-  if (role === "founder") {
-    groups.push({
-      label: "Founder",
-      items: [
-        { href: "/founder/projects", label: "My projects", icon: FolderKanban },
-        { href: "/founder/launch", label: "Launch project", icon: Rocket },
-        { href: "/founder/launches", label: "My launches", icon: ListChecks },
-        { href: "/founder/revenue", label: "Revenue", icon: Coins },
-        { href: "/founder/repository", label: "Repository", icon: GitBranch },
-        { href: "/founder/wallets", label: "Shadow wallets", icon: Wallet },
-        { href: "/founder/takeover", label: "Takeover requests", icon: UserCheck },
-        { href: "/founder/agreement", label: "Agreement", icon: FileText },
-      ],
-    });
-  }
-  return groups;
-}
-
-function isActive(pathname: string, href: string): boolean {
-  if (href === "/projects") {
-    return pathname === "/projects" || pathname.startsWith("/projects/");
-  }
-  return pathname === href || pathname.startsWith(`${href}/`);
+function SidebarLink({ item, active, compact, onNavigate }: { item: NavItem; active: boolean; compact: boolean; onNavigate: () => void }): ReactElement {
+  const { href, label, icon: Icon } = item;
+  return (
+    <CompactTip compact={compact} label={label}>
+      <Link
+        href={href}
+        onClick={onNavigate}
+        aria-label={compact ? label : undefined}
+        aria-current={active ? "page" : undefined}
+        className={cx("shell-item", active && "shell-item-active")}
+      >
+        <Icon size={18} aria-hidden="true" />
+        {!compact && <span>{label}</span>}
+      </Link>
+    </CompactTip>
+  );
 }
 
 interface AppSidebarProps {
@@ -121,7 +59,7 @@ interface AppSidebarProps {
   onClose: () => void;
 }
 
-export function AppSidebar({ collapsed, onToggleCollapsed, open, onClose }: AppSidebarProps) {
+export function AppSidebar({ collapsed, onToggleCollapsed, open, onClose }: AppSidebarProps): ReactElement | null {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
 
@@ -141,73 +79,61 @@ export function AppSidebar({ collapsed, onToggleCollapsed, open, onClose }: AppS
   return (
     <>
       {open && <div className="shell-backdrop" onClick={onClose} aria-hidden="true" />}
-      <aside className={`shell-sidebar${compact ? " shell-collapsed" : ""}${open ? " shell-open" : ""}`}>
+      <aside className={cx("shell-sidebar", compact && "shell-collapsed", open && "shell-open")}>
         <div className="shell-brand">
           <BrandLink />
         </div>
-        <nav aria-label="Main navigation" style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
+        <nav aria-label="Main navigation" className="shell-nav">
           {groups.map((group, i) => (
-            <div key={group.label ?? `group-${i}`} style={{ marginBottom: "12px" }}>
+            <div key={group.label ?? `group-${i}`} className="shell-group">
               {group.label && !compact && <div className="shell-group-label">{group.label}</div>}
-              {group.items.map(({ href, label, icon: Icon }) => {
-                const active = isActive(pathname, href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    onClick={onClose}
-                    title={compact ? label : undefined}
-                    aria-label={compact ? label : undefined}
-                    aria-current={active ? "page" : undefined}
-                    className={`shell-item${active ? " shell-item-active" : ""}`}
-                  >
-                    <Icon size={20} aria-hidden="true" />
-                    {!compact && <span>{label}</span>}
-                  </Link>
-                );
-              })}
+              {group.items.map((item) => (
+                <SidebarLink key={item.href} item={item} active={isActive(pathname, item.href)} compact={compact} onNavigate={onClose} />
+              ))}
             </div>
           ))}
         </nav>
         <div className="shell-bottom">
-          {!compact && (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "13px", color: "rgba(241,245,249,0.8)" }}>{shortAddr(user.address)}</span>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  padding: "2px 8px",
-                  borderRadius: "999px",
-                  background: "rgba(99,102,241,0.15)",
-                  color: "#a78bfa",
-                }}
-              >
-                {user.role}
-              </span>
-            </div>
-          )}
-          <button
-            type="button"
-            className="shell-item"
-            onClick={() => void signOut()}
-            title={compact ? "Sign out" : undefined}
-            aria-label="Sign out"
-          >
-            <LogOut size={20} aria-hidden="true" />
-            {!compact && <span>Sign out</span>}
-          </button>
-          <button
-            type="button"
-            className="shell-item shell-collapse-btn"
-            onClick={onToggleCollapsed}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!collapsed}
-          >
-            {collapsed ? <ChevronsRight size={20} aria-hidden="true" /> : <ChevronsLeft size={20} aria-hidden="true" />}
-            {!compact && <span>Collapse</span>}
-          </button>
+          <div className="shell-user">
+            <span className="shell-avatar mono" title={compact ? `${user.address} (${roleLabel(user.role)})` : undefined}>
+              <span aria-hidden="true">{addressInitials(user.address)}</span>
+              {compact && <span className="sr-only">{`Signed in as ${user.address}, role ${user.role}`}</span>}
+            </span>
+            {!compact && (
+              <div className="shell-user-meta">
+                <span className="mono shell-user-addr" title={user.address}>
+                  <span aria-hidden="true">{shortAddr(user.address)}</span>
+                  <span className="sr-only">{`Signed in as ${user.address}`}</span>
+                </span>
+                <StatusPill tone="accent">{roleLabel(user.role)}</StatusPill>
+              </div>
+            )}
+          </div>
+          <CompactTip compact={compact} label="Sign out">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shell-bottom-btn"
+              onClick={() => void signOut()}
+              aria-label={compact ? "Sign out" : undefined}
+              leftIcon={<LogOut size={16} aria-hidden="true" />}
+            >
+              {!compact && "Sign out"}
+            </Button>
+          </CompactTip>
+          <CompactTip compact={compact} label="Expand sidebar">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shell-bottom-btn shell-collapse-btn"
+              onClick={onToggleCollapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+              leftIcon={collapsed ? <ChevronsRight size={16} aria-hidden="true" /> : <ChevronsLeft size={16} aria-hidden="true" />}
+            >
+              {!compact && "Collapse"}
+            </Button>
+          </CompactTip>
         </div>
       </aside>
     </>

@@ -3,25 +3,34 @@
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
+import { useAccount } from "wagmi";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { AppSidebar } from "@/components/shell/AppSidebar";
 import { Footer } from "@/components/shell/Footer";
-import { PublicTopBar } from "@/components/shell/PublicTopBar";
-import { SessionControls } from "@/components/shell/TopBarParts";
+import { PendingTopBar, PublicTopBar } from "@/components/shell/PublicTopBar";
+import { ChainIndicator, SessionControls, useSignInLanding } from "@/components/shell/TopBarParts";
+import { pageTitle } from "@/components/shell/navConfig";
+import { cx } from "@/components/ui/cx";
 
 const COLLAPSE_KEY = "forgecapita.sidebar.collapsed";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+export function AppShell({ children }: { children: React.ReactNode }): React.ReactElement {
+  const { user, loading } = useAuth();
+  const { status } = useAccount();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [open, setOpen] = useState(false);
   const [lastPath, setLastPath] = useState(pathname);
+  const [authResolved, setAuthResolved] = useState(false);
+  useSignInLanding();
 
   if (lastPath !== pathname) {
     setLastPath(pathname);
     setOpen(false);
   }
+
+  // Latches after the first auth resolution, so later loading (for example signing in) never hides the public bar.
+  if (!loading && !authResolved) setAuthResolved(true);
 
   useEffect(() => {
     // Read after mount (deferred) so server and first client render match.
@@ -48,11 +57,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const closeDrawer = useCallback(() => setOpen(false), []);
 
   if (!user) {
+    // A wallet is (re)connecting and its session is still being checked: a session may exist.
+    const sessionPending = loading && !authResolved && status !== "disconnected";
     return (
       <>
-        <PublicTopBar />
+        {sessionPending ? <PendingTopBar /> : <PublicTopBar />}
         <main>{children}</main>
-        <Footer />
+        {sessionPending ? null : <Footer />}
       </>
     );
   }
@@ -60,28 +71,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <AppSidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} open={open} onClose={closeDrawer} />
-      <div className={`shell-content${collapsed ? " shell-content-collapsed" : ""}`}>
-        <header className="sticky top-0 z-30 w-full">
-          <div
-            className="shell-topbar"
-            style={{ height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 24px" }}
-          >
-            <button
-              type="button"
-              className="shell-hamburger btn-secondary"
-              onClick={() => setOpen(true)}
-              aria-label="Open navigation"
-              aria-expanded={open}
-              style={{ padding: "6px 8px" }}
-            >
-              <Menu size={20} aria-hidden="true" />
-            </button>
-            <div style={{ marginLeft: "auto" }}>
+      <div className={cx("shell-content", collapsed && "shell-content-collapsed")}>
+        <header className="shell-topbar shell-sticky">
+          <div className="shell-bar">
+            <div className="shell-title">{pageTitle(pathname, user.role)}</div>
+            <div className="shell-bar-actions">
+              <ChainIndicator />
               <SessionControls />
+              <button
+                type="button"
+                className="btn-ghost shell-icon-btn shell-hamburger"
+                onClick={() => setOpen(true)}
+                aria-label="Open navigation"
+                aria-expanded={open}
+              >
+                <Menu size={20} aria-hidden="true" />
+              </button>
             </div>
           </div>
         </header>
-        <main>{children}</main>
+        <main className="shell-main">{children}</main>
       </div>
     </>
   );

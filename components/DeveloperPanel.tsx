@@ -4,24 +4,18 @@ import { useState } from "react";
 import { useAccount, useBalance, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { Wrench } from "lucide-react";
-import { StatusIcon } from "@/components/ui/StatusIcon";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { toast } from "@/lib/toast";
+import { toastTxError } from "@/lib/walletErrors";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useAuth } from "@/components/web3/AuthProvider";
 
 type Addr = `0x${string}`;
-
-function errMessage(err: unknown): string {
-  if (typeof err === "object" && err !== null) {
-    const e = err as { shortMessage?: unknown; message?: unknown };
-    if (typeof e.shortMessage === "string") return e.shortMessage;
-    if (typeof e.message === "string") return e.message;
-  }
-  return "Transaction failed";
-}
 
 /**
  * Developer-only "Close funding & start". Mirrors MilestoneEscrow.closeFundingAndStart():
@@ -38,7 +32,6 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
   const { writeContractAsync } = useWriteContract();
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   const escrow = project.escrowAddress as Addr;
   const developer = project.developer.toLowerCase();
@@ -89,7 +82,6 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
 
   async function handleClose(): Promise<void> {
     setBusy(true);
-    setResult(null);
     try {
       const hash = await writeContractAsync({
         address: escrow,
@@ -100,15 +92,14 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
       });
       const receipt = await waitForTransactionReceipt(config, { hash, chainId: project.chainId });
       if (receipt.status !== "success") {
-        setResult({ ok: false, text: "Close funding failed (reverted)." });
+        toast.error("Close funding failed (reverted).");
         return;
       }
-      setResult({
-        ok: true,
-        text: "Funding closed and project started. The indexer may take a little while to show the new state.",
+      toast.success("Funding closed and project started.", {
+        description: "The indexer may take a little while to show the new state.",
       });
     } catch (err) {
-      setResult({ ok: false, text: errMessage(err) });
+      toastTxError(err);
     } finally {
       setBusy(false);
       setConfirmOpen(false);
@@ -119,31 +110,34 @@ export function DeveloperPanel({ project, nowSeconds }: { project: ProjectDto; n
   }
 
   return (
-    <div className="glass-card" style={{ padding: "28px", marginBottom: "24px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}><Wrench size={20} aria-hidden="true" style={{ flexShrink: 0 }} />Developer</h2>
+    <Card>
+      <CardHeader
+        title={
+          <span className="panel-title">
+            <Wrench size={16} aria-hidden="true" />
+            Developer
+          </span>
+        }
+        subtitle="Close the funding round once the goal is reached."
+      />
+      <CardBody>
       {reason ? (
-        <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>{reason}</p>
+        <p className="panel-note">{reason}</p>
       ) : (
-        <button type="button" className="btn-primary" style={{ width: "100%" }} disabled={busy || !isConnected} onClick={() => setConfirmOpen(true)}>
-          {busy ? "Waiting for confirmation..." : "Close funding & start project"}
-        </button>
+        <Button className="btn-block" loading={busy} disabled={!isConnected} onClick={() => setConfirmOpen(true)}>
+          Close funding and start project
+        </Button>
       )}
       <ConfirmDialog
         open={confirmOpen}
+        onOpenChange={setConfirmOpen}
         title="Close funding & start project?"
+        body={`This ends the funding phase, sends ${feeText} of the raised funds to the platform treasury as the platform fee, and unlocks token claims for investors. This cannot be undone.`}
         confirmLabel="Close funding & start project"
-        busy={busy}
-        onConfirm={() => void handleClose()}
-        onCancel={() => setConfirmOpen(false)}
-      >
-        This ends the funding phase, sends {feeText} of the raised funds to the platform treasury as the platform fee, and unlocks token claims for investors. This cannot be undone.
-      </ConfirmDialog>
-      {result && (
-        <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
-          <StatusIcon state={result.ok ? "done" : "warning"} />
-          <span>{result.text}</span>
-        </div>
-      )}
-    </div>
+        tone="danger"
+        onConfirm={handleClose}
+      />
+      </CardBody>
+    </Card>
   );
 }

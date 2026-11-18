@@ -5,7 +5,12 @@ import { TakeoverSection } from "@/components/founder/TakeoverSection";
 export default function FounderTakeoverPage() {
   return (
     <>
-      <h1 style={{ fontSize: "28px", marginBottom: "24px" }}>Takeover requests</h1>
+      <div className="page-title-row">
+        <div>
+          <h1>Takeover requests</h1>
+          <p>Projects where staff nominated you as the new developer. Accept the request, then accept the developer role on-chain after the vote.</p>
+        </div>
+      </div>
       <TakeoverSection />
     </>
   );

@@ -3,15 +3,20 @@
 import { useState } from "react";
 import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
-import { AlertTriangle } from "lucide-react";
-import { StatusIcon } from "@/components/ui/StatusIcon";
+import { ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { Field, Input } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { toast } from "@/lib/toast";
+import { toastTxError, txErrorMessage } from "@/lib/walletErrors";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
 import { explorerTxUrl } from "@/lib/explorer";
-import { chainCurrency, SUPPORTED_CHAINS } from "@/config/chains";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { chainCurrency, chainName, SUPPORTED_CHAINS } from "@/config/chains";
 
 type Addr = `0x${string}`;
 type Action = "freeze" | "unfreeze" | "cancel" | "shutdown";
@@ -20,15 +25,6 @@ const MUTED = { fontSize: "13px", color: "var(--text-muted)" } as const;
 const MAX_TOTAL_FREEZE = BigInt(90 * 24 * 60 * 60);
 const REASON_MAX = 200;
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
-
-function errMessage(err: unknown): string {
-  if (typeof err === "object" && err !== null) {
-    const e = err as { shortMessage?: unknown; message?: unknown };
-    if (typeof e.shortMessage === "string") return e.shortMessage;
-    if (typeof e.message === "string") return e.message;
-  }
-  return "Transaction failed";
-}
 
 function asBool(v: unknown): boolean | null {
   return typeof v === "boolean" ? v : null;
@@ -184,13 +180,16 @@ export function GuardianPanel({ project, nowSeconds }: { project: ProjectDto; no
       } else hash = await writeContractAsync({ ...base, functionName: "emergencyShutdown" });
       const receipt = await waitForTransactionReceipt(config, { hash, chainId });
       if (receipt.status !== "success") {
+        toast.error("Transaction failed (reverted).");
         setResult({ ok: false, text: "Transaction failed (reverted).", hash });
         return;
       }
       if (action === "cancel") setReason("");
+      toast.success("Guardian transaction confirmed.");
       setResult({ ok: true, text: "Transaction confirmed.", hash });
     } catch (err) {
-      setResult({ ok: false, text: errMessage(err) });
+      toastTxError(err);
+      setResult({ ok: false, text: txErrorMessage(err) });
     } finally {
       setBusy(null);
       setConfirm(null);
@@ -202,51 +201,63 @@ export function GuardianPanel({ project, nowSeconds }: { project: ProjectDto; no
 
   const link = result?.hash ? explorerTxUrl(chainId, result.hash) : null;
 
+  function closeConfirm(open: boolean): void {
+    if (!open) setConfirm(null);
+  }
+
   function actionButton(action: Action, label: string, reasonText: string | null, danger = false) {
     return (
       <div style={{ marginBottom: "12px" }}>
-        <button
-          type="button"
-          className={danger ? "btn-danger" : "btn-secondary"}
-          style={{ width: "100%" }}
+        <Button
+          variant={danger ? "danger" : "secondary"}
+          className="btn-block"
+          loading={busy === action}
           disabled={busy !== null || reasonText !== null}
           onClick={() => setConfirm(action)}
         >
-          {busy === action ? "Waiting for confirmation..." : label}
-        </button>
+          {label}
+        </Button>
         {reasonText && <p style={{ ...MUTED, margin: "6px 0 0" }}>{reasonText}</p>}
       </div>
     );
   }
 
   return (
-    <div className="glass-card" style={{ padding: "28px", marginBottom: "24px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>Guardian controls</h2>
-      <p style={{ ...MUTED, marginBottom: "16px" }}>
-        Current state: <strong>{state}</strong>. You pay the network gas for these transactions.
-      </p>
+    <Card>
+      <CardHeader
+        title={
+          <span className="panel-title">
+            <ShieldAlert size={16} aria-hidden="true" />
+            Guardian controls
+          </span>
+        }
+        subtitle={
+          <>
+            Current state: <strong style={{ color: "var(--text)" }}>{state}</strong>. You pay the network gas.
+          </>
+        }
+      />
+      <CardBody>
       {wrongChain && (
-        <div className="alert alert-warning" style={{ marginBottom: "16px" }}>
-          <AlertTriangle size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-          <span>Switch your wallet to this project&apos;s network (chain {chainId}) to use guardian controls.</span>
-        </div>
+        <InlineAlert tone="warning" className="panel-gap">
+          Switch your wallet to this project&apos;s network ({chainName(chainId)}) to use guardian controls.
+        </InlineAlert>
       )}
 
       {actionButton("freeze", "Freeze milestones", freezeReason)}
       {actionButton("unfreeze", "Unfreeze milestones", unfreezeReason)}
 
-      <div style={{ marginBottom: "12px" }}>
-        <label className="label">Cancellation reason</label>
-        <input
-          className="input-field"
-          type="text"
-          maxLength={REASON_MAX}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="Why is this project being cancelled?"
-          disabled={busy !== null}
-          style={{ marginBottom: "8px" }}
-        />
+      <div className="panel-section" style={{ marginBottom: "12px" }}>
+        <Field label="Cancellation reason" hint={`Plain text, at most ${REASON_MAX} characters.`} className="panel-gap">
+          <Input
+            type="text"
+            maxLength={REASON_MAX}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why is this project being cancelled?"
+            disabled={busy !== null}
+          />
+        </Field>
         {actionButton("cancel", "Cancel project", cancelReason ?? (reasonError ? `Cancellation: ${reasonError}` : null), true)}
       </div>
 
@@ -254,66 +265,53 @@ export function GuardianPanel({ project, nowSeconds }: { project: ProjectDto; no
 
       <ConfirmDialog
         open={confirm === "freeze"}
+        onOpenChange={closeConfirm}
         title="Freeze milestones?"
+        body={`Milestone execution is blocked for at most 45 days. Only executeMilestone is affected. The cumulative freeze limit is 90 days; ${fmtDays(totalFrozen)} already used.`}
         confirmLabel="Freeze milestones"
-        busy={busy !== null}
-        onConfirm={() => void run("freeze")}
-        onCancel={() => setConfirm(null)}
-      >
-        Milestone execution is blocked for at most 45 days. Only executeMilestone is affected. The cumulative freeze
-        limit is 90 days; {fmtDays(totalFrozen)} already used.
-      </ConfirmDialog>
+        onConfirm={() => run("freeze")}
+      />
       <ConfirmDialog
         open={confirm === "unfreeze"}
+        onOpenChange={closeConfirm}
         title="Unfreeze milestones?"
+        body="Milestone execution is allowed again immediately."
         confirmLabel="Unfreeze milestones"
-        busy={busy !== null}
-        onConfirm={() => void run("unfreeze")}
-        onCancel={() => setConfirm(null)}
-      >
-        Milestone execution is allowed again immediately.
-      </ConfirmDialog>
+        onConfirm={() => run("unfreeze")}
+      />
       <ConfirmDialog
         open={confirm === "cancel"}
+        onOpenChange={closeConfirm}
         title="Cancel this project?"
+        body={
+          <>
+            This is irreversible. Refunds open for {refundDays.toString()} days (the refund window) and milestones can no
+            longer be executed. Reason: <strong>{reason.trim()}</strong>
+          </>
+        }
         confirmLabel="Cancel project"
         tone="danger"
-        busy={busy !== null}
         confirmDisabled={reasonError !== null}
-        onConfirm={() => void run("cancel")}
-        onCancel={() => setConfirm(null)}
-      >
-        This is irreversible. Refunds open for {refundDays.toString()} days (the refund window) and milestones can no
-        longer be executed. Reason: <strong>{reason.trim()}</strong>
-      </ConfirmDialog>
+        onConfirm={() => run("cancel")}
+      />
       <ConfirmDialog
         open={confirm === "shutdown"}
+        onOpenChange={closeConfirm}
         title="Emergency shutdown?"
+        body={`This is irreversible. Project tokens are wiped (invalidated) and any remaining ${currency} in the escrow is sent to the treasury.`}
         confirmLabel="Shut down"
         tone="danger"
-        busy={busy !== null}
-        onConfirm={() => void run("shutdown")}
-        onCancel={() => setConfirm(null)}
-      >
-        This is irreversible. Project tokens are wiped (invalidated) and any remaining {currency} in the escrow is sent
-        to the treasury.
-      </ConfirmDialog>
+        onConfirm={() => run("shutdown")}
+      />
 
-      {result && (
-        <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
-          <StatusIcon state={result.ok ? "done" : "warning"} />
-          <span>
-            {result.text}
-            {link && (
-              <>
-                {" "}
-                <a href={link} target="_blank" rel="noopener noreferrer">View transaction</a>
-              </>
-            )}
-          </span>
-        </div>
+      {result && link && (
+        <p className="tx-status">
+          Last transaction{result.ok ? "" : " (failed)"}:{" "}
+          <a href={link} target="_blank" rel="noopener noreferrer">View transaction</a>
+        </p>
       )}
-    </div>
+      </CardBody>
+    </Card>
   );
 }
 

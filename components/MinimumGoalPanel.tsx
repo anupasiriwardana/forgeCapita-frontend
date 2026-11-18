@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { formatUnits } from "viem";
+import { ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { InlineAlert } from "@/components/ui/InlineAlert";
 import { chainCurrency } from "@/config/chains";
 import { formatEth, formatEthCeil, type MinimumGoalDto } from "@/lib/api";
 
@@ -12,8 +15,6 @@ interface Props {
   enteredWei: bigint | null;
 }
 
-const noteStyle = { fontSize: "13px", marginTop: "10px", opacity: 0.85 } as const;
-const warnStyle = { fontSize: "13px", marginTop: "10px", color: "#f59e0b" } as const;
 
 /** Parse a decimal wei string; null when invalid. */
 export function parseWei(value: string | null | undefined): bigint | null {
@@ -37,12 +38,12 @@ export function MinimumGoalPanel({ chainId, goal, enteredWei }: Props) {
   // No data: mode is unknown (still loading, or the very first request failed), so show nothing.
   if (!goal) return null;
   if (goal.mode === "test") {
-    return <p style={noteStyle}>The minimum fund goal is switched off in test mode.</p>;
+    return <p className="min-goal panel-note">The minimum fund goal is switched off in test mode.</p>;
   }
 
   const minWei = parseWei(goal.minGoalWei);
   if (minWei === null) {
-    return <p style={noteStyle}>Could not load the minimum; it will still be checked when you launch.</p>;
+    return <p className="min-goal panel-note">Could not load the minimum; it will still be checked when you launch.</p>;
   }
   const below = enteredWei !== null && enteredWei < minWei;
   const minText = `${formatEthCeil(goal.minGoalWei, 6)} ${currency}`;
@@ -50,31 +51,36 @@ export function MinimumGoalPanel({ chainId, goal, enteredWei }: Props) {
   const margin = parseWei(goal.margin);
 
   return (
-    <div style={{ marginTop: "12px" }}>
-      <p style={{ fontSize: "14px", fontWeight: 600 }}>Minimum fund goal: {minText}</p>
-      {goal.stale && (
-        <p style={warnStyle}>
-          We could not get the latest network costs, so this minimum may change.
-        </p>
+    <div className="min-goal">
+      <p className="min-goal-title">
+        Minimum fund goal: <span className="num">{minText}</span>
+      </p>
+      {(goal.stale || below) && (
+        <div className="stack-sm" style={{ marginTop: 10 }}>
+          {goal.stale && (
+            <InlineAlert tone="warning">We could not get the latest network costs, so this minimum may change.</InlineAlert>
+          )}
+          {below && <InlineAlert tone="warning">Your fund goal is below the minimum of {minText}. Raise it to continue.</InlineAlert>}
+        </div>
       )}
-      {below && <p style={warnStyle}>Your fund goal is below the minimum of {minText}. Raise it to continue.</p>}
-      <button
-        type="button"
-        className="btn-secondary"
-        style={{ padding: "6px 12px", fontSize: "12px", marginTop: "8px" }}
+      <Button
+        variant="ghost"
+        size="sm"
+        style={{ marginTop: 8, marginLeft: -12 }}
         aria-expanded={open}
+        rightIcon={<ChevronDown size={14} aria-hidden="true" style={{ transform: open ? "rotate(180deg)" : undefined }} />}
         onClick={() => setOpen((v) => !v)}
       >
         How is this calculated?
-      </button>
+      </Button>
       {open && (
-        <div style={noteStyle}>
+        <div className="min-goal-details">
           <p>
             The 5% platform fee has to cover the network costs we pay for about {goal.N} investors and {goal.M} milestones,
             plus a safety margin.
           </p>
-          <p style={{ marginTop: "8px", fontWeight: 600 }}>Network cost details</p>
-          <ul style={{ marginTop: "4px", paddingLeft: "18px" }}>
+          <p style={{ marginTop: "8px", fontWeight: 600, color: "var(--text)" }}>Network cost details</p>
+          <ul className="num">
             <li>Gas units: {goal.gasUnits}</li>
             <li>Smoothed gas price: {gasPrice === null ? "-" : `${formatUnits(gasPrice, 9)} gwei`}</li>
             <li>L1 fee: {formatEth(goal.l1FeeUsed, 6)} {currency}</li>

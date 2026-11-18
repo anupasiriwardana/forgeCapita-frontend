@@ -1,86 +1,82 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { Zap } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
 import { useAuth } from "@/components/web3/AuthProvider";
+import { Button } from "@/components/ui/Button";
+import { cx } from "@/components/ui/cx";
+import { chainName } from "@/config/chains";
 
-export function BrandLink() {
+const SUPPORTED_CHAIN_IDS: ReadonlyArray<number> = [421614, 97];
+
+export function BrandLink(): React.ReactElement {
   return (
-    <Link href="/" style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none", flexShrink: 0 }}>
-      <div
-        style={{
-          width: "32px",
-          height: "32px",
-          borderRadius: "8px",
-          background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          flexShrink: 0,
-        }}
-      >
-        <Zap size={20} aria-hidden="true" />
-      </div>
-      <span
-        className="shell-brand-text"
-        style={{
-          fontFamily: "'Space Grotesk', sans-serif",
-          fontWeight: 700,
-          fontSize: "18px",
-          background: "linear-gradient(135deg, #6366f1, #a78bfa)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text",
-        }}
-      >
+    <Link href="/" className="brand-link" aria-label="ForgeCapita home">
+      <span className="brand-mark" aria-hidden="true">
+        <Zap size={18} />
+      </span>
+      <span className="shell-brand-text" aria-hidden="true">
         ForgeCapita
       </span>
     </Link>
   );
 }
 
-/** Sign in button, error text and wallet button. Lands on the role home only after an explicit sign-in click. */
-export function SessionControls() {
-  const router = useRouter();
-  const { isConnected } = useAccount();
-  const { user, loading, error, signIn } = useAuth();
-  const [landing, setLanding] = useState(false);
+/** Connected network as a dot plus name; warning tone when the wallet is on an unsupported chain. */
+export function ChainIndicator(): React.ReactElement | null {
+  const { isConnected, chainId } = useAccount();
+  if (!isConnected || chainId === undefined) return null;
+  const supported = SUPPORTED_CHAIN_IDS.includes(chainId);
+  return (
+    <span className={cx("shell-chain", !supported && "shell-chain-warning")} role="status">
+      <span className="shell-chain-dot" aria-hidden="true" />
+      <span className="sr-only">Network: </span>
+      {supported ? chainName(chainId) : "Unsupported network"}
+    </span>
+  );
+}
 
-  const handledRef = useRef(true);
+/**
+ * Set while a sign-in started from the shell button is in flight. Module level because the public top bar
+ * (and its SessionControls) unmounts as soon as the session appears, before signIn() resolves.
+ */
+let signInLandingPending = false;
+
+/** Lands on the role home once, right after a sign-in started from the shell button; never on load or session restore. */
+export function useSignInLanding(): void {
+  const router = useRouter();
+  const { user } = useAuth();
 
   useEffect(() => {
-    if (!landing || !user || handledRef.current) return;
-    handledRef.current = true;
+    if (!user || !signInLandingPending) return;
+    signInLandingPending = false;
     router.push(user.role === "staff" || user.role === "admin" ? "/admin/applications" : "/portfolio");
-  }, [landing, user, router]);
+  }, [user, router]);
+}
+
+/** Sign in button, error text and wallet button. The landing redirect runs in AppShell via useSignInLanding. */
+export function SessionControls(): React.ReactElement {
+  const { isConnected } = useAccount();
+  const { user, loading, error, signIn } = useAuth();
 
   async function handleSignIn(): Promise<void> {
-    handledRef.current = false;
-    if (await signIn()) setLanding(true);
-    else handledRef.current = true;
+    signInLandingPending = true;
+    if (!(await signIn())) signInLandingPending = false;
   }
 
   return (
-    <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: "10px" }}>
+    <div className="shell-session">
       {isConnected && !user && (
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => void handleSignIn()}
-          disabled={loading}
-          title={error ?? undefined}
-          style={{ padding: "6px 12px", fontSize: "13px" }}
-        >
+        <Button variant="secondary" size="sm" onClick={() => void handleSignIn()} disabled={loading} title={error ?? undefined}>
           {loading ? "Signing in…" : "Sign in"}
-        </button>
+        </Button>
       )}
       {error && !user && (
-        <span role="alert" style={{ fontSize: "12px", color: "var(--rose)", maxWidth: "200px" }}>
+        <span role="alert" className="shell-session-error">
           {error}
         </span>
       )}

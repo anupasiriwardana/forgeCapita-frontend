@@ -1,21 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { RotateCw } from "lucide-react";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { Field, Input, Select } from "@/components/ui/Field";
+import { StatusPill, type StatusTone } from "@/components/ui/StatusPill";
 import {
   describeApiError,
   listAdminUsers,
   setUserRole,
-  shortAddr,
   type AdminUserDto,
   type ManagedRole,
   type UserRole,
 } from "@/lib/api";
-import { ADMIN_PAGE_SIZE as PAGE_SIZE, AdminPager as Pager } from "./shared";
+import { toast } from "@/lib/toast";
+import { ADMIN_PAGE_SIZE as PAGE_SIZE, AdminListCard, AdminPageHeader, AdminPager as Pager, RelativeTime, statusLabel } from "./shared";
 
 const PREFIX_REGEX = /^0x[0-9a-f]{0,40}$/;
 const ROLE_FILTERS: (UserRole | "all")[] = ["all", "founder", "staff", "investor", "admin"];
 const MANAGED_ROLES: ManagedRole[] = ["founder", "staff", "investor"];
+
+const ROLE_TONES: Partial<Record<string, StatusTone>> = {
+  admin: "danger",
+  staff: "info",
+  founder: "accent",
+  investor: "neutral",
+};
 
 export function UsersTab() {
   const [offset, setOffset] = useState(0);
@@ -24,11 +38,13 @@ export function UsersTab() {
   const [items, setItems] = useState<AdminUserDto[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [hasData, setHasData] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [busy, setBusy] = useState(false);
 
   const q = search.trim().toLowerCase();
   const qValid = q === "" || PREFIX_REGEX.test(q);
+  const listKey = `${roleFilter}:${q}:${offset}:${reloadKey}`;
 
   useEffect(() => {
     if (!qValid) return;
@@ -43,117 +59,140 @@ export function UsersTab() {
         setItems(page.items);
         setTotal(page.total);
         setError("");
+        setHasData(true);
+        setLoadedKey(listKey);
       })
       .catch((err: unknown) => {
-        if (!signal.aborted) setError(describeApiError(err, "Failed to load users"));
+        if (signal.aborted) return;
+        setError(describeApiError(err, "Failed to load users"));
+        setLoadedKey(listKey);
       });
     return () => controller.abort();
-  }, [roleFilter, q, qValid, offset, reloadKey]);
+  }, [roleFilter, q, qValid, offset, reloadKey, listKey]);
 
   const [pending, setPending] = useState<{ user: AdminUserDto; role: ManagedRole } | null>(null);
 
   const requestRoleChange = (user: AdminUserDto, role: ManagedRole) => {
-    if (busy || role === user.role) return;
+    if (role === user.role) return;
     setPending({ user, role });
   };
 
-  const changeRole = async () => {
-    if (!pending || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await setUserRole(pending.user.address, pending.role);
-      setReloadKey((k) => k + 1);
-    } catch (err) {
-      setError(describeApiError(err, "Role change failed"));
-    } finally {
-      setBusy(false);
-      setPending(null);
-    }
+  const changeRole = async (): Promise<void> => {
+    if (!pending) return;
+    await setUserRole(pending.user.address, pending.role);
+    toast.success("Role changed", { description: `${statusLabel(pending.user.role)} to ${statusLabel(pending.role)}` });
+    setReloadKey((k) => k + 1);
   };
+
+  const refresh = () => setReloadKey((k) => k + 1);
+
+  const columns: ReadonlyArray<DataTableColumn<AdminUserDto>> = [
+    { key: "address", header: "Wallet", cell: (u) => <AddressChip address={u.address} /> },
+    { key: "role", header: "Role", cell: (u) => <StatusPill tone={ROLE_TONES[u.role] ?? "neutral"}>{statusLabel(u.role)}</StatusPill> },
+    { key: "login", header: "Last sign-in", numeric: true, cell: (u) => <RelativeTime iso={u.lastLoginAt} fallback="never" /> },
+    {
+      key: "change",
+      header: "Change role",
+      align: "right",
+      cell: (u) =>
+        u.role === "admin" ? (
+          <span className="cell-sub">Not editable</span>
+        ) : (
+          <Select
+            value={u.role}
+            aria-label={`Role for ${u.address}`}
+            onChange={(e) => requestRoleChange(u, e.target.value as ManagedRole)}
+            style={{ width: 140, marginLeft: "auto" }}
+          >
+            {MANAGED_ROLES.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </Select>
+        ),
+    },
+  ];
 
   return (
     <section>
-      <h1 style={{ fontSize: "22px", marginBottom: "16px" }}>Users</h1>
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
-        <select
-          className="input-field"
-          style={{ width: "160px" }}
-          value={roleFilter}
-          onChange={(e) => {
-            setRoleFilter(e.target.value as UserRole | "all");
-            setOffset(0);
-          }}
-          aria-label="Filter by role"
-        >
-          {ROLE_FILTERS.map((r) => (
-            <option key={r} value={r}>{r}</option>
-          ))}
-        </select>
-        <input
-          className="input-field"
-          style={{ width: "360px", maxWidth: "100%" }}
-          placeholder="Address prefix (0x…)"
-          value={search}
-          maxLength={42}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setOffset(0);
-          }}
-          aria-label="Address prefix"
-        />
-      </div>
-      {!qValid && <div role="alert" className="alert alert-warning" style={{ marginBottom: "12px" }}>Prefix must be 0x followed by hex digits</div>}
-      {error && <div role="alert" className="alert alert-error" style={{ marginBottom: "12px" }}>{error}</div>}
-      <div className="glass-card" style={{ padding: "8px" }}>
-        {items.length === 0 && <p style={{ padding: "12px", color: "var(--text-secondary)" }}>No users.</p>}
-        {items.map((u) => (
-          <div
-            key={u.id}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.5fr 1fr 1.5fr 1fr",
-              gap: "8px",
-              alignItems: "center",
-              padding: "10px 12px",
-              borderBottom: "1px solid var(--border)",
-              fontSize: "14px",
+      <AdminPageHeader
+        title="Users"
+        description="Every signed-in wallet and its role. Role changes are recorded in the audit log."
+        actions={
+          <Button variant="secondary" size="sm" onClick={refresh} leftIcon={<RotateCw size={14} aria-hidden="true" />}>
+            Refresh
+          </Button>
+        }
+      />
+      <Card className="admin-toolbar">
+        <Field label="Role" className="toolbar-field">
+          <Select
+            value={roleFilter}
+            onChange={(e) => {
+              setRoleFilter(e.target.value as UserRole | "all");
+              setOffset(0);
             }}
           >
-            <span title={u.address}>{shortAddr(u.address)}</span>
-            <span>{u.role}</span>
-            <span style={{ color: "var(--text-secondary)" }}>
-              {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "never"}
-            </span>
-            {u.role === "admin" ? (
-              <span />
-            ) : (
-              <select
-                className="input-field"
-                value={u.role}
-                disabled={busy}
-                aria-label={`Role for ${u.address}`}
-                onChange={(e) => requestRoleChange(u, e.target.value as ManagedRole)}
-              >
-                {MANAGED_ROLES.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            )}
-          </div>
-        ))}
-      </div>
-      <Pager offset={offset} total={total} onChange={setOffset} />
+            {ROLE_FILTERS.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field
+          label="Address prefix"
+          className="toolbar-field toolbar-field-wide"
+          error={!qValid ? "Prefix must be 0x followed by hex digits" : undefined}
+        >
+          <Input
+            placeholder="0x…"
+            value={search}
+            maxLength={42}
+            spellCheck={false}
+            autoComplete="off"
+            className="mono"
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setOffset(0);
+            }}
+          />
+        </Field>
+      </Card>
+      <AdminListCard
+        error={error}
+        errorTitle="Could not load users"
+        onRetry={refresh}
+        hasData={hasData}
+        footer={<Pager offset={offset} total={total} onChange={setOffset} />}
+      >
+        <DataTable
+          columns={columns}
+          rows={items}
+          rowKey={(u) => u.id}
+          caption="Users"
+          loading={qValid && loadedKey !== listKey}
+          dense
+          stickyHeader
+          emptyTitle="No users."
+        />
+      </AdminListCard>
       <ConfirmDialog
         open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open) setPending(null);
+        }}
         title="Change user role?"
+        body={
+          pending ? (
+            <>
+              Change <span className="mono">{pending.user.address}</span> from {pending.user.role} to {pending.role}?
+            </>
+          ) : (
+            ""
+          )
+        }
         confirmLabel="Change role"
-        busy={busy}
-        onConfirm={() => void changeRole()}
-        onCancel={() => setPending(null)}
-      >
-        Change {pending?.user.address} from {pending?.user.role} to {pending?.role}?
-      </ConfirmDialog>
+        onConfirm={changeRole}
+        errorFallback="Role change failed"
+      />
     </section>
   );
 }

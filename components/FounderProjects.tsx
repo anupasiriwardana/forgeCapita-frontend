@@ -1,42 +1,60 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useReadContracts } from "wagmi";
 import { useQueries } from "@tanstack/react-query";
+import { Coins, FolderGit2, HandCoins, Receipt, Rocket, ShieldCheck, Wallet } from "lucide-react";
+import { ProjectStatusBadge } from "@/components/ProjectStatusBadge";
 import { RevenueReport } from "@/components/RevenueReport";
 import { complianceBadge, formatBps } from "@/components/TransparencyPanel";
+import { Amount } from "@/components/ui/Amount";
+import { ButtonLink, buttonClass } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { InlineAlert, type AlertTone } from "@/components/ui/InlineAlert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { StatCard } from "@/components/ui/StatCard";
+import { StatusPill, type StatusTone } from "@/components/ui/StatusPill";
 import { ABIS } from "@/lib/contracts";
 import { useAuth } from "@/components/web3/AuthProvider";
-import { chainName } from "@/config/chains";
+import { chainCurrency, chainName } from "@/config/chains";
 import { FOUNDER_COMPLIANCE_TEXT } from "@/lib/founderCompliance";
 import { exactTime, formatAge } from "@/lib/timeAgo";
 import {
   fetchOwnRepos,
   fetchProjectRevenue,
+  formatEth,
   formatNative,
   getProjectTransparency,
   getTakeoverByProject,
   listProjects,
   shortAddr,
+  type ComplianceState,
   type OwnRepoDto,
   type ProjectDto,
+  type ProjectRevenueDto,
   type ProjectState,
   type PublicTakeoverCaseDto,
   type TransparencyDto,
 } from "@/lib/api";
 
-const MUTED = { fontSize: "13px", color: "var(--text-muted)" } as const;
-const LINK = { color: "var(--brand-accent)" } as const;
+type ComplianceView = ComplianceState | "not_checked";
 
-const STATE_BADGE: Record<ProjectState, string> = {
-  FUNDING: "badge-active",
-  ACTIVE: "badge-active",
-  COMPLETED: "badge-brand",
-  FAILED: "badge-inactive",
-  CANCELLED: "badge-inactive",
-  SHUTDOWN: "badge-danger",
-};
+function complianceTone(state: ComplianceView): StatusTone {
+  const badge = complianceBadge(state);
+  if (badge === "badge-active") return "success";
+  if (badge === "badge-danger") return "danger";
+  if (badge === "badge-pending") return "warning";
+  return "neutral";
+}
+
+function complianceAlertTone(state: ComplianceView): AlertTone {
+  if (state === "OK" || state === "RESOLVED") return "success";
+  if (state === "SHUTDOWN") return "danger";
+  if (state === "not_checked") return "info";
+  return "warning";
+}
 
 const NEXT_ACTION: Record<ProjectState, string> = {
   FUNDING: "Open the project to close funding and start",
@@ -65,7 +83,7 @@ function progressPercent(raised: string, goal: string): number {
   }
 }
 
-function ComplianceBlock({ project }: { project: ProjectDto }) {
+function ComplianceBlock({ project, variant }: { project: ProjectDto; variant: "card" | "inline" }) {
   const [data, setData] = useState<TransparencyDto | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
 
@@ -83,34 +101,58 @@ function ComplianceBlock({ project }: { project: ProjectDto }) {
 
   if (!data || data.auditStatus === "unaudited") return null;
   const state = data.complianceState ?? "not_checked";
+  const pill = <StatusPill tone={complianceTone(state)}>{state === "not_checked" ? "not checked" : state}</StatusPill>;
+  const details = (
+    <>
+      <InlineAlert tone={complianceAlertTone(state)}>{FOUNDER_COMPLIANCE_TEXT[state]}</InlineAlert>
+      <div className="facts">
+        {data.observedNative != null && data.routedNative != null && (
+          <p className="num" style={{ color: "var(--text)" }}>
+            Observed {formatNative(data.observedNative, data.chainId)} vs routed{" "}
+            {formatNative(data.routedNative, data.chainId)} (last {data.windowDays} days)
+          </p>
+        )}
+        {data.shortfallBps != null && (
+          <p className="num">
+            Shortfall {formatBps(data.shortfallBps)} (tolerance {formatBps(data.toleranceBps)})
+          </p>
+        )}
+        <p title={exactTime(data.lastCheckedAt)}>Last checked: {formatAge(data.lastCheckedAt, now)}</p>
+        <p>The check refreshes about every 15 minutes (configurable).</p>
+        {state === "WARNED" && (
+          <p>
+            The indexer might be behind, so ignore the warning if you have already routed the revenue. This check runs
+            periodically on indexed data; see &quot;last checked&quot; above.
+          </p>
+        )}
+      </div>
+    </>
+  );
+
+  if (variant === "card") {
+    return (
+      <Card>
+        <CardHeader
+          as="h3"
+          title={
+            <span className="panel-title">
+              <ShieldCheck size={16} aria-hidden="true" />
+              Revenue compliance
+            </span>
+          }
+          actions={pill}
+        />
+        <CardBody>{details}</CardBody>
+      </Card>
+    );
+  }
   return (
-    <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
-      <p style={{ marginBottom: "6px" }}>
-        Revenue compliance:{" "}
-        <span className={`badge ${complianceBadge(state)}`}>{state === "not_checked" ? "not checked" : state}</span>
-      </p>
-      <p style={{ fontSize: "14px", marginBottom: "6px" }}>{FOUNDER_COMPLIANCE_TEXT[state]}</p>
-      {data.observedNative != null && data.routedNative != null && (
-        <p style={{ fontSize: "14px" }}>
-          Observed {formatNative(data.observedNative, data.chainId)} vs routed{" "}
-          {formatNative(data.routedNative, data.chainId)} (last {data.windowDays} days)
-        </p>
-      )}
-      {data.shortfallBps != null && (
-        <p style={MUTED}>
-          Shortfall {formatBps(data.shortfallBps)} (tolerance {formatBps(data.toleranceBps)})
-        </p>
-      )}
-      <p style={MUTED} title={exactTime(data.lastCheckedAt)}>
-        Last checked: {formatAge(data.lastCheckedAt, now)}
-      </p>
-      <p style={MUTED}>The check refreshes about every 15 minutes (configurable).</p>
-      {state === "WARNED" && (
-        <p style={MUTED}>
-          The indexer might be behind, so ignore the warning if you have already routed the revenue. This check runs
-          periodically on indexed data; see &quot;last checked&quot; above.
-        </p>
-      )}
+    <div className="panel-section">
+      <div className="inline-actions panel-gap">
+        <span className="panel-note">Revenue compliance:</span>
+        {pill}
+      </div>
+      {details}
     </div>
   );
 }
@@ -131,20 +173,28 @@ function TakeoverNotice({ project }: { project: ProjectDto }) {
   if (!item || (item.status !== "vote_open" && item.status !== "closed")) return null;
   const href = `/projects/${encodeURIComponent(project.id)}`;
   return (
-    <div className="alert alert-warning" style={{ marginTop: "12px" }}>
+    <InlineAlert
+      tone="warning"
+      title={item.status === "vote_open" ? "Takeover vote open" : "Takeover vote closed"}
+      action={
+        <ButtonLink href={href} variant="secondary" size="sm">
+          View project
+        </ButtonLink>
+      }
+    >
       {item.status === "vote_open" ? (
-        <span>
+        <>
           A takeover vote is open (ends {item.endsAt ? new Date(item.endsAt).toLocaleString() : "soon"}). The community is
-          voting on replacing the developer with {shortAddr(item.candidateWallet)}. The result is advisory; staff decide.
-        </span>
+          voting on replacing the developer with <span className="mono">{shortAddr(item.candidateWallet)}</span>. The result is
+          advisory; staff decide.
+        </>
       ) : (
-        <span>
+        <>
           Vote closed: {item.result ? (TAKEOVER_RESULT[item.result] ?? item.result) : "no result"}. Staff may propose a new
           developer on-chain.
-        </span>
-      )}{" "}
-      <Link href={href} style={LINK}>View project</Link>
-    </div>
+        </>
+      )}
+    </InlineAlert>
   );
 }
 
@@ -155,76 +205,168 @@ function isRevenueState(project: ProjectDto): boolean {
 /** undefined = still loading, null = unavailable, bigint = amount in wei. */
 type Claimable = bigint | null | undefined;
 
-function ClaimableLine({ project, claimable }: { project: ProjectDto; claimable: Claimable }) {
-  let text: string;
-  if (claimable === undefined) text = "Checking...";
-  else if (claimable === null) text = "Not available";
-  else text = formatNative(claimable.toString(), project.chainId, 6);
+/** undefined = still loading, null = failed or not indexed yet, otherwise the indexer's revenue report. */
+type Revenue = ProjectRevenueDto | null | undefined;
+
+const ACTIONABLE: ReadonlySet<ProjectState> = new Set<ProjectState>(["FUNDING", "ACTIVE"]);
+
+function RepoLink({ repo }: { repo: OwnRepoDto | undefined }) {
+  if (!repo || !repo.htmlUrl.startsWith("https://")) return null;
   return (
-    <p style={{ fontSize: "14px", marginBottom: "8px" }}>
-      Claimable creator funds: <strong>{text}</strong>
-      {typeof claimable === "bigint" && claimable > BigInt(0) && (
-        <>
-          {" "}
-          <Link href={`/projects/${encodeURIComponent(project.id)}`} style={LINK}>Claim on project page</Link>
-        </>
-      )}
-    </p>
+    <a href={repo.htmlUrl} target="_blank" rel="noopener noreferrer" className={buttonClass("ghost", "sm")}>
+      <FolderGit2 size={14} aria-hidden="true" />
+      Repository
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+}
+
+function RevenueKpis({ project, claimable, revenue }: { project: ProjectDto; claimable: Claimable; revenue: Revenue }) {
+  const currency = chainCurrency(project.chainId);
+  const totals = revenue?.totals;
+  const loading = revenue === undefined;
+  const totalValue = (wei: string | undefined): string => (totals ? formatEth(wei, 6) : "0");
+  const noRevenueHint = !loading && !totals ? "No revenue recorded yet" : undefined;
+
+  let claimableValue: string;
+  if (claimable === null) claimableValue = "Not available";
+  else if (claimable === undefined) claimableValue = "";
+  else claimableValue = formatEth(claimable.toString(), 6);
+
+  return (
+    <div className="kpi-grid">
+      <StatCard
+        label="Claimable creator funds"
+        value={claimableValue}
+        unit={typeof claimable === "bigint" ? currency : undefined}
+        loading={claimable === undefined}
+        hint={claimable === undefined ? "Checking..." : "Live from the revenue router"}
+        icon={<HandCoins size={16} />}
+      />
+      <StatCard
+        label="Total revenue received"
+        value={totalValue(totals?.totalGross)}
+        unit={currency}
+        loading={loading}
+        hint={noRevenueHint}
+        icon={<Receipt size={16} />}
+      />
+      <StatCard
+        label="Developer share (24%)"
+        value={totalValue(totals?.totalCreatorCut)}
+        unit={currency}
+        loading={loading}
+        icon={<Coins size={16} />}
+      />
+      <StatCard
+        label="Claimed"
+        value={totalValue(totals?.totalCreatorClaimed)}
+        unit={currency}
+        loading={loading}
+        icon={<Wallet size={16} />}
+      />
+    </div>
   );
 }
 
 type FounderProjectsView = "projects" | "revenue";
 
-function ProjectRow({
-  project,
-  repo,
-  claimable,
-  view,
-}: {
+interface ProjectRowProps {
   project: ProjectDto;
   repo: OwnRepoDto | undefined;
   claimable: Claimable;
-  view: FounderProjectsView;
-}) {
+  revenue: Revenue;
+}
+
+function ProjectCard({ project, repo }: ProjectRowProps) {
   const name = project.profile?.name ?? project.tokenName;
   const pct = progressPercent(project.totalRaised, project.fundingGoal);
-  const revenueView = view === "revenue";
-  const showCompliance =
-    project.state !== "FUNDING" && project.state !== "CANCELLED" && (revenueView || !isRevenueState(project));
-  const repoLink = repo && repo.htmlUrl.startsWith("https://") ? repo : undefined;
+  const currency = chainCurrency(project.chainId);
+  const href = `/projects/${encodeURIComponent(project.id)}`;
+  const showCompliance = project.state !== "FUNDING" && project.state !== "CANCELLED" && !isRevenueState(project);
 
   return (
-    <div style={{ padding: "16px 0", borderBottom: "1px solid var(--border)" }}>
-      <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-        <strong>{name}</strong>
-        <span style={MUTED}>{chainName(project.chainId)}</span>
-        <span className={`badge ${STATE_BADGE[project.state]}`}>{project.state}</span>
-        {project.state === "ACTIVE" && <span style={MUTED}>Milestone {project.currentMilestoneIndex}</span>}
-      </div>
-      {!revenueView && (
-        <>
-          <p style={{ fontSize: "14px", margin: "8px 0 4px" }}>
-            Raised {formatNative(project.totalRaised, project.chainId)} of {formatNative(project.fundingGoal, project.chainId)}
-          </p>
-          <div className="progress-bar" style={{ height: "6px", marginBottom: "8px" }}>
-            <div className="progress-fill" style={{ width: `${pct.toString()}%` }} />
+    <Card className="fp-card">
+      <div className="fp-head">
+        <div style={{ minWidth: 0 }}>
+          <h3 className="fp-title">{name}</h3>
+          <div className="fp-meta">
+            <span className="chip">{chainName(project.chainId)}</span>
+            <ProjectStatusBadge status={project.state} />
+            {project.state === "ACTIVE" && <span className="chip num">Milestone {project.currentMilestoneIndex}</span>}
           </div>
-          <p style={{ fontSize: "14px", marginBottom: "8px" }}>Next action: {NEXT_ACTION[project.state]}</p>
-        </>
-      )}
-      {revenueView && <ClaimableLine project={project} claimable={claimable} />}
-      <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "14px" }}>
-        <Link href={`/projects/${encodeURIComponent(project.id)}`} style={LINK}>Open project</Link>
-        {repoLink && (
-          <a href={repoLink.htmlUrl} target="_blank" rel="noopener noreferrer" style={LINK}>
-            Repository
-          </a>
-        )}
+        </div>
+        <RepoLink repo={repo} />
       </div>
-      {showCompliance && <ComplianceBlock project={project} />}
-      {revenueView && <RevenueReport project={project} />}
-      {!revenueView && <TakeoverNotice project={project} />}
-    </div>
+      <div className="fp-funding">
+        <div className="fp-funding-row">
+          <span>
+            Raised <Amount value={formatEth(project.totalRaised)} unit={currency} /> of{" "}
+            <Amount value={formatEth(project.fundingGoal)} unit={currency} />
+          </span>
+          <span className="num">{pct}%</span>
+        </div>
+        <div
+          className="progress-bar"
+          role="progressbar"
+          aria-label={`Funding progress for ${name}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
+        >
+          <div className="progress-fill" style={{ width: `${pct.toString()}%` }} />
+        </div>
+      </div>
+      <div className="fp-next">
+        <p className="fp-next-text">
+          <strong>Next action:</strong> {NEXT_ACTION[project.state]}
+        </p>
+        <ButtonLink href={href} variant={ACTIONABLE.has(project.state) ? "primary" : "secondary"} size="sm">
+          Open project
+        </ButtonLink>
+      </div>
+      {showCompliance && <ComplianceBlock project={project} variant="inline" />}
+      <div className="fp-extra">
+        <TakeoverNotice project={project} />
+      </div>
+    </Card>
+  );
+}
+
+function RevenueProject({ project, repo, claimable, revenue }: ProjectRowProps) {
+  const headingId = useId();
+  const name = project.profile?.name ?? project.tokenName;
+  const href = `/projects/${encodeURIComponent(project.id)}`;
+  const canClaim = typeof claimable === "bigint" && claimable > BigInt(0);
+
+  return (
+    <section className="revenue-block" aria-labelledby={headingId}>
+      <div className="chain-block-head">
+        <div style={{ minWidth: 0 }}>
+          <h2 id={headingId}>{name}</h2>
+          <div className="fp-meta">
+            <span className="chip">{chainName(project.chainId)}</span>
+            <ProjectStatusBadge status={project.state} />
+          </div>
+        </div>
+        <div className="inline-actions">
+          {canClaim && (
+            <ButtonLink href={href} size="sm" leftIcon={<HandCoins size={14} aria-hidden="true" />}>
+              Claim on project page
+            </ButtonLink>
+          )}
+          <ButtonLink href={href} variant="secondary" size="sm">
+            Open project
+          </ButtonLink>
+          <RepoLink repo={repo} />
+        </div>
+      </div>
+      <RevenueKpis project={project} claimable={claimable} revenue={revenue} />
+      <div className="section-stack">
+        <ComplianceBlock project={project} variant="card" />
+        <RevenueReport project={project} />
+      </div>
+    </section>
   );
 }
 
@@ -273,12 +415,25 @@ function ProjectList({
     return typeof result === "bigint" ? result : null;
   }
 
+  function revenueFor(project: ProjectDto): Revenue {
+    const q = revenueQueries[eligible.indexOf(project)];
+    if (!q || q.isLoading) return undefined;
+    return q.data ?? null;
+  }
+
+  const Row = view === "revenue" ? RevenueProject : ProjectCard;
   return (
-    <>
+    <div className={view === "revenue" ? undefined : "fp-list"}>
       {projects.map((p) => (
-        <ProjectRow key={p.id} project={p} repo={repos.find((r) => r.projectId === p.id)} claimable={claimableFor(p)} view={view} />
+        <Row
+          key={p.id}
+          project={p}
+          repo={repos.find((r) => r.projectId === p.id)}
+          claimable={claimableFor(p)}
+          revenue={revenueFor(p)}
+        />
       ))}
-    </>
+    </div>
   );
 }
 
@@ -312,26 +467,65 @@ export function FounderProjects({ view = "projects" }: { view?: FounderProjectsV
 
   let body: React.ReactNode;
   if (error) {
-    body = <div role="alert" className="alert alert-error">{error}</div>;
+    body = (
+      <Card>
+        <ErrorState title="Could not load your projects" message={error} />
+      </Card>
+    );
   } else if (projects === null) {
-    body = <p style={{ color: "var(--text-secondary)" }}>Loading...</p>;
+    body = (
+      <Card className="fp-card" aria-busy="true">
+        <span className="sr-only" role="status">Loading...</span>
+        <div className="stack-md">
+          <Skeleton width="35%" height={16} />
+          <Skeleton width="25%" />
+          <Skeleton height={6} />
+          <Skeleton width="60%" />
+        </div>
+      </Card>
+    );
   } else if (view === "revenue" && !projects.some(isRevenueState)) {
-    body = <p style={{ color: "var(--text-secondary)" }}>No projects in revenue state yet.</p>;
+    body = (
+      <Card>
+        <EmptyState
+          icon={<Coins size={20} />}
+          title="No projects in revenue state yet."
+          text="Revenue shows here once a project is active or completed."
+        />
+      </Card>
+    );
   } else if (projects.length === 0) {
     body = (
-      <p style={{ color: "var(--text-secondary)" }}>
-        No projects yet.{" "}
-        <Link href="/founder/launch" style={LINK}>Create a project</Link>
-        {" or check "}
-        <Link href="/founder/launches" style={LINK}>your launch drafts</Link>.
-      </p>
+      <Card>
+        <EmptyState
+          icon={<Rocket size={20} />}
+          title="No projects yet."
+          text="Create a project or check your launch drafts."
+          action={
+            <div className="inline-actions" style={{ justifyContent: "center" }}>
+              <ButtonLink href="/founder/launch" leftIcon={<Rocket size={14} aria-hidden="true" />}>Launch project</ButtonLink>
+              <ButtonLink href="/founder/launches" variant="secondary">Your launch drafts</ButtonLink>
+            </div>
+          }
+        />
+      </Card>
     );
   } else {
     body = <ProjectList projects={view === "revenue" ? projects.filter(isRevenueState) : projects} repos={repos} view={view} />;
   }
 
   return (
-    <section id="projects" className="glass-card" style={{ padding: "24px" }}>
+    <section id="projects" aria-labelledby={view === "projects" ? "founder-projects-heading" : undefined}>
+      {view === "projects" && (
+        <div className="chain-block-head">
+          <h2 id="founder-projects-heading">
+            Your projects
+            {projects !== null && projects.length > 0 && (
+              <span className="num" style={{ color: "var(--text-2)", fontWeight: 500 }}> ({projects.length})</span>
+            )}
+          </h2>
+        </div>
+      )}
       {body}
     </section>
   );
