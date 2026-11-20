@@ -6,7 +6,7 @@ export function safeNextPath(raw: string | null | undefined): string {
   return raw;
 }
 
-const WRITE_PREFIXES = ["/apply", "/founder", "/launches", "/p2p", "/admin", "/portfolio", "/projects/create"];
+const WRITE_PREFIXES = ["/apply", "/founder", "/p2p", "/admin", "/portfolio"];
 const MILESTONES_ROUTE = /^\/projects\/[^/]+\/milestones(\/|$)/;
 const PROJECT_ROUTE = /^\/projects\/[^/]+\/?$/;
 
@@ -19,5 +19,5 @@ export function isWriteRoute(pathname: string): boolean {
 }
 
 export function isPublicReadRoute(pathname: string): boolean {
-  return pathname === "/" || (PROJECT_ROUTE.test(pathname) && !underPrefix(pathname, "/projects/create"));
+  return pathname === "/" || PROJECT_ROUTE.test(pathname);
 }

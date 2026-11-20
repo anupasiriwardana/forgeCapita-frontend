@@ -2,19 +2,56 @@
 
 import Link from "next/link";
 import { useCallback, useState } from "react";
+import { RotateCw } from "lucide-react";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { Field, Select } from "@/components/ui/Field";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { chainName } from "@/config/chains";
-import { listAdminLaunchDrafts, shortAddr, type LaunchDraftStatus } from "@/lib/api";
-import { ADMIN_PAGE_SIZE, AdminPager, ListState, ROW_STYLE, useAdminList } from "./shared";
+import { listAdminLaunchDrafts, shortAddr, type AdminLaunchDraftDto, type LaunchDraftStatus } from "@/lib/api";
+import {
+  ADMIN_PAGE_SIZE,
+  AdminListCard,
+  AdminPageHeader,
+  AdminPager,
+  RelativeTime,
+  StatusFilter,
+  statusLabel,
+  toneFromBadge,
+  useAdminList,
+} from "./shared";
 
 const STATUSES: LaunchDraftStatus[] = ["pending", "attached", "applied", "cancelled", "expired", "conflict"];
 const CHAINS = [421614, 97];
-const COLUMNS = "1.4fr 1.4fr 1fr 1.2fr 0.9fr 1.2fr 1.4fr";
 
 function draftBadge(status: LaunchDraftStatus): string {
   if (status === "applied") return "badge-active";
   if (status === "pending" || status === "attached") return "badge-pending";
   return "badge-inactive";
 }
+
+const COLUMNS: ReadonlyArray<DataTableColumn<AdminLaunchDraftDto>> = [
+  { key: "created", header: "Created", numeric: true, cell: (d) => <RelativeTime iso={d.createdAt} /> },
+  { key: "name", header: "Project", cell: (d) => <span className="cell-title text-wrap">{d.name}</span> },
+  { key: "wallet", header: "Founder", cell: (d) => <AddressChip address={d.walletAddress} /> },
+  { key: "chain", header: "Network", cell: (d) => <span className="cell-sub" style={{ fontSize: 13 }}>{chainName(d.chainId)}</span> },
+  { key: "status", header: "Status", cell: (d) => <StatusPill tone={toneFromBadge(draftBadge(d.status))}>{statusLabel(d.status)}</StatusPill> },
+  {
+    key: "project",
+    header: "Escrow",
+    cell: (d) =>
+      d.projectId ? (
+        <Link href={`/projects/${encodeURIComponent(d.projectId)}`} className="link-accent mono" style={{ fontSize: 12 }} title={d.projectId}>
+          {d.escrowAddress ? shortAddr(d.escrowAddress) : "project"}
+        </Link>
+      ) : (
+        <span className="cell-sub">-</span>
+      ),
+  },
+  { key: "applied", header: "Applied", numeric: true, cell: (d) => <RelativeTime iso={d.appliedAt} /> },
+];
 
 export function LaunchDraftsTab() {
   const [offset, setOffset] = useState(0);
@@ -35,73 +72,63 @@ export function LaunchDraftsTab() {
       ),
     [offset, status, chain],
   );
-  const { page, error, loading } = useAdminList(load, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(load, reloadKey);
   const items = page?.items ?? [];
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Launch drafts</h2>
-      <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "12px" }}>
-        Pending drafts hold the founder&apos;s shadow wallet until cancelled or confirmed.
-      </p>
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
-        <select
-          className="input-field"
-          style={{ width: "160px" }}
+      <AdminPageHeader
+        title="Launch drafts"
+        description="Pending drafts hold the founder's shadow wallet until cancelled or confirmed."
+        actions={
+          <Button variant="secondary" size="sm" onClick={() => setReloadKey((k) => k + 1)} leftIcon={<RotateCw size={14} aria-hidden="true" />}>
+            Refresh
+          </Button>
+        }
+      />
+      <Card className="admin-toolbar">
+        <StatusFilter
+          options={STATUSES}
           value={status}
-          onChange={(e) => {
-            setStatus(STATUSES.find((s) => s === e.target.value) ?? "");
+          onChange={(value) => {
+            setStatus(value);
             setOffset(0);
           }}
-          aria-label="Filter by status"
-        >
-          <option value="">all statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <select
-          className="input-field"
-          style={{ width: "180px" }}
-          value={chain}
-          onChange={(e) => {
-            setChain(CHAINS.map(String).find((c) => c === e.target.value) ?? "");
-            setOffset(0);
-          }}
-          aria-label="Filter by network"
-        >
-          <option value="">all networks</option>
-          {CHAINS.map((c) => (
-            <option key={c} value={String(c)}>{chainName(c)}</option>
-          ))}
-        </select>
-        <button type="button" className="btn-secondary" onClick={() => setReloadKey((k) => k + 1)}>
-          Refresh
-        </button>
-      </div>
-      <div className="glass-card" style={{ padding: "8px" }}>
-        <ListState loading={loading} error={error} empty={items.length === 0} emptyText="No launch drafts." />
-        {items.map((d) => (
-          <div key={d.id} style={{ ...ROW_STYLE, gridTemplateColumns: COLUMNS }}>
-            <span style={{ color: "var(--text-secondary)" }}>{new Date(d.createdAt).toLocaleString()}</span>
-            <span style={{ wordBreak: "break-word" }}>{d.name}</span>
-            <span title={d.walletAddress}>{shortAddr(d.walletAddress)}</span>
-            <span>{chainName(d.chainId)}</span>
-            <span><span className={`badge ${draftBadge(d.status)}`}>{d.status}</span></span>
-            <span title={d.projectId ?? undefined}>
-              {d.projectId ? (
-                <Link href={`/projects/${encodeURIComponent(d.projectId)}`} style={{ color: "var(--brand-accent)" }}>
-                  {d.escrowAddress ? shortAddr(d.escrowAddress) : "project"}
-                </Link>
-              ) : (
-                "-"
-              )}
-            </span>
-            <span style={{ color: "var(--text-secondary)" }}>{d.appliedAt ? new Date(d.appliedAt).toLocaleString() : "-"}</span>
-          </div>
-        ))}
-      </div>
-      <AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />
+        />
+        <Field label="Network" className="toolbar-field">
+          <Select
+            value={chain}
+            onChange={(e) => {
+              setChain(CHAINS.map(String).find((c) => c === e.target.value) ?? "");
+              setOffset(0);
+            }}
+          >
+            <option value="">all networks</option>
+            {CHAINS.map((c) => (
+              <option key={c} value={String(c)}>{chainName(c)}</option>
+            ))}
+          </Select>
+        </Field>
+      </Card>
+      <AdminListCard
+        error={error}
+        requestId={requestId}
+        errorTitle="Could not load launch drafts"
+        onRetry={() => setReloadKey((k) => k + 1)}
+        hasData={page !== null}
+        footer={<AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />}
+      >
+        <DataTable
+          columns={COLUMNS}
+          rows={items}
+          rowKey={(d) => d.id}
+          caption="Launch drafts"
+          loading={loading}
+          dense
+          stickyHeader
+          emptyTitle="No launch drafts."
+        />
+      </AdminListCard>
     </section>
   );
 }

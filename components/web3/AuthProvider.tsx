@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, useSignMessage } from "wagmi";
+import { WALLET_CANCELLED_MESSAGE } from "@/lib/walletErrors";
 import {
   ApiError,
   fetchSession,
@@ -42,7 +43,7 @@ function isUserRejection(err: unknown): boolean {
 }
 
 function describeError(err: unknown): string {
-  if (isUserRejection(err)) return "Signature request was rejected.";
+  if (isUserRejection(err)) return WALLET_CANCELLED_MESSAGE;
   if (err instanceof Error && err.message === SIGN_TIMEOUT_MESSAGE) return SIGN_TIMEOUT_MESSAGE;
   if (err instanceof ApiError) {
     if (err.status === 403) return "Request origin is not allowed by the API.";

@@ -3,8 +3,12 @@
 import { useState } from "react";
 import { useAccount, useChainId, useConfig, usePublicClient, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Button, buttonClass } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { InlineAlert } from "@/components/ui/InlineAlert";
 import { chainName } from "@/config/chains";
+import { toast } from "@/lib/toast";
+import { isUserRejection, toastTxError, txErrorMessage } from "@/lib/walletErrors";
 import { type MyTakeoverCaseDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { explorerTxUrl } from "@/lib/explorer";
@@ -13,15 +17,6 @@ import { getFeeOverrides } from "@/lib/fees";
 type Addr = `0x${string}`;
 
 const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
-
-function errMessage(err: unknown): string {
-  if (typeof err === "object" && err !== null) {
-    const e = err as { shortMessage?: unknown; message?: unknown };
-    if (typeof e.shortMessage === "string") return e.shortMessage;
-    if (typeof e.message === "string") return e.message;
-  }
-  return "Transaction failed";
-}
 
 /**
  * Candidate side of the on-chain developer change: acceptDeveloperRole() on the escrow, signed in the
@@ -45,14 +40,19 @@ export function AcceptDeveloperRole({ item, writeAllowed }: { item: MyTakeoverCa
   if (done) {
     const url = result?.hash ? explorerTxUrl(chainId, result.hash) : null;
     return (
-      <span style={{ color: "var(--text-secondary)" }}>
-        You are now the developer. Repository handover is done by staff.{" "}
-        {url && (
-          <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)" }}>
-            View transaction
-          </a>
-        )}
-      </span>
+      <InlineAlert
+        tone="success"
+        className="btn-block"
+        action={
+          url ? (
+            <a href={url} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "sm")}>
+              View transaction
+            </a>
+          ) : undefined
+        }
+      >
+        You are now the developer. Repository handover is done by staff.
+      </InlineAlert>
     );
   }
   if (item.execution.state !== "proposed" || !item.execution.pendingForCandidate) return null;
@@ -79,12 +79,15 @@ export function AcceptDeveloperRole({ item, writeAllowed }: { item: MyTakeoverCa
       const receipt = await waitForTransactionReceipt(config, { hash, chainId });
       if (receipt.status !== "success") {
         setResult({ ok: false, text: "Transaction failed (reverted).", hash });
+        toast.error("Transaction failed (reverted).");
       } else {
         setResult({ ok: true, text: "Confirmed", hash });
         setDone(true);
+        toast.success("Developer role accepted");
       }
     } catch (err) {
-      setResult({ ok: false, text: errMessage(err) });
+      toastTxError(err);
+      if (!isUserRejection(err)) setResult({ ok: false, text: txErrorMessage(err) });
     } finally {
       setBusy(false);
       setConfirm(false);
@@ -93,26 +96,25 @@ export function AcceptDeveloperRole({ item, writeAllowed }: { item: MyTakeoverCa
 
   return (
     <>
-      <button type="button" className="btn-primary" disabled={busy || blocker !== null} onClick={() => setConfirm(true)}>
+      <Button loading={busy} disabled={blocker !== null} onClick={() => setConfirm(true)}>
         {busy ? "Waiting…" : "Accept developer role"}
-      </button>
-      {blocker && <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>{blocker}</span>}
+      </Button>
+      {blocker && <span className="panel-note">{blocker}</span>}
       {result && !result.ok && (
-        <div role="alert" className="alert alert-error" style={{ width: "100%" }}>
+        <InlineAlert tone="danger" className="btn-block">
           {result.text}
-        </div>
+        </InlineAlert>
       )}
       <ConfirmDialog
         open={confirm}
+        onOpenChange={(open) => {
+          if (!open && !busy) setConfirm(false);
+        }}
         title="Accept the developer role?"
+        body="You become the project's developer on-chain: you will receive milestone payouts and vesting tokens and be responsible for delivery."
         confirmLabel="Send transaction"
-        busy={busy}
-        onConfirm={() => void accept()}
-        onCancel={() => setConfirm(false)}
-      >
-        You become the project&apos;s developer on-chain: you will receive milestone payouts and vesting tokens and be
-        responsible for delivery.
-      </ConfirmDialog>
+        onConfirm={accept}
+      />
     </>
   );
 }

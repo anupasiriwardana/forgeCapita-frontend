@@ -2,7 +2,11 @@
 
 import { ShoppingCart } from "lucide-react";
 import type { P2PListing } from "@/lib/api";
-import { formatEth, shortAddr } from "@/lib/api";
+import { formatEth } from "@/lib/api";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Amount } from "@/components/ui/Amount";
+import { Button } from "@/components/ui/Button";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { chainCurrency } from "@/config/chains";
 import { formatTokenAmount } from "@/lib/format";
 
@@ -30,109 +34,41 @@ export function P2PListingCard({ listing, onBuy, onCancel, viewer, isPending, in
   const priceEth = `${formatEth(listing.priceInETH, 4)} ${currency}`;
   const isSeller = !!viewer && viewer.toLowerCase() === listing.seller.toLowerCase();
   const { fee, proceeds } = splitPrice(BigInt(listing.priceInETH));
-  const feeText = `${formatEth(fee.toString(), 6)} ${currency}`;
-  const proceedsText = `${formatEth(proceeds.toString(), 6)} ${currency}`;
   const tokenAmount = formatTokenAmount(listing.tokenAmount);
 
   return (
-    <div
-      className="glass-card fade-in-up"
-      style={{ padding: "24px", animationDelay: `${index * 0.06}s` }}
-    >
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-        <div>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Token</div>
-          <div style={{ fontFamily: "monospace", fontSize: "13px", color: "var(--brand-accent)", fontWeight: 600 }}>
-            {shortAddr(listing.tokenAddress)}
+    <div className="ui-card mobile-card fade-in-up" style={{ animationDelay: `${Math.min(index, 5) * 0.03}s` }}>
+      <div className="mobile-card-head">
+        <div style={{ minWidth: 0 }}>
+          <AddressChip address={listing.tokenAddress} />
+          <div className="cell-sub" style={{ marginTop: 4 }}>
+            Listing <span className="num">#{listing.id.split(":")[1] ?? listing.id}</span>
           </div>
         </div>
-        <span className="badge badge-active">
-          <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "currentColor", flexShrink: 0 }} />
-          Active
-        </span>
+        <StatusPill tone="success">Active</StatusPill>
       </div>
 
-      {/* Divider */}
-      <div className="divider" style={{ margin: "0 0 16px" }} />
-
-      {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>
-        <div className="stat-card">
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Tokens</div>
-          <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)" }}>{tokenAmount}</div>
-        </div>
-        <div className="stat-card">
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Price</div>
-          <div style={{ fontSize: "18px", fontWeight: 700, color: "var(--teal)" }}>{priceEth}</div>
-        </div>
+      <div className="kv-list">
+        <div className="kv-row"><span>Tokens</span><Amount value={tokenAmount} /></div>
+        <div className="kv-row"><span>Price</span><Amount value={formatEth(listing.priceInETH, 4)} unit={currency} /></div>
+        <div className="kv-row"><span>Seller</span><AddressChip address={listing.seller} /></div>
+        <div className="kv-row"><span>Platform fee {PROTOCOL_FEE_BPS / 100}%</span><Amount value={formatEth(fee.toString(), 6)} unit={currency} /></div>
+        <div className="kv-row"><span>Seller receives</span><Amount value={formatEth(proceeds.toString(), 6)} unit={currency} /></div>
       </div>
 
-      {/* Seller */}
-      <div style={{ marginBottom: "16px", padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px", display: "flex", justifyContent: "space-between" }}>
-        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Seller</span>
-        <span style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{shortAddr(listing.seller)}</span>
+      <div style={{ marginTop: 12 }}>
+        {!viewer ? (
+          <p className="panel-note" style={{ textAlign: "center" }}>Connect your wallet to buy or manage this listing.</p>
+        ) : isSeller ? (
+          <Button variant="secondary" className="btn-block" loading={isPending} onClick={() => onCancel(listing)}>
+            Cancel listing
+          </Button>
+        ) : (
+          <Button className="btn-block" loading={isPending} leftIcon={<ShoppingCart size={16} aria-hidden="true" />} onClick={() => onBuy(listing)}>
+            Buy for {priceEth}
+          </Button>
+        )}
       </div>
-
-      {/* Listing ID */}
-      <div style={{ marginBottom: "20px", padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px", display: "flex", justifyContent: "space-between" }}>
-        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Listing #</span>
-        <span style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{listing.id.split(":")[1] ?? listing.id}</span>
-      </div>
-
-      {/* Fees */}
-      <div style={{ marginBottom: "20px", fontSize: "12px", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: "4px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>Platform fee {PROTOCOL_FEE_BPS / 100}%</span>
-          <span style={{ fontFamily: "monospace" }}>{feeText}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>Seller receives</span>
-          <span style={{ fontFamily: "monospace" }}>{proceedsText}</span>
-        </div>
-      </div>
-
-      {/* Actions */}
-      {!viewer ? (
-        <div style={{ fontSize: "13px", color: "var(--text-muted)", textAlign: "center" }}>
-          Connect your wallet to buy or manage this listing.
-        </div>
-      ) : isSeller ? (
-        <button
-          className="btn-secondary"
-          style={{ width: "100%", justifyContent: "center" }}
-          onClick={() => onCancel(listing)}
-          disabled={isPending}
-        >
-          {isPending ? (
-            <>
-              <span className="spinner" style={{ width: "14px", height: "14px" }} />
-              Processing...
-            </>
-          ) : (
-            "Cancel listing"
-          )}
-        </button>
-      ) : (
-        <button
-          className="btn-primary"
-          style={{ width: "100%", justifyContent: "center" }}
-          onClick={() => onBuy(listing)}
-          disabled={isPending}
-        >
-          {isPending ? (
-            <>
-              <span className="spinner" style={{ width: "14px", height: "14px" }} />
-              Processing...
-            </>
-          ) : (
-            <>
-              <ShoppingCart size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-              Buy for {priceEth}
-            </>
-          )}
-        </button>
-      )}
     </div>
   );
 }

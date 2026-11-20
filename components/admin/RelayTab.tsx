@@ -2,23 +2,43 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { RotateCw, Zap } from "lucide-react";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { Field, Select } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { StatCard } from "@/components/ui/StatCard";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { chainName } from "@/config/chains";
 import {
   fetchRelayStatus,
   listAdminRelayRequests,
   shortAddr,
+  type AdminRelayRequestDto,
   type RelayBalanceBucket,
   type RelayKind,
   type RelayRequestStatus,
   type RelayStatusDto,
 } from "@/lib/api";
-import { ADMIN_PAGE_SIZE, AdminPager, ListState, ROW_STYLE, truncate, useAdminList } from "./shared";
+import {
+  ADMIN_PAGE_SIZE,
+  AdminListCard,
+  AdminPageHeader,
+  AdminPager,
+  RelativeTime,
+  StatusFilter,
+  statusLabel,
+  toneFromBadge,
+  truncate,
+  useAdminList,
+} from "./shared";
 import { explorerTxUrl } from "@/lib/explorer";
 
 const KINDS: RelayKind[] = ["claim", "stake", "vote", "execute"];
 const STATUSES: RelayRequestStatus[] = ["QUEUED", "SENDING", "SENT", "CONFIRMED", "FAILED", "EXPIRED"];
 const CHAINS = [421614, 97];
-const COLUMNS = "1.3fr 0.7fr 1.1fr 1.1fr 1fr 0.9fr 1.4fr 1fr";
 const POLL_MS = 30_000;
 
 function requestBadge(status: RelayRequestStatus): string {
@@ -33,7 +53,57 @@ function balanceBadge(balance: RelayBalanceBucket): string {
   return "badge-inactive";
 }
 
-function RelayerStatusStrip({ reloadKey }: { reloadKey: number }) {
+function errorText(r: AdminRelayRequestDto): string {
+  return [r.errorCode, r.errorMessage].filter((v): v is string => Boolean(v)).join(": ");
+}
+
+const COLUMNS: ReadonlyArray<DataTableColumn<AdminRelayRequestDto>> = [
+  { key: "created", header: "Created", numeric: true, cell: (r) => <RelativeTime iso={r.createdAt} /> },
+  { key: "kind", header: "Kind", cell: (r) => <span style={{ fontSize: 13 }}>{statusLabel(r.kind)}</span> },
+  { key: "chain", header: "Network", cell: (r) => <span className="cell-sub" style={{ fontSize: 13 }}>{chainName(r.chainId)}</span> },
+  {
+    key: "project",
+    header: "Project",
+    cell: (r) => (
+      <Link href={`/projects/${encodeURIComponent(r.projectId)}`} className="link-accent mono" style={{ fontSize: 12 }} title={r.projectId}>
+        {shortAddr(r.projectId.split(":")[1] ?? r.projectId)}
+      </Link>
+    ),
+  },
+  { key: "account", header: "Account", cell: (r) => <AddressChip address={r.account} /> },
+  { key: "status", header: "Status", cell: (r) => <StatusPill tone={toneFromBadge(requestBadge(r.status))}>{statusLabel(r.status)}</StatusPill> },
+  {
+    key: "error",
+    header: "Error",
+    cell: (r) => {
+      const text = errorText(r);
+      return text ? (
+        <span className="cell-sub text-wrap" style={{ display: "block", maxWidth: 260 }} title={text}>
+          {truncate(text, 60)}
+        </span>
+      ) : (
+        <span className="cell-sub">-</span>
+      );
+    },
+  },
+  {
+    key: "tx",
+    header: "Transaction",
+    cell: (r) => {
+      const txUrl = r.txHash ? explorerTxUrl(r.chainId, r.txHash) : null;
+      return r.txHash && txUrl ? (
+        <a href={txUrl} target="_blank" rel="noopener noreferrer" className="link-accent mono" style={{ fontSize: 12 }} title={r.txHash}>
+          {shortAddr(r.txHash)}
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+      ) : (
+        <span className="cell-sub">-</span>
+      );
+    },
+  },
+];
+
+function RelayerHealth({ reloadKey }: { reloadKey: number }) {
   const [state, setState] = useState<{ reloadKey: number; status: RelayStatusDto | null; error: boolean } | null>(null);
 
   useEffect(() => {
@@ -53,28 +123,57 @@ function RelayerStatusStrip({ reloadKey }: { reloadKey: number }) {
   const warn = chains.some((c) => c.enabled && (c.balance === "low" || c.balance === "empty"));
 
   return (
-    <div
-      className={warn ? "alert alert-warning" : "glass-card"}
-      style={{ padding: "10px 12px", marginBottom: "16px", display: "flex", gap: "20px", flexWrap: "wrap", fontSize: "13px" }}
-      aria-label="Relayer status"
-    >
-      <strong>Relayer status</strong>
-      {state === null && <span style={{ color: "var(--text-secondary)" }}>Loading…</span>}
-      {state?.error && <span>Status unavailable</span>}
-      {chains.map((c) => (
-        <span key={c.chainId} style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
-          {chainName(c.chainId)}:
-          {c.enabled ? (
-            <>
-              <span title={c.relayerAddress}>{c.relayerAddress ? shortAddr(c.relayerAddress) : "-"}</span>
-              <span className={`badge ${balanceBadge(c.balance ?? "unknown")}`}>{c.balance ?? "unknown"}</span>
-            </>
-          ) : (
-            <span style={{ color: "var(--text-secondary)" }}>disabled</span>
-          )}
-        </span>
-      ))}
-    </div>
+    <section aria-label="Relayer status" className="admin-kpis">
+      {warn && (
+        <InlineAlert tone="warning" className="panel-gap">
+          A relayer wallet balance is low or empty.
+        </InlineAlert>
+      )}
+      {state?.error && (
+        <InlineAlert tone="warning" className="panel-gap">
+          Status unavailable
+        </InlineAlert>
+      )}
+      <div className="kpi-grid" style={{ marginBottom: 0 }}>
+        {state === null && (
+          <>
+            <StatCard label="Relayer status" value="" loading />
+            <StatCard label="Relayer status" value="" loading />
+          </>
+        )}
+        {chains.map((c) => (
+          <StatCard
+            key={c.chainId}
+            label={chainName(c.chainId)}
+            icon={<Zap size={16} />}
+            value={
+              c.enabled ? (
+                <span className="relay-health">
+                  <StatusPill tone={toneFromBadge(balanceBadge(c.balance ?? "unknown"))}>
+                    Balance: {c.balance ?? "unknown"}
+                  </StatusPill>
+                </span>
+              ) : (
+                <span className="relay-health">
+                  <StatusPill tone="neutral">Disabled</StatusPill>
+                </span>
+              )
+            }
+            hint={
+              c.enabled ? (
+                c.relayerAddress ? (
+                  <>
+                    Relayer <AddressChip address={c.relayerAddress} />
+                  </>
+                ) : (
+                  "Relayer -"
+                )
+              ) : undefined
+            }
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -106,60 +205,59 @@ export function RelayTab() {
       ),
     [offset, kind, status, chain, systemOnly],
   );
-  const { page, error, loading } = useAdminList(load, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(load, reloadKey);
   const items = page?.items ?? [];
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Relay</h2>
-      <RelayerStatusStrip reloadKey={reloadKey} />
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
-        <select
-          className="input-field"
-          style={{ width: "140px" }}
-          value={kind}
-          onChange={(e) => {
-            setKind(KINDS.find((k) => k === e.target.value) ?? "");
-            setOffset(0);
-          }}
-          aria-label="Filter by kind"
-        >
-          <option value="">all kinds</option>
-          {KINDS.map((k) => (
-            <option key={k} value={k}>{k}</option>
-          ))}
-        </select>
-        <select
-          className="input-field"
-          style={{ width: "150px" }}
+      <AdminPageHeader
+        title="Relay"
+        description="Gasless relayer health and the request queue. Auto-refreshes every 30 seconds."
+        actions={
+          <Button variant="secondary" size="sm" onClick={() => setReloadKey((k) => k + 1)} leftIcon={<RotateCw size={14} aria-hidden="true" />}>
+            Refresh
+          </Button>
+        }
+      />
+      <RelayerHealth reloadKey={reloadKey} />
+      <Card className="admin-toolbar">
+        <StatusFilter
+          options={STATUSES}
           value={status}
-          onChange={(e) => {
-            setStatus(STATUSES.find((s) => s === e.target.value) ?? "");
+          onChange={(value) => {
+            setStatus(value);
             setOffset(0);
           }}
-          aria-label="Filter by status"
-        >
-          <option value="">all statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <select
-          className="input-field"
-          style={{ width: "180px" }}
-          value={chain}
-          onChange={(e) => {
-            setChain(CHAINS.map(String).find((c) => c === e.target.value) ?? "");
-            setOffset(0);
-          }}
-          aria-label="Filter by network"
-        >
-          <option value="">all networks</option>
-          {CHAINS.map((c) => (
-            <option key={c} value={String(c)}>{chainName(c)}</option>
-          ))}
-        </select>
-        <label style={{ fontSize: "13px", display: "flex", gap: "6px", alignItems: "center" }}>
+        />
+        <Field label="Kind" className="toolbar-field">
+          <Select
+            value={kind}
+            onChange={(e) => {
+              setKind(KINDS.find((k) => k === e.target.value) ?? "");
+              setOffset(0);
+            }}
+          >
+            <option value="">all kinds</option>
+            {KINDS.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Network" className="toolbar-field">
+          <Select
+            value={chain}
+            onChange={(e) => {
+              setChain(CHAINS.map(String).find((c) => c === e.target.value) ?? "");
+              setOffset(0);
+            }}
+          >
+            <option value="">all networks</option>
+            {CHAINS.map((c) => (
+              <option key={c} value={String(c)}>{chainName(c)}</option>
+            ))}
+          </Select>
+        </Field>
+        <label className="admin-check">
           <input
             type="checkbox"
             checked={systemOnly}
@@ -170,43 +268,26 @@ export function RelayTab() {
           />
           Automatic executions only
         </label>
-        <button type="button" className="btn-secondary" onClick={() => setReloadKey((k) => k + 1)}>
-          Refresh
-        </button>
-      </div>
-      <p style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "8px" }}>Auto-refreshes every 30 seconds.</p>
-      <div className="glass-card" style={{ padding: "8px" }}>
-        <ListState loading={loading && page === null} error={error} empty={items.length === 0} emptyText="No relay requests." />
-        {items.map((r) => {
-          const txUrl = r.txHash ? explorerTxUrl(r.chainId, r.txHash) : null;
-          const errText = [r.errorCode, r.errorMessage].filter((v): v is string => Boolean(v)).join(": ");
-          return (
-            <div key={r.id} style={{ ...ROW_STYLE, gridTemplateColumns: COLUMNS }}>
-              <span style={{ color: "var(--text-secondary)" }}>{new Date(r.createdAt).toLocaleString()}</span>
-              <span>{r.kind}</span>
-              <span>{chainName(r.chainId)}</span>
-              <span title={r.projectId}>
-                <Link href={`/projects/${encodeURIComponent(r.projectId)}`} style={{ color: "var(--brand-accent)" }}>
-                  {shortAddr(r.projectId.split(":")[1] ?? r.projectId)}
-                </Link>
-              </span>
-              <span title={r.account}>{shortAddr(r.account)}</span>
-              <span><span className={`badge ${requestBadge(r.status)}`}>{r.status}</span></span>
-              <span style={{ wordBreak: "break-word" }} title={errText || undefined}>{errText ? truncate(errText, 60) : "-"}</span>
-              <span title={r.txHash ?? undefined}>
-                {r.txHash && txUrl ? (
-                  <a href={txUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)" }}>
-                    {shortAddr(r.txHash)}
-                  </a>
-                ) : (
-                  "-"
-                )}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />
+      </Card>
+      <AdminListCard
+        error={error}
+        requestId={requestId}
+        errorTitle="Could not load relay requests"
+        onRetry={() => setReloadKey((k) => k + 1)}
+        hasData={page !== null}
+        footer={<AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />}
+      >
+        <DataTable
+          columns={COLUMNS}
+          rows={items}
+          rowKey={(r) => r.id}
+          caption="Relay requests"
+          loading={loading && page === null}
+          dense
+          stickyHeader
+          emptyTitle="No relay requests."
+        />
+      </AdminListCard>
     </section>
   );
 }

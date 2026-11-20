@@ -5,6 +5,8 @@ import { useReadContracts } from "wagmi";
 import { listProjects, shortAddr, type ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { formatTokenAmount } from "@/lib/format";
+import { buttonClass } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
@@ -73,33 +75,34 @@ export function TokenPicker({ chainId, wallet, selected, networkName, onSelect }
   return (
     <div>
       {loadingProjects || loadingBalances ? (
-        <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Loading your project tokens...</div>
-      ) : held.length === 0 ? (
-        <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-          No project tokens in this wallet on {networkName}
+        <div role="status" className="stack-sm">
+          <span className="sr-only">Loading your project tokens</span>
+          <Skeleton height={40} radius="var(--r-md)" />
+          <Skeleton height={40} radius="var(--r-md)" />
         </div>
+      ) : held.length === 0 ? (
+        <p className="panel-note">No project tokens in this wallet on {networkName}</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div role="radiogroup" aria-label="Your project tokens" className="stack-sm">
           {held.map(({ option, balance }) => {
             const active = option.address.toLowerCase() === selected.toLowerCase();
             return (
               <button
                 type="button"
                 key={option.address}
-                className={active ? "btn-primary" : "btn-secondary"}
-                style={{ display: "flex", justifyContent: "space-between", width: "100%" }}
+                role="radio"
+                aria-checked={active}
+                className={`${buttonClass(active ? "subtle" : "secondary")} token-option`}
                 onClick={() => onSelect(option.address, balance)}
               >
-                <span>{option.label}</span>
-                <span style={{ fontFamily: "monospace" }}>{formatTokenAmount(balance)}</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{option.label}</span>
+                <span className="mono num">{formatTokenAmount(balance)}</span>
               </button>
             );
           })}
         </div>
       )}
-      <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "8px" }}>
-        Switch network to see tokens on the other chain. Staked tokens must be unstaked first.
-      </div>
+      <p className="field-hint">Switch network to see tokens on the other chain. Staked tokens must be unstaked first.</p>
     </div>
   );
 }

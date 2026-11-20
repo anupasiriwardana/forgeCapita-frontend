@@ -11,10 +11,28 @@ import { ProfileRequiredNotice } from "@/components/ProfileRequiredNotice";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { parseEther } from "viem";
 import { getFeeOverrides } from "@/lib/fees";
-import { ApiError, getProject, formatEth, fundingProgress, shortAddr, type ProjectDto } from "@/lib/api";
+import { ApiError, getProject, formatEth, fundingProgress, type ProjectDto } from "@/lib/api";
 import Link from "next/link";
+import { ArrowLeft, ArrowRight, CalendarClock, CheckCircle2, Coins, ExternalLink, FileText, Flag, Globe, Link2, SearchX, Vote, XCircle, Zap } from "lucide-react";
+import { ProjectLogo } from "@/components/ProjectLogo";
+import { ProjectStatusBadge } from "@/components/ProjectStatusBadge";
 import { Suspense } from "react";
 import { chainCurrency, chainName } from "@/config/chains";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Amount } from "@/components/ui/Amount";
+import { Button, ButtonLink, buttonClass } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Field, Input } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { StatCard } from "@/components/ui/StatCard";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { Spinner } from "@/components/ui/Spinner";
+import { toast } from "@/lib/toast";
+import { toastTxError } from "@/lib/walletErrors";
+import { explorerAddressUrl, explorerTxUrl } from "@/lib/explorer";
+import { useMilestoneOutline, type MilestoneOutline } from "@/lib/useMilestoneOutline";
 import { ReportProblem } from "@/components/ComplaintDialog";
 import { InvestorPanel } from "@/components/InvestorPanel";
 import { DeveloperPanel } from "@/components/DeveloperPanel";
@@ -33,15 +51,6 @@ import {
   type FundingPhaseInput,
 } from "@/lib/projectState";
 
-const STATE_BADGE: Record<ProjectDto["state"], { label: string; className: string }> = {
-  FUNDING: { label: "🟢 Funding", className: "badge-active" },
-  ACTIVE: { label: "🟢 Active", className: "badge-active" },
-  COMPLETED: { label: "✅ Completed", className: "badge-brand" },
-  FAILED: { label: "⚫ Failed", className: "badge-inactive" },
-  CANCELLED: { label: "⚫ Cancelled", className: "badge-inactive" },
-  SHUTDOWN: { label: "⚫ Shut down", className: "badge-inactive" },
-};
-
 function formatDate(seconds: bigint): string {
   return new Date(Number(seconds) * 1000).toLocaleString();
 }
@@ -59,6 +68,139 @@ function phaseLabel(phase: FundingPhase, input: FundingPhaseInput): string | nul
   }
 }
 
+/** Unix seconds as YYYY-MM-DD in UTC; null for missing or invalid values. */
+function utcDate(seconds: string): string | null {
+  const ms = Number(seconds) * 1000;
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** Inline validation for the funding amount (parsed as wei, no floating point); null when empty or valid. */
+function fundAmountError(input: string): string | null {
+  if (input.trim() === "") return null;
+  try {
+    return parseEther(input.trim()) > BigInt(0) ? null : "Enter an amount greater than 0.";
+  } catch {
+    return "Enter a valid amount.";
+  }
+}
+
+function FundingClosedNote({ text }: { text: string }) {
+  return (
+    <Card>
+      <CardBody style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Coins size={16} aria-hidden="true" style={{ color: "var(--text-2)", flexShrink: 0 }} />
+        <p className="panel-note">{text}</p>
+      </CardBody>
+    </Card>
+  );
+}
+
+type StepState = "done" | "current" | "failed" | "upcoming";
+
+function milestoneStep(m: MilestoneOutline, project: ProjectDto): StepState {
+  if (m.isExecuted) return "done";
+  if (project.failedMilestoneIndex === m.index) return "failed";
+  if (m.isVotingOpen) return "current";
+  if (project.state === "ACTIVE" && project.currentMilestoneIndex === m.index) return "current";
+  return "upcoming";
+}
+
+const STEP_LABEL: Record<StepState, string> = {
+  done: "Released",
+  current: "In progress",
+  failed: "Failed",
+  upcoming: "Upcoming",
+};
+
+function StepDot({ state, index }: { state: StepState; index: number }) {
+  return (
+    <span className="timeline-dot" aria-hidden="true">
+      {state === "done" ? (
+        <CheckCircle2 size={14} />
+      ) : state === "failed" ? (
+        <XCircle size={14} />
+      ) : state === "current" ? (
+        <Flag size={13} />
+      ) : (
+        <span className="num">{index + 1}</span>
+      )}
+    </span>
+  );
+}
+
+function MilestoneTimeline({ project, milestones }: { project: ProjectDto; milestones: MilestoneOutline[] | null }) {
+  const href = `/projects/${encodeURIComponent(project.id)}/milestones`;
+  return (
+    <Card>
+      <CardHeader
+        title="Milestones"
+        subtitle="Funds are released one milestone at a time after a staked vote."
+        actions={
+          <ButtonLink href={href} variant="ghost" size="sm" rightIcon={<ArrowRight size={14} aria-hidden="true" />}>
+            Voting
+          </ButtonLink>
+        }
+      />
+      <CardBody>
+        {milestones === null ? (
+          <div role="status" className="stack-md">
+            <span className="sr-only">Loading milestones</span>
+            {[1, 2, 3].map(n => (
+              <div key={n} style={{ display: "flex", gap: 14 }}>
+                <Skeleton width={28} height={28} radius="50%" />
+                <div style={{ flex: 1 }}>
+                  <Skeleton width="40%" height={14} style={{ marginBottom: 6 }} />
+                  <Skeleton width="70%" height={12} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : milestones.length === 0 ? (
+          <p className="panel-note">The milestone plan could not be read from the chain yet.</p>
+        ) : (
+          <ol className="timeline">
+            {milestones.map(m => {
+              const state = milestoneStep(m, project);
+              return (
+                <li key={m.index} className={`timeline-item is-${state}`}>
+                  <StepDot state={state} index={m.index} />
+                  <div className="timeline-body">
+                    <div className="timeline-head">
+                      <span className="timeline-title">Milestone {m.index + 1}</span>
+                      <StatusPill tone={state === "done" ? "success" : state === "current" ? "warning" : state === "failed" ? "danger" : "neutral"}>
+                        {STEP_LABEL[state]}
+                      </StatusPill>
+                    </div>
+                    {m.description && <p className="timeline-desc">{m.description}</p>}
+                    <p className="timeline-meta">
+                      Releases <span className="num">{m.unlockPct.toString()}%</span> of net funds
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+function MilestoneKpi({ project, milestones }: { project: ProjectDto; milestones: MilestoneOutline[] | null }) {
+  if (milestones === null) return <StatCard label="Milestones" value="" loading icon={<Flag size={16} />} />;
+  if (milestones.length === 0) return <StatCard label="Milestones" value="-" hint="Not readable yet" icon={<Flag size={16} />} />;
+  const total = milestones.length;
+  const released = milestones.filter(m => m.isExecuted).length;
+  const open = milestones.find(m => m.isVotingOpen && !m.isExecuted);
+  let hint = "Starts after funding closes";
+  if (released === total) hint = "All milestones released";
+  else if (open) hint = `Milestone ${open.index + 1} is in voting`;
+  else if (project.state === "ACTIVE") hint = `Milestone ${project.currentMilestoneIndex + 1} not started`;
+  else if (project.state !== "FUNDING") hint = "No milestone in progress";
+  return <StatCard label="Milestones released" value={`${released} of ${total}`} hint={hint} icon={<Flag size={16} />} />;
+}
+
 function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: () => void }) {
   const config = useConfig();
   const currency = chainCurrency(project.chainId);
@@ -67,20 +209,23 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
   const wrongChain = walletChainId !== project.chainId;
   const { allowed: writeAllowed } = useWriteAllowed();
   const [ethAmount, setEthAmount] = useState("");
-  const [txStatus, setTxStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
-  const [txError, setTxError] = useState("");
+  const [txStatus, setTxStatus] = useState<"idle" | "pending">("idle");
 
   const { sendTransactionAsync } = useSendTransaction();
   const feeClient = usePublicClient({ chainId: project.chainId });
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   useWaitForTransactionReceipt({ hash: txHash });
 
+  const amountError = fundAmountError(ethAmount);
+  const pending = txStatus === "pending";
+  const pendingTxUrl = pending && txHash ? explorerTxUrl(project.chainId, txHash) : null;
+
   async function handleFund(e: React.FormEvent) {
     e.preventDefault();
     if (!ethAmount || Number(ethAmount) <= 0) return;
     if (wrongChain || !writeAllowed) return;
     setTxStatus("pending");
-    setTxError("");
+    setTxHash(undefined);
     try {
       const hash = await sendTransactionAsync({
         to: project.escrowAddress as `0x${string}`, // Sends native currency directly to trigger the receive() fallback
@@ -90,98 +235,93 @@ function FundingPanel({ project, onFunded }: { project: ProjectDto; onFunded: ()
       setTxHash(hash);
       const receipt = await waitForTransactionReceipt(config, { hash, chainId: project.chainId });
       if (receipt.status !== "success") {
-        setTxStatus("error");
-        setTxError("Funding transaction reverted.");
+        toast.error("Funding transaction reverted.");
         return;
       }
-      setTxStatus("success");
+      toast.success("Funding confirmed", { description: "Tokens will be claimable after funding closes." });
       setEthAmount("");
       onFunded();
     } catch (err) {
-      setTxStatus("error");
-      setTxError(err instanceof Error ? err.message : "Transaction failed");
+      toastTxError(err);
+    } finally {
+      setTxStatus("idle");
     }
   }
 
   return (
-    <div className="glass-card" style={{ padding: "28px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px" }}>
-        💰 Fund This Project
-      </h2>
-
-      {!isConnected ? (
-        <div className="alert alert-warning">
-          <span>🔌</span>
-          <span>Connect your wallet to fund this project.</span>
-        </div>
-      ) : (
-        <form onSubmit={handleFund}>
-          <ProfileRequiredNotice />
-          {wrongChain && (
-            <div className="alert alert-warning" style={{ marginBottom: "16px" }}>
-              <span>⚠️</span>
-              <span>Switch your wallet to this project&apos;s network (chain {project.chainId}) to fund it.</span>
+    <Card>
+      <CardHeader
+        title={
+          <span className="panel-title">
+            <Coins size={16} aria-hidden="true" />
+            Fund this project
+          </span>
+        }
+        subtitle="Funds go to the project escrow and are released milestone by milestone."
+      />
+      <CardBody>
+        {!isConnected ? (
+          <InlineAlert tone="warning">Connect your wallet to fund this project.</InlineAlert>
+        ) : (
+          <form onSubmit={handleFund} className="stack-md" noValidate>
+            <ProfileRequiredNotice />
+            {wrongChain && (
+              <InlineAlert tone="warning">
+                Switch your wallet to this project&apos;s network ({chainName(project.chainId)}) to fund it.
+              </InlineAlert>
+            )}
+            <Field label={`Amount (${currency})`} error={amountError ?? undefined}>
+              <div className="input-row">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.001"
+                  min="0.001"
+                  value={ethAmount}
+                  onChange={e => setEthAmount(e.target.value)}
+                  placeholder="0.1"
+                  disabled={pending}
+                  className="num"
+                />
+                <Button
+                  type="submit"
+                  loading={pending}
+                  disabled={!ethAmount || amountError !== null || wrongChain || !writeAllowed}
+                  rightIcon={<Zap size={16} aria-hidden="true" />}
+                >
+                  Fund
+                </Button>
+              </div>
+            </Field>
+            <div className="quick-amounts" style={{ marginTop: 0 }} role="group" aria-label="Quick amounts">
+              {["0.01", "0.05", "0.1", "0.5"].map(amt => (
+                <Button key={amt} variant="secondary" size="sm" onClick={() => setEthAmount(amt)} disabled={pending}>
+                  <span className="num">{amt}</span> {currency}
+                </Button>
+              ))}
             </div>
-          )}
-          <label className="label">Amount ({currency})</label>
-          <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
-            <input
-              className="input-field"
-              type="number"
-              step="0.001"
-              min="0.001"
-              value={ethAmount}
-              onChange={e => setEthAmount(e.target.value)}
-              placeholder="0.1"
-              disabled={txStatus === "pending"}
-            />
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={txStatus === "pending" || !ethAmount || wrongChain || !writeAllowed}
-              style={{ flexShrink: 0, padding: "12px 20px" }}
-            >
-              {txStatus === "pending" ? <span className="spinner" style={{ width: "16px", height: "16px" }} /> : "Fund ⚡"}
-            </button>
+            {pending && (
+              <p className="tx-status" role="status" style={{ marginTop: 0 }}>
+                <Spinner size={12} />
+                {txHash ? "Waiting for confirmation" : "Confirm in your wallet"}
+                {pendingTxUrl && (
+                  <a href={pendingTxUrl} target="_blank" rel="noopener noreferrer">
+                    View transaction
+                  </a>
+                )}
+              </p>
+            )}
+          </form>
+        )}
+
+        {address && (
+          <div className="panel-section" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span className="panel-note">Connected as</span>
+            <AddressChip address={address} />
           </div>
-
-          {/* Quick amounts */}
-          <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-            {["0.01", "0.05", "0.1", "0.5"].map(amt => (
-              <button
-                key={amt}
-                type="button"
-                className="btn-secondary"
-                style={{ padding: "6px 12px", fontSize: "12px" }}
-                onClick={() => setEthAmount(amt)}
-              >
-                {amt} {currency}
-              </button>
-            ))}
-          </div>
-
-          {txStatus === "success" && (
-            <div className="alert alert-success">
-              <span>✅</span>
-              <span>Funding transaction submitted! Tokens will be claimable after funding closes.</span>
-            </div>
-          )}
-          {txStatus === "error" && (
-            <div className="alert alert-error">
-              <span>⚠️</span>
-              <span>{txError}</span>
-            </div>
-          )}
-        </form>
-      )}
-
-      {address && (
-        <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--border)" }}>
-          <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Connected as: </span>
-          <span style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{shortAddr(address)}</span>
-        </div>
-      )}
-    </div>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -204,11 +344,11 @@ function FundingGate({ project, nowSeconds, onFunded }: { project: ProjectDto; n
   const chainDeadline = data?.[1]?.result;
   const indexerClosed = project.state !== "FUNDING" || project.fundingClosedAt != null;
   if (indexerClosed || chainActive === false) {
-    return <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "24px" }}>Funding is closed for this project.</p>;
+    return <FundingClosedNote text="Funding is closed for this project." />;
   }
   const deadline = typeof chainDeadline === "bigint" ? chainDeadline : BigInt(project.fundingDeadline);
   if (BigInt(nowSeconds) > deadline) {
-    return <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "24px" }}>The funding window has ended.</p>;
+    return <FundingClosedNote text="The funding window has ended." />;
   }
   return <FundingPanel project={project} onFunded={onFunded} />;
 }
@@ -221,7 +361,8 @@ function ProjectDetailInner({ id }: { id: string }) {
       try {
         return await getProject(id);
       } catch (err) {
-        if (err instanceof ApiError && err.status === 404) return null;
+        // 400 means the id is malformed (e.g. a removed route like /projects/create): same page as a missing project.
+        if (err instanceof ApiError && (err.status === 404 || err.status === 400)) return null;
         throw err;
       }
     },
@@ -233,18 +374,24 @@ function ProjectDetailInner({ id }: { id: string }) {
     chainId: project?.chainId,
     query: { enabled: funding, refetchInterval: 10_000 },
   });
+  const { milestones } = useMilestoneOutline(project?.chainId, project?.escrowAddress);
 
   if (!project) {
     return (
-      <div style={{ textAlign: "center", padding: "80px 24px" }}>
-        <div style={{ fontSize: "56px", marginBottom: "16px" }}>🔍</div>
-        <h2 style={{ fontSize: "22px", marginBottom: "8px" }}>Project Not Found</h2>
-        <p style={{ color: "var(--text-muted)", marginBottom: "24px" }}>
-          This project does not exist in the on-chain registry yet.
-        </p>
-        <Link href="/" className="btn-secondary" style={{ display: "inline-flex" }}>
-          ← Back to Marketplace
-        </Link>
+      <div className="page-container page-container-narrow">
+        <h1 className="sr-only">Project not found</h1>
+        <Card>
+          <EmptyState
+            icon={<SearchX size={20} />}
+            title="Project not found"
+            text="This project does not exist in the on-chain registry yet."
+            action={
+              <ButtonLink href="/projects" variant="secondary" leftIcon={<ArrowLeft size={16} aria-hidden="true" />}>
+                Back to projects
+              </ButtonLink>
+            }
+          />
+        </Card>
       </div>
     );
   }
@@ -265,179 +412,172 @@ function ProjectDetailInner({ id }: { id: string }) {
   const phase = fundingPhase(BigInt(nowSeconds), phaseInput);
   const phaseText = phaseLabel(phase, phaseInput);
 
+  const deadlineDate = utcDate(project.fundingDeadline);
+  const fundingOpen = phase === "OPEN" || phase === "CLOSEABLE";
+  const escrowUrl = explorerAddressUrl(project.chainId, project.escrowAddress);
+
   return (
-    <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "48px 24px" }}>
-      {/* Breadcrumb */}
-      <div className="fade-in-up" style={{ marginBottom: "24px" }}>
-        <Link href="/" style={{ color: "var(--text-muted)", textDecoration: "none", fontSize: "14px" }}>
-          ← Marketplace
-        </Link>
-        <span style={{ color: "var(--text-muted)", margin: "0 8px", fontSize: "14px" }}>/</span>
-        <span style={{ fontSize: "14px", color: "var(--text-secondary)" }}>{name || shortAddr(project.escrowAddress)}</span>
-      </div>
+    <div className="page-container layout-container">
+      <Link href="/projects" className="page-back">
+        <ArrowLeft size={14} aria-hidden="true" />
+        Back to projects
+      </Link>
 
-      <div className="project-layout">
-        {/* Left: Project Info */}
-        <div>
-          {/* Header */}
-          <div className="glass-card fade-in-up" style={{ padding: "32px", marginBottom: "24px" }}>
-            <div style={{ display: "flex", gap: "20px", alignItems: "flex-start", marginBottom: "24px" }}>
-              <div
-                style={{
-                  width: "72px",
-                  height: "72px",
-                  borderRadius: "16px",
-                  background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2))",
-                  border: "1px solid rgba(99,102,241,0.3)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "32px",
-                  flexShrink: 0,
-                  overflow: "hidden",
-                }}
-              >
-                {profile?.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={profile.logoUrl} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                ) : (
-                  <span aria-hidden="true" style={{ fontWeight: 700, color: "var(--brand-accent)" }}>
-                    {(name || "P").charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div>
-                <h1 style={{ fontSize: "28px", margin: "0 0 8px" }}>{name || "Unnamed Project"}</h1>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
-                  <span className={`badge ${STATE_BADGE[shownState].className}`}>
-                    {STATE_BADGE[shownState].label}
-                  </span>
-                  {phaseText && (
-                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{phaseText}</span>
-                  )}
-                  {profile?.websiteUrl && (
-                    <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer" className="badge badge-brand" style={{ textDecoration: "none" }}>
-                      🌐 Website
-                    </a>
-                  )}
-                  {profile?.pitchDeckUrl && (
-                    <a href={profile.pitchDeckUrl} target="_blank" rel="noopener noreferrer" className="badge badge-pending" style={{ textDecoration: "none" }}>
-                      📄 Pitch Deck
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {profile?.description && (
-              <p style={{ color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: "24px", fontSize: "15px" }}>
-                {profile.description}
-              </p>
-            )}
-
-            {/* Funding Progress */}
-            <div style={{ marginBottom: "8px", display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>Funding Progress</span>
-              <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--brand-accent)" }}>{progress}%</span>
-            </div>
-            <div className="progress-bar" style={{ height: "8px", marginBottom: "16px" }}>
-              <div className="progress-fill" style={{ width: `${progress}%` }} />
-            </div>
-
-            {/* Stats grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
-              <div className="stat-card">
-                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>RAISED</div>
-                <div style={{ fontSize: "20px", fontWeight: 800, color: "var(--emerald)" }}>{ethRaised} {currency}</div>
-                {aheadOfIndexer && (
-                  <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }}>Updating from the chain; the indexer is catching up</div>
-                )}
-              </div>
-              <div className="stat-card">
-                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>GOAL</div>
-                <div style={{ fontSize: "20px", fontWeight: 800, color: "var(--text-primary)" }}>{ethGoal} {currency}</div>
-              </div>
-              <div className="stat-card">
-                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>DEVELOPER</div>
-                <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "monospace" }}>{shortAddr(project.developer)}</div>
-              </div>
-            </div>
+      <header className="detail-header fade-in-up">
+        <ProjectLogo name={name} logoUrl={profile?.logoUrl} />
+        <div className="detail-header-main">
+          <h1>{name || "Unnamed Project"}</h1>
+          <div className="detail-meta">
+            {project.tokenSymbol && <span className="chip mono">{project.tokenSymbol}</span>}
+            <span className="chip">{chainName(project.chainId)}</span>
+            <ProjectStatusBadge status={shownState} />
+            <AddressChip address={project.escrowAddress} href={escrowUrl ?? undefined} />
           </div>
+          {phaseText && <p className="detail-phase">{phaseText}</p>}
+        </div>
+        {(profile?.websiteUrl || profile?.pitchDeckUrl) && (
+          <div className="detail-links">
+            {profile?.websiteUrl && (
+              <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "sm")}>
+                <Globe size={14} aria-hidden="true" />
+                Website
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            )}
+            {profile?.pitchDeckUrl && (
+              <a href={profile.pitchDeckUrl} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "sm")}>
+                <FileText size={14} aria-hidden="true" />
+                Pitch deck
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            )}
+          </div>
+        )}
+      </header>
+
+      <section className="kpi-grid" aria-label="Key figures">
+        <StatCard
+          label="Raised"
+          value={ethRaised}
+          unit={currency}
+          icon={<Coins size={16} />}
+          hint={
+            <>
+              <div
+                className="progress-bar kpi-progress"
+                role="progressbar"
+                aria-label="Funding progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+                style={{ marginBottom: 6 }}
+              >
+                <div className="progress-fill" style={{ width: `${progress}%` }} />
+              </div>
+              <span className="num" style={{ color: "var(--text)", fontWeight: 600 }}>{progress}%</span> of{" "}
+              <Amount value={ethGoal} unit={currency} /> goal
+              {aheadOfIndexer && <div style={{ marginTop: 4 }}>Updating from the chain; the indexer is catching up</div>}
+            </>
+          }
+        />
+        <MilestoneKpi project={project} milestones={milestones} />
+        <StatCard
+          label="Funding deadline"
+          value={fundingOpen ? (deadlineDate ?? "-") : "Closed"}
+          icon={<CalendarClock size={16} />}
+          hint={fundingOpen ? (phase === "CLOSEABLE" ? "Close window open (UTC date)" : "Funding open (UTC date)") : deadlineDate ? `Deadline was ${deadlineDate}` : undefined}
+        />
+      </section>
+
+      <div className="detail-layout">
+        <div className="detail-main">
+          {(profile?.description || profile?.founderBio) && (
+            <Card className="fade-in-up">
+              <CardHeader title="About" />
+              <CardBody>
+                {profile?.description && <p className="desc-text">{profile.description}</p>}
+                {profile?.founderBio && (
+                  <div className={profile.description ? "panel-section" : undefined}>
+                    <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>About the founder</h3>
+                    <p className="desc-text" style={{ fontSize: 14 }}>{profile.founderBio}</p>
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+          )}
 
           <ProfileEditor project={project} />
 
-          {/* Founder Bio */}
-          {profile?.founderBio && (
-            <div className="glass-card fade-in-up fade-in-up-1" style={{ padding: "24px", marginBottom: "24px" }}>
-              <h2 style={{ fontSize: "16px", marginBottom: "12px", display: "flex", gap: "8px" }}>
-                About the Founder
-              </h2>
-              <p style={{ color: "var(--text-secondary)", lineHeight: 1.7, fontSize: "14px", margin: 0 }}>
-                {profile.founderBio}
-              </p>
-            </div>
-          )}
+          <MilestoneTimeline project={project} milestones={milestones} />
 
-          {/* Contract Info */}
-          <div className="glass-card fade-in-up fade-in-up-2" style={{ padding: "24px", marginBottom: "24px" }}>
-            <h2 style={{ fontSize: "16px", marginBottom: "16px" }}>⛓️ Contract Details</h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px" }}>
-                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Escrow Address</span>
-                <span style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--text-secondary)" }}>{project.escrowAddress}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", background: "rgba(255,255,255,0.02)", borderRadius: "8px" }}>
-                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Network</span>
-                <span style={{ fontSize: "12px", color: "var(--teal)", fontWeight: 600 }}>{chainName(project.chainId)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Transparency and governance */}
-          <section style={{ marginBottom: "24px" }}>
-            <h2 style={{ fontSize: "18px", marginBottom: "16px" }}>Transparency and governance</h2>
+          <section aria-labelledby="governance-heading" className="detail-main">
+            <h2 id="governance-heading" className="sr-only">Transparency and governance</h2>
             <MilestonePanel project={project} nowSeconds={nowSeconds} />
             <TransparencyPanel project={project} />
             <GasLedger project={project} />
             <TakeoverPanel chainId={project.chainId} escrowAddress={project.escrowAddress} />
           </section>
 
-          {/* Milestones Link */}
-          <Link
-            href={`/projects/${encodeURIComponent(id)}/milestones`}
-            className="glass-card fade-in-up fade-in-up-3"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "20px 24px",
-              textDecoration: "none",
-              border: "1px solid rgba(99,102,241,0.25)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <span style={{ fontSize: "24px" }}>🗳️</span>
-              <div>
-                <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>Milestone Governance</div>
-                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>Vote on milestones and release funds</div>
-              </div>
-            </div>
-            <span style={{ color: "var(--brand-accent)", fontSize: "18px" }}>→</span>
+          <Link href={`/projects/${encodeURIComponent(id)}/milestones`} className="ui-card cta-link">
+            <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span className="feature-icon feature-icon-sm" aria-hidden="true">
+                <Vote size={16} />
+              </span>
+              <span>
+                <span style={{ display: "block", fontWeight: 600 }}>Milestone governance</span>
+                <span className="cta-link-sub">Vote on milestones and release funds</span>
+              </span>
+            </span>
+            <ArrowRight size={18} aria-hidden="true" style={{ color: "var(--accent)", flexShrink: 0 }} />
           </Link>
 
-          <div style={{ marginTop: "24px" }}>
-            <ReportProblem projectId={project.id} />
-          </div>
+          <Card>
+            <CardHeader
+              title={
+                <span className="panel-title">
+                  <Link2 size={16} aria-hidden="true" />
+                  Contract details
+                </span>
+              }
+            />
+            <CardBody style={{ paddingTop: 8 }}>
+              <div className="kv-list">
+                <div className="kv-row">
+                  <span>Escrow</span>
+                  <AddressChip address={project.escrowAddress} href={escrowUrl ?? undefined} />
+                </div>
+                <div className="kv-row">
+                  <span>Token</span>
+                  <AddressChip address={project.tokenAddress} href={explorerAddressUrl(project.chainId, project.tokenAddress) ?? undefined} />
+                </div>
+                <div className="kv-row">
+                  <span>Developer</span>
+                  <AddressChip address={project.developer} href={explorerAddressUrl(project.chainId, project.developer) ?? undefined} />
+                </div>
+                <div className="kv-row">
+                  <span>Network</span>
+                  <span>{chainName(project.chainId)}</span>
+                </div>
+              </div>
+              {escrowUrl && (
+                <a href={escrowUrl} target="_blank" rel="noopener noreferrer" className="panel-note" style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12 }}>
+                  View escrow on the explorer
+                  <ExternalLink size={12} aria-hidden="true" />
+                </a>
+              )}
+            </CardBody>
+          </Card>
+
+          <ReportProblem projectId={project.id} />
         </div>
 
-        {/* Right: actions */}
-        <div className="project-actions">
+        <aside className="detail-side" aria-label="Project actions">
           <DeveloperPanel project={project} nowSeconds={nowSeconds} />
           <CreatorFunds project={project} />
           <GuardianPanel project={project} nowSeconds={nowSeconds} />
           <FundingGate project={project} nowSeconds={nowSeconds} onFunded={() => void refetchBalance()} />
           <InvestorPanel project={project} nowSeconds={nowSeconds} />
-        </div>
+        </aside>
       </div>
     </div>
   );
@@ -445,10 +585,29 @@ function ProjectDetailInner({ id }: { id: string }) {
 
 function LoadingSkeleton() {
   return (
-    <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "48px 24px" }}>
-      <div className="project-layout">
-        <div className="glass-card" style={{ padding: "32px", height: "400px", opacity: 0.5 }} />
-        <div className="glass-card" style={{ padding: "28px", height: "300px", opacity: 0.5 }} />
+    <div className="page-container layout-container" role="status" aria-live="polite">
+      <span className="sr-only">Loading project</span>
+      <Skeleton width={120} height={12} style={{ marginBottom: 20 }} />
+      <div className="detail-header">
+        <Skeleton width={56} height={56} radius="var(--r-md)" />
+        <div className="detail-header-main">
+          <Skeleton width="45%" height={26} style={{ marginBottom: 10 }} />
+          <Skeleton width="30%" height={14} />
+        </div>
+      </div>
+      <div className="kpi-grid">
+        {[1, 2, 3].map(n => (
+          <StatCard key={n} label={<Skeleton width={80} height={12} />} value="" loading />
+        ))}
+      </div>
+      <div className="detail-layout">
+        <div className="detail-main">
+          <Card style={{ height: 220 }} aria-hidden="true" />
+          <Card style={{ height: 300 }} aria-hidden="true" />
+        </div>
+        <div className="detail-side">
+          <Card style={{ height: 260 }} aria-hidden="true" />
+        </div>
       </div>
     </div>
   );

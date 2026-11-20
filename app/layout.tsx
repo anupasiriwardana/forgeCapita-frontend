@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { Providers } from "@/components/web3/Providers";
-import { Navbar } from "@/components/Navbar";
+import { AppShell } from "@/components/shell/AppShell";
 import "./globals.css";
+
+const fontSans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+const fontMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "ForgeCapita — Web3 Milestone-Gated Crowdfunding",
@@ -12,26 +16,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      </head>
+    <html lang="en" className={`${fontSans.variable} ${fontMono.variable}`}>
       <body>
         <Providers>
-          {/* Ambient glow orbs */}
-          <div
-            className="glow-orb"
-            style={{ width: "600px", height: "600px", background: "#6366f1", top: "-200px", left: "-200px" }}
-          />
-          <div
-            className="glow-orb"
-            style={{ width: "500px", height: "500px", background: "#8b5cf6", bottom: "10%", right: "-150px" }}
-          />
-
+          {/* No global glow: pages that want one use .hero-glow (one per page). */}
           <div className="page-wrapper">
-            <Navbar />
-            <main>{children}</main>
+            <AppShell>{children}</AppShell>
           </div>
         </Providers>
       </body>

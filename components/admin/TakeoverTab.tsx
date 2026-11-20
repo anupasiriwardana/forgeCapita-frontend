@@ -1,8 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Plus, RotateCw } from "lucide-react";
 import { IndexerLagNote } from "@/components/IndexerLagNote";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Amount } from "@/components/ui/Amount";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { Dialog, DialogContent } from "@/components/ui/Dialog";
+import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { toast } from "@/lib/toast";
 import { SUPPORTED_CHAINS, chainName } from "@/config/chains";
 import {
   ApiError,
@@ -18,17 +30,28 @@ import {
   type Page,
   type TakeoverCaseDto,
   type TakeoverDetailDto,
+  type TakeoverHolderDto,
   type TakeoverStatus,
   type TakeoverVoteDto,
   type UserRole,
 } from "@/lib/api";
 import { formatTokenAmount } from "@/lib/format";
-import { ADMIN_PAGE_SIZE, AdminPager, ListState, ROW_STYLE, useAdminList } from "./shared";
+import {
+  ADMIN_PAGE_SIZE,
+  AdminListCard,
+  AdminPageHeader,
+  AdminPager,
+  RelativeTime,
+  Row,
+  StatusFilter,
+  statusLabel,
+  toneFromBadge,
+  useAdminList,
+} from "./shared";
 import { TakeoverExecution } from "./TakeoverExecution";
 import { TakeoverHandover } from "./TakeoverHandover";
 
 const STATUSES: TakeoverStatus[] = ["prepared", "vote_open", "closed", "cancelled"];
-const COLUMNS = "1.4fr 1.1fr 0.9fr 0.9fr 1.4fr 0.6fr 0.6fr";
 const ADDRESS_INPUT = /^0x[0-9a-fA-F]{40}$/;
 const MAX_REASON = 2000;
 const MAX_LINKS = 10;
@@ -78,16 +101,7 @@ function actionErrorMessage(err: unknown, action: "open" | "cancel" | "close" | 
   return describeApiError(err, "Action failed");
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: "8px" }}>
-      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{label}</div>
-      <div style={{ fontSize: "13px", wordBreak: "break-word" }}>{children}</div>
-    </div>
-  );
-}
-
-function PrepareForm({ onCreated }: { onCreated: () => void }) {
+function PrepareDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void }) {
   const [chainId, setChainId] = useState<number>(SUPPORTED_CHAINS[0].id);
   const [project, setProject] = useState("");
   const [candidate, setCandidate] = useState("");
@@ -95,7 +109,6 @@ function PrepareForm({ onCreated }: { onCreated: () => void }) {
   const [links, setLinks] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   const submit = async (): Promise<void> => {
     if (busy) return;
@@ -103,7 +116,6 @@ function PrepareForm({ onCreated }: { onCreated: () => void }) {
     const candidateWallet = candidate.trim();
     const trimmedReason = reason.trim();
     const evidenceLinks = parseLinks(links);
-    setSuccess("");
     if (!ADDRESS_INPUT.test(projectAddress)) return setError("Project escrow address must be 0x followed by 40 hex characters");
     if (!ADDRESS_INPUT.test(candidateWallet)) return setError("Candidate wallet must be 0x followed by 40 hex characters");
     if (trimmedReason === "" || trimmedReason.length > MAX_REASON) return setError(`Reason is required (up to ${MAX_REASON} characters)`);
@@ -123,8 +135,9 @@ function PrepareForm({ onCreated }: { onCreated: () => void }) {
       setCandidate("");
       setReason("");
       setLinks("");
-      setSuccess("Case prepared. It opens for voting only after the candidate accepts and an admin opens it.");
+      toast.success("Case prepared", { description: "It opens for voting only after the candidate accepts and an admin opens it." });
       onCreated();
+      onOpenChange(false);
     } catch (err) {
       setError(actionErrorMessage(err, "prepare"));
     } finally {
@@ -133,29 +146,95 @@ function PrepareForm({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <div className="glass-card" style={{ padding: "16px", marginBottom: "16px", display: "grid", gap: "10px" }}>
-      <h3 style={{ fontSize: "16px" }}>Prepare a takeover case</h3>
-      <select className="input-field" value={chainId} onChange={(e) => setChainId(Number(e.target.value))} aria-label="Chain">
-        {SUPPORTED_CHAINS.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
-        ))}
-      </select>
-      <input className="input-field" placeholder="Project escrow address (0x…)" maxLength={42} value={project} onChange={(e) => setProject(e.target.value)} aria-label="Project escrow address" />
-      <input className="input-field" placeholder="Candidate wallet (0x…)" maxLength={42} value={candidate} onChange={(e) => setCandidate(e.target.value)} aria-label="Candidate wallet" />
-      <textarea className="input-field" rows={3} maxLength={MAX_REASON} placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Reason" />
-      <textarea className="input-field" rows={3} placeholder="Evidence links, one https URL per line (optional)" value={links} onChange={(e) => setLinks(e.target.value)} aria-label="Evidence links" />
-      {error && <div role="alert" className="alert alert-error">{error}</div>}
-      {success && <div role="status" className="alert alert-success">{success}</div>}
-      <div>
-        <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>
-          {busy ? "Preparing…" : "Prepare case"}
-        </button>
-      </div>
-    </div>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (busy) return;
+        if (!next) setError("");
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent
+        title="Prepare a takeover case"
+        description="The case opens for voting only after the candidate accepts and an admin opens it."
+        maxWidth={560}
+        hideClose={busy}
+        preventDismiss={busy}
+        footer={
+          <>
+            <Button variant="secondary" disabled={busy} onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button loading={busy} onClick={() => void submit()}>
+              {busy ? "Preparing…" : "Prepare case"}
+            </Button>
+          </>
+        }
+      >
+        <div className="stack-md">
+          <Field label="Chain">
+            <Select value={chainId} onChange={(e) => setChainId(Number(e.target.value))}>
+              {SUPPORTED_CHAINS.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Project escrow address" required>
+            <Input
+              className="mono"
+              placeholder="0x…"
+              maxLength={42}
+              spellCheck={false}
+              autoComplete="off"
+              value={project}
+              onChange={(e) => setProject(e.target.value)}
+            />
+          </Field>
+          <Field label="Candidate wallet" required>
+            <Input
+              className="mono"
+              placeholder="0x…"
+              maxLength={42}
+              spellCheck={false}
+              autoComplete="off"
+              value={candidate}
+              onChange={(e) => setCandidate(e.target.value)}
+            />
+          </Field>
+          <Field label="Reason" required hint={`Up to ${MAX_REASON} characters.`}>
+            <Textarea rows={3} maxLength={MAX_REASON} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </Field>
+          <Field label="Evidence links" hint={`Optional. One https URL per line, at most ${MAX_LINKS}.`}>
+            <Textarea rows={3} value={links} onChange={(e) => setLinks(e.target.value)} />
+          </Field>
+          {error && <InlineAlert tone="danger">{error}</InlineAlert>}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 type Action = "open" | "cancel" | "close";
+
+const VOTE_COLUMNS: ReadonlyArray<DataTableColumn<TakeoverVoteDto>> = [
+  { key: "voter", header: "Voter", cell: (v) => <AddressChip address={v.voter} /> },
+  { key: "choice", header: "Choice", cell: (v) => statusLabel(v.choice) },
+  { key: "weight", header: "Weight", align: "right", numeric: true, cell: (v) => <Amount value={formatTokenAmount(v.weight)} /> },
+  { key: "updated", header: "Updated", numeric: true, cell: (v) => <RelativeTime iso={v.updatedAt} /> },
+];
+
+const HOLDER_COLUMNS: ReadonlyArray<DataTableColumn<TakeoverHolderDto>> = [
+  { key: "investor", header: "Investor", cell: (h) => <AddressChip address={h.investorAddress} /> },
+  { key: "staked", header: "Staked", align: "right", numeric: true, cell: (h) => <Amount value={formatTokenAmount(h.stakedBalance)} /> },
+  {
+    key: "unstaked",
+    header: "Unstaked",
+    align: "right",
+    numeric: true,
+    cell: (h) =>
+      h.unstakedBalance === null ? <span className="cell-sub">n/a</span> : <Amount value={`~${formatTokenAmount(h.unstakedBalance)}`} />,
+  },
+];
 
 function VotesTable({ id }: { id: string }) {
   const [shown, setShown] = useState(false);
@@ -181,25 +260,33 @@ function VotesTable({ id }: { id: string }) {
 
   if (!shown) {
     return (
-      <button type="button" className="btn-secondary" onClick={() => setShown(true)}>
+      <Button variant="secondary" size="sm" onClick={() => setShown(true)}>
         Load votes
-      </button>
+      </Button>
     );
   }
   return (
     <div>
-      <h4 style={{ fontSize: "14px", marginBottom: "6px" }}>Votes</h4>
-      {error && <div role="alert" className="alert alert-error">{error}</div>}
-      {page && page.items.length === 0 && <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>No votes yet.</p>}
-      {page?.items.map((v) => (
-        <div key={v.voter} style={{ ...ROW_STYLE, gridTemplateColumns: "1.5fr 0.6fr 1fr 1.4fr" }}>
-          <span title={v.voter}>{shortAddr(v.voter)}</span>
-          <span>{v.choice}</span>
-          <span>{formatTokenAmount(v.weight)}</span>
-          <span style={{ color: "var(--text-secondary)" }}>{when(v.updatedAt)}</span>
-        </div>
-      ))}
-      <AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />
+      {error && (
+        <InlineAlert tone="danger" className="panel-gap">
+          {error}
+        </InlineAlert>
+      )}
+      <div className="admin-subtable">
+        <DataTable
+          columns={VOTE_COLUMNS}
+          rows={page?.items ?? []}
+          rowKey={(v) => v.voter}
+          caption="Votes"
+          loading={page === null && !error}
+          skeletonRows={3}
+          dense
+          emptyTitle="No votes yet."
+        />
+      </div>
+      <div className="admin-pager-inline">
+        <AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />
+      </div>
     </div>
   );
 }
@@ -211,9 +298,6 @@ function CaseDetail({ id, role, onChanged }: { id: string; role: UserRole; onCha
   const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<Action | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState("");
-  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -232,28 +316,25 @@ function CaseDetail({ id, role, onChanged }: { id: string; role: UserRole; onCha
   }, [id, holdersOffset, reloadKey]);
 
   const run = async (action: Action): Promise<void> => {
-    if (busy) return;
-    setBusy(true);
-    setActionError("");
-    setNotice("");
-    try {
-      if (action === "open") await openTakeoverCase(id);
-      else if (action === "cancel") await cancelTakeoverCase(id);
-      else await closeTakeoverCase(id);
-      setNotice(action === "open" ? "Voting is open" : action === "cancel" ? "Case cancelled" : "Case closed");
-      setPending(null);
-      setReloadKey((k) => k + 1);
-      onChanged();
-    } catch (err) {
-      setActionError(actionErrorMessage(err, action));
-      setPending(null);
-    } finally {
-      setBusy(false);
-    }
+    if (action === "open") await openTakeoverCase(id);
+    else if (action === "cancel") await cancelTakeoverCase(id);
+    else await closeTakeoverCase(id);
+    toast.success(action === "open" ? "Voting is open" : action === "cancel" ? "Case cancelled" : "Case closed");
+    setReloadKey((k) => k + 1);
+    onChanged();
   };
 
-  if (error) return <div role="alert" className="alert alert-error">{error}</div>;
-  if (!detail) return <p style={{ color: "var(--text-secondary)" }}>Loading…</p>;
+  if (error) return <InlineAlert tone="danger">{error}</InlineAlert>;
+  if (!detail) {
+    return (
+      <div className="stack-sm" role="status">
+        <Skeleton width="40%" />
+        <Skeleton width="70%" />
+        <Skeleton width="55%" />
+        <span className="sr-only">Loading</span>
+      </div>
+    );
+  }
 
   const c = detail.case;
   const isAdmin = role === "admin";
@@ -261,104 +342,120 @@ function CaseDetail({ id, role, onChanged }: { id: string; role: UserRole; onCha
   const holdersTotal = c.snapshotHolderCount ?? 0;
 
   return (
-    <div className="glass-card" style={{ padding: "20px", marginTop: "16px" }}>
+    <div>
       <IndexerLagNote chainId={c.chainId} />
-      <Field label="Project">{c.projectId}</Field>
-      <Field label="Candidate">{c.candidateWallet}</Field>
-      <Field label="Reason"><span style={{ whiteSpace: "pre-wrap" }}>{c.reason}</span></Field>
-      <Field label="Evidence">
-        {c.evidenceLinks.length === 0 && "None"}
-        {c.evidenceLinks.map((link) =>
-          isHttps(link) ? (
-            <div key={link}>
-              <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)", wordBreak: "break-all" }}>
-                {link}
-              </a>
-            </div>
-          ) : (
-            <div key={link}>{link}</div>
-          ),
-        )}
-      </Field>
-      <Field label="Candidate accepted">{when(c.candidateAcceptedAt)}</Field>
-      <Field label="Developer at open">{c.developerAtOpen ?? "-"}</Field>
-      <Field label="Snapshot">
-        {c.snapshotBlock === null
-          ? "Not taken yet"
-          : `block ${c.snapshotBlock}, total staked ${formatTokenAmount(c.snapshotTotalStaked ?? "0")}, ${holdersTotal} holders, indexer lag ${c.snapshotLagSeconds ?? "-"}s`}
-      </Field>
-      <Field label="Voting window ends">{when(c.endsAt)}</Field>
-      <Field label="Tally">
-        {c.votedWeight === null
-          ? "-"
-          : `yes ${formatTokenAmount(c.yesWeight ?? "0")}, no ${formatTokenAmount(c.noWeight ?? "0")}, voted ${formatTokenAmount(c.votedWeight)} by ${c.voterCount ?? 0} voters, quorum ${c.quorumPercent ?? "-"}%`}
-        {c.result && ` (result: ${c.result})`}
-      </Field>
+      <dl className="admin-detail" style={{ marginTop: 12 }}>
+        <Row label="Status">
+          <StatusPill tone={toneFromBadge(statusBadge(c.status))}>{statusLabel(c.status)}</StatusPill>
+        </Row>
+        <Row label="Voting window ends">{when(c.endsAt)}</Row>
+        <Row label="Project" wide>
+          <span className="mono">{c.projectId}</span>
+        </Row>
+        <Row label="Candidate" wide>
+          <span className="mono">{c.candidateWallet}</span>
+        </Row>
+        <Row label="Reason" wide>
+          <span className="admin-detail-pre">{c.reason}</span>
+        </Row>
+        <Row label="Evidence" wide>
+          {c.evidenceLinks.length === 0 && "None"}
+          {c.evidenceLinks.map((link) =>
+            isHttps(link) ? (
+              <div key={link}>
+                <a href={link} target="_blank" rel="noopener noreferrer" className="link-accent text-wrap">
+                  {link}
+                </a>
+              </div>
+            ) : (
+              <div key={link}>{link}</div>
+            ),
+          )}
+        </Row>
+        <Row label="Candidate accepted">{when(c.candidateAcceptedAt)}</Row>
+        <Row label="Developer at open">{c.developerAtOpen ? <span className="mono">{c.developerAtOpen}</span> : "-"}</Row>
+        <Row label="Snapshot" wide>
+          {c.snapshotBlock === null
+            ? "Not taken yet"
+            : `block ${c.snapshotBlock}, total staked ${formatTokenAmount(c.snapshotTotalStaked ?? "0")}, ${holdersTotal} holders, indexer lag ${c.snapshotLagSeconds ?? "-"}s`}
+        </Row>
+        <Row label="Tally" wide>
+          {c.votedWeight === null
+            ? "-"
+            : `yes ${formatTokenAmount(c.yesWeight ?? "0")}, no ${formatTokenAmount(c.noWeight ?? "0")}, voted ${formatTokenAmount(c.votedWeight)} by ${c.voterCount ?? 0} voters, quorum ${c.quorumPercent ?? "-"}%`}
+          {c.result && ` (result: ${c.result})`}
+        </Row>
+      </dl>
 
-      {notice && <div role="status" className="alert alert-success" style={{ marginBottom: "12px" }}>{notice}</div>}
-      {actionError && <div role="alert" className="alert alert-error" style={{ marginBottom: "12px" }}>{actionError}</div>}
-      {isAdmin && (
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
-          {c.status === "prepared" && (
-            <>
-              <button type="button" className="btn-primary" disabled={busy || c.candidateAcceptedAt === null} onClick={() => setPending("open")}>
-                Open vote
-              </button>
-              {c.candidateAcceptedAt === null && (
-                <span style={{ fontSize: "12px", color: "var(--text-muted)", alignSelf: "center" }}>Waiting for the candidate to accept</span>
-              )}
-            </>
-          )}
-          {(c.status === "prepared" || c.status === "vote_open") && (
-            <button type="button" className="btn-danger" disabled={busy} onClick={() => setPending("cancel")}>
+      {isAdmin && (c.status === "prepared" || c.status === "vote_open") && (
+        <div className="admin-section">
+          <h3 className="admin-section-title">Admin actions</h3>
+          <div className="admin-actions">
+            {c.status === "prepared" && (
+              <>
+                <Button disabled={c.candidateAcceptedAt === null} onClick={() => setPending("open")}>
+                  Open vote
+                </Button>
+                {c.candidateAcceptedAt === null && <span className="panel-note">Waiting for the candidate to accept</span>}
+              </>
+            )}
+            {c.status === "vote_open" && (
+              <Button variant="secondary" disabled={!ended} onClick={() => setPending("close")}>
+                Close vote
+              </Button>
+            )}
+            <Button variant="danger" onClick={() => setPending("cancel")}>
               Cancel case
-            </button>
-          )}
-          {c.status === "vote_open" && (
-            <button type="button" className="btn-secondary" disabled={busy || !ended} onClick={() => setPending("close")}>
-              Close vote
-            </button>
-          )}
+            </Button>
+          </div>
         </div>
       )}
 
       <TakeoverExecution c={c} onSent={() => setReloadKey((k) => k + 1)} />
       <TakeoverHandover c={c} role={role} onChanged={() => setReloadKey((k) => k + 1)} />
 
-      <h4 style={{ fontSize: "14px", marginBottom: "6px" }}>Snapshot holders</h4>
-      {detail.holders.items.length === 0 && <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>No snapshot holders.</p>}
-      {detail.holders.items.map((h) => (
-        <div key={h.investorAddress} style={{ ...ROW_STYLE, gridTemplateColumns: "1.5fr 1fr 1fr" }}>
-          <span title={h.investorAddress}>{shortAddr(h.investorAddress)}</span>
-          <span>staked {formatTokenAmount(h.stakedBalance)}</span>
-          <span style={{ color: "var(--text-secondary)" }}>
-            {h.unstakedBalance === null ? "unstaked n/a" : `unstaked ~${formatTokenAmount(h.unstakedBalance)}`}
-          </span>
+      <div className="admin-section">
+        <h3 className="admin-section-title">Snapshot holders</h3>
+        <div className="admin-subtable">
+          <DataTable
+            columns={HOLDER_COLUMNS}
+            rows={detail.holders.items}
+            rowKey={(h) => h.investorAddress}
+            caption="Snapshot holders"
+            dense
+            emptyTitle="No snapshot holders."
+          />
         </div>
-      ))}
-      <AdminPager offset={holdersOffset} total={holdersTotal} onChange={setHoldersOffset} />
-      <div style={{ marginTop: "16px" }}>
+        <div className="admin-pager-inline">
+          <AdminPager offset={holdersOffset} total={holdersTotal} onChange={setHoldersOffset} />
+        </div>
+      </div>
+      <div className="admin-section">
+        <h3 className="admin-section-title">Votes</h3>
         <VotesTable id={id} />
       </div>
 
       <ConfirmDialog
         open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open) setPending(null);
+        }}
         title={pending === "open" ? "Open the vote?" : pending === "cancel" ? "Cancel this case?" : "Close the vote?"}
+        body={
+          pending === "open"
+            ? "A snapshot of staked balances is frozen now. A voting window of about 7 days starts (the exact end time is shown after opening). The vote is advisory. The current developer and the candidate cannot vote."
+            : pending === "cancel"
+              ? "The case is cancelled and cannot be reopened. This is recorded in the audit log."
+              : "The voting window has ended. Closing computes and records the result."
+        }
         confirmLabel={pending === "open" ? "Open vote" : pending === "cancel" ? "Cancel case" : "Close vote"}
-        tone={pending === "cancel" ? "danger" : "default"}
-        busy={busy}
-        onConfirm={() => pending && void run(pending)}
-        onCancel={() => setPending(null)}
-      >
-        {pending === "open" && (
-          <p>
-            A snapshot of staked balances is frozen now. A voting window of about 7 days starts (the exact end time is
-            shown after opening). The vote is advisory. The current developer and the candidate cannot vote.
-          </p>
-        )}
-        {pending === "cancel" && <p>The case is cancelled and cannot be reopened. This is recorded in the audit log.</p>}
-        {pending === "close" && <p>The voting window has ended. Closing computes and records the result.</p>}
-      </ConfirmDialog>
+        cancelLabel="Back"
+        tone={pending === "cancel" ? "danger" : "primary"}
+        onConfirm={async () => {
+          if (pending) await run(pending);
+        }}
+        describeError={(err) => actionErrorMessage(err, pending ?? "open")}
+      />
     </div>
   );
 }
@@ -369,89 +466,112 @@ export function TakeoverTab({ role }: { role: UserRole }) {
   const [chainId, setChainId] = useState<number | "">("");
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
 
   const load = useCallback(
     (signal: AbortSignal) =>
       listTakeoverCases({ status: status || undefined, chainId: chainId || undefined, limit: ADMIN_PAGE_SIZE, offset }, signal),
     [status, chainId, offset],
   );
-  const { page, error, loading } = useAdminList(load, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(load, reloadKey);
   const items = page?.items ?? [];
   const refresh = (): void => setReloadKey((k) => k + 1);
 
+  const columns: ReadonlyArray<DataTableColumn<TakeoverCaseDto>> = [
+    { key: "project", header: "Project", cell: (c) => <span className="mono" style={{ fontSize: 12 }} title={c.projectId}>{projectLabel(c)}</span> },
+    { key: "candidate", header: "Candidate", cell: (c) => <AddressChip address={c.candidateWallet} /> },
+    { key: "status", header: "Status", cell: (c) => <StatusPill tone={toneFromBadge(statusBadge(c.status))}>{statusLabel(c.status)}</StatusPill> },
+    { key: "result", header: "Result", cell: (c) => (c.result ? statusLabel(c.result) : <span className="cell-sub">-</span>) },
+    { key: "ends", header: "Ends", numeric: true, cell: (c) => <span className="cell-sub" style={{ fontSize: 13 }}>{when(c.endsAt)}</span> },
+    { key: "voters", header: "Voters", align: "right", numeric: true, cell: (c) => c.voterCount ?? "-" },
+    { key: "quorum", header: "Quorum", align: "right", numeric: true, cell: (c) => (c.quorumPercent === null ? "-" : `${c.quorumPercent}%`) },
+    {
+      key: "actions",
+      header: <span className="sr-only">Actions</span>,
+      align: "right",
+      cell: (c) => (
+        <Button variant="secondary" size="sm" onClick={() => setSelectedId(c.id)}>
+          View
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Takeover</h2>
-      <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "12px" }}>
-        Advisory votes on replacing a project developer. Staff prepare cases; admins open and close them.
-      </p>
-      <PrepareForm onCreated={refresh} />
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
-        <select
-          className="input-field"
-          style={{ width: "180px" }}
+      <AdminPageHeader
+        title="Takeover"
+        description="Advisory votes on replacing a project developer. Staff prepare cases; admins open and close them."
+        actions={
+          <>
+            <Button variant="secondary" size="sm" onClick={refresh} leftIcon={<RotateCw size={14} aria-hidden="true" />}>
+              Refresh
+            </Button>
+            <Button size="sm" onClick={() => setPreparing(true)} leftIcon={<Plus size={14} aria-hidden="true" />}>
+              Prepare case
+            </Button>
+          </>
+        }
+      />
+      <Card className="admin-toolbar">
+        <StatusFilter
+          options={STATUSES}
           value={status}
-          onChange={(e) => {
-            setStatus(STATUSES.find((s) => s === e.target.value) ?? "");
+          onChange={(value) => {
+            setStatus(value);
             setOffset(0);
           }}
-          aria-label="Filter by status"
-        >
-          <option value="">all statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <select
-          className="input-field"
-          style={{ width: "180px" }}
-          value={chainId}
-          onChange={(e) => {
-            setChainId(SUPPORTED_CHAINS.find((c) => String(c.id) === e.target.value)?.id ?? "");
-            setOffset(0);
-          }}
-          aria-label="Filter by chain"
-        >
-          <option value="">all chains</option>
-          {SUPPORTED_CHAINS.map((c) => (
-            <option key={c.id} value={c.id}>{chainName(c.id)}</option>
-          ))}
-        </select>
-        <button type="button" className="btn-secondary" onClick={refresh}>
-          Refresh
-        </button>
-      </div>
-      <div className="glass-card" style={{ padding: "8px" }}>
-        <ListState loading={loading} error={error} empty={items.length === 0} emptyText="No takeover cases." />
-        {items.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => setSelectedId(c.id)}
-            style={{
-              ...ROW_STYLE,
-              gridTemplateColumns: COLUMNS,
-              width: "100%",
-              textAlign: "left",
-              background: c.id === selectedId ? "rgba(99,102,241,0.12)" : "transparent",
-              border: "none",
-              borderBottom: "1px solid var(--border)",
-              color: "inherit",
-              cursor: "pointer",
+        />
+        <Field label="Chain" className="toolbar-field">
+          <Select
+            value={chainId}
+            onChange={(e) => {
+              setChainId(SUPPORTED_CHAINS.find((c) => String(c.id) === e.target.value)?.id ?? "");
+              setOffset(0);
             }}
           >
-            <span title={c.projectId}>{projectLabel(c)}</span>
-            <span title={c.candidateWallet}>{shortAddr(c.candidateWallet)}</span>
-            <span><span className={`badge ${statusBadge(c.status)}`}>{c.status}</span></span>
-            <span>{c.result ?? "-"}</span>
-            <span style={{ color: "var(--text-secondary)" }}>{when(c.endsAt)}</span>
-            <span>{c.voterCount ?? "-"}</span>
-            <span>{c.quorumPercent === null ? "-" : `${c.quorumPercent}%`}</span>
-          </button>
-        ))}
-      </div>
-      <AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />
-      {selectedId && <CaseDetail key={selectedId} id={selectedId} role={role} onChanged={refresh} />}
+            <option value="">all chains</option>
+            {SUPPORTED_CHAINS.map((c) => (
+              <option key={c.id} value={c.id}>{chainName(c.id)}</option>
+            ))}
+          </Select>
+        </Field>
+      </Card>
+      <AdminListCard
+        error={error}
+        requestId={requestId}
+        errorTitle="Could not load takeover cases"
+        onRetry={refresh}
+        hasData={page !== null}
+        footer={<AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />}
+      >
+        <DataTable
+          columns={columns}
+          rows={items}
+          rowKey={(c) => c.id}
+          caption="Takeover cases"
+          loading={loading}
+          dense
+          stickyHeader
+          emptyTitle="No takeover cases."
+        />
+      </AdminListCard>
+
+      <PrepareDialog open={preparing} onOpenChange={setPreparing} onCreated={refresh} />
+      <Dialog
+        open={selectedId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedId(null);
+        }}
+      >
+        <DialogContent
+          title="Takeover case"
+          description="Case details, admin actions, on-chain execution, repository handover, snapshot holders and votes."
+          maxWidth={880}
+        >
+          {selectedId && <CaseDetail key={selectedId} id={selectedId} role={role} onChanged={refresh} />}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

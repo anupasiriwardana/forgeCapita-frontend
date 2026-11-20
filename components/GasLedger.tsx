@@ -10,15 +10,22 @@ import {
   type GasSponsoredRow,
   type ProjectDto,
 } from "@/lib/api";
+import { Fuel } from "lucide-react";
 import { ABIS } from "@/lib/contracts";
 import { EXPLORER_URLS } from "@/config/chains";
 import { IndexerLagNote } from "@/components/IndexerLagNote";
+import { Amount } from "@/components/ui/Amount";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { Select } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
 
 const PAGE_SIZE = 20;
 const MAX_LIMIT = 200;
 const REFRESH_MS = 30_000;
 const TX_HASH_REGEX = /^0x[a-fA-F0-9]{64}$/;
-const MUTED = { fontSize: "13px", color: "var(--text-muted)" } as const;
+const DASH = "—";
 
 // Registry action kinds (MilestoneEscrow / DividendDistributor ACTION_*): Claim, Stake, Vote, Execute = 0..3.
 const ACTION_LABELS: readonly string[] = ["Claim", "Stake", "Vote", "Execute"];
@@ -115,7 +122,7 @@ export function GasLedger({ project }: { project: ProjectDto }) {
 
   if (!loaded) return null;
   if (!ledger && error) {
-    return <p style={{ ...MUTED, marginBottom: "24px" }}>{error}</p>;
+    return <InlineAlert tone="warning">{error}</InlineAlert>;
   }
 
   const summary = ledger?.summary;
@@ -138,124 +145,132 @@ export function GasLedger({ project }: { project: ProjectDto }) {
     if (pct > BigInt(100)) pct = BigInt(100);
   }
 
+  const columns: ReadonlyArray<DataTableColumn<GasSponsoredRow>> = [
+    { key: "time", header: "Time", numeric: true, cell: (r) => <span className="cell-sub" style={{ fontSize: 12 }}>{formatTime(r.timestamp)}</span> },
+    { key: "action", header: "Action", cell: (r) => actionLabel(r.action) },
+    { key: "who", header: "Who", cell: (r) => <span className="mono" style={{ fontSize: 12 }} title={r.account}>{shortAddr(r.account)}</span> },
+    { key: "cost", header: "Cost", align: "right", cell: (r) => <Amount value={formatNative(r.cost, chainId, 6)} /> },
+    {
+      key: "tx",
+      header: "Tx",
+      align: "right",
+      cell: (r) => {
+        const link = txLink(chainId, r.txHash);
+        return link ? (
+          <a href={link} target="_blank" rel="noopener noreferrer" className="mono link-accent" style={{ fontSize: 12 }}>
+            {r.txHash.slice(0, 8)}…{r.txHash.slice(-4)}
+          </a>
+        ) : (
+          <span className="mono">{DASH}</span>
+        );
+      },
+    },
+  ];
+
   return (
-    <div className="glass-card" style={{ padding: "20px", marginBottom: "24px" }}>
-      <h2 style={{ fontSize: "16px", marginBottom: "8px" }}>Gas sponsorship</h2>
-      <IndexerLagNote chainId={chainId} />
-      <p style={{ ...MUTED, marginTop: 0, marginBottom: "12px" }}>
-        The platform pays the network fee for your gasless claim, vote and stake (relayed actions). The cost is
-        booked against this project&apos;s gas budget (taken from the 5% platform fee at funding close).
-      </p>
-
-      <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", fontSize: "13px", marginBottom: "10px" }}>
-        <span>Total gas sponsored: <strong>{formatNative(spentWei, chainId, 6)}</strong></span>
-        {typeof budget === "bigint" && (
-          <span>Gas budget: <strong>{formatNative(budget.toString(), chainId, 6)}</strong></span>
-        )}
-        {ceiling !== null && (
-          <span>Ceiling: <strong>{formatNative(ceiling.toString(), chainId, 6)}</strong></span>
-        )}
-      </div>
-
-      {ceiling !== null && ceiling > BigInt(0) && (
-        <div style={{ marginBottom: "12px" }}>
-          <div className="progress-bar" style={{ height: "6px", marginBottom: "4px" }}>
-            <div className="progress-fill" style={{ width: `${pct.toString()}%` }} />
-          </div>
-          <span style={MUTED}>
-            Used {formatNative(spentWei, chainId, 6)} of {formatNative(ceiling.toString(), chainId, 6)}
+    <Card>
+      <CardHeader
+        title={
+          <span className="panel-title">
+            <Fuel size={16} aria-hidden="true" />
+            Gas sponsorship
           </span>
-        </div>
-      )}
+        }
+        actions={
+          <span className="inline-actions">
+            <label htmlFor="gas-ledger-action" className="panel-note">Action</label>
+            <Select
+              id="gas-ledger-action"
+              style={{ width: "auto", padding: "6px 32px 6px 10px", fontSize: "13px" }}
+              value={action === undefined ? "all" : String(action)}
+              onChange={e => {
+                const v = e.target.value;
+                setAction(v === "all" ? undefined : Number(v));
+              }}
+            >
+              <option value="all">All</option>
+              {ACTION_LABELS.map((label, i) => (
+                <option key={label} value={String(i)}>{label}</option>
+              ))}
+            </Select>
+          </span>
+        }
+      />
+      <CardBody>
+        <IndexerLagNote chainId={chainId} />
+        <p className="panel-note panel-gap">
+          The platform pays the network fee for your gasless claim, vote and stake (relayed actions). The cost is
+          booked against this project&apos;s gas budget (taken from the 5% platform fee at funding close).
+        </p>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-        <label htmlFor="gas-ledger-action" style={MUTED}>Action</label>
-        <select
-          id="gas-ledger-action"
-          className="input-field"
-          style={{ width: "auto", padding: "4px 8px", fontSize: "13px" }}
-          value={action === undefined ? "all" : String(action)}
-          onChange={e => {
-            const v = e.target.value;
-            setAction(v === "all" ? undefined : Number(v));
-          }}
-        >
-          <option value="all">All</option>
-          {ACTION_LABELS.map((label, i) => (
-            <option key={label} value={String(i)}>{label}</option>
-          ))}
-        </select>
+        <div className="kv-list">
+          <div className="kv-row"><span>Total gas sponsored</span><Amount value={formatNative(spentWei, chainId, 6)} /></div>
+          {typeof budget === "bigint" && (
+            <div className="kv-row"><span>Gas budget</span><Amount value={formatNative(budget.toString(), chainId, 6)} /></div>
+          )}
+          {ceiling !== null && (
+            <div className="kv-row"><span>Ceiling</span><Amount value={formatNative(ceiling.toString(), chainId, 6)} /></div>
+          )}
+        </div>
+
+        {ceiling !== null && ceiling > BigInt(0) && (
+          <div style={{ marginTop: 12 }}>
+            <div
+              className="progress-bar"
+              role="progressbar"
+              aria-label="Gas ceiling used"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={parseInt(pct.toString(), 10)}
+              style={{ marginBottom: 6 }}
+            >
+              <div className="progress-fill" style={{ width: `${pct.toString()}%` }} />
+            </div>
+            <span className="panel-note num">
+              Used {formatNative(spentWei, chainId, 6)} of {formatNative(ceiling.toString(), chainId, 6)}
+            </span>
+          </div>
+        )}
+      </CardBody>
+
+      <div style={{ borderTop: "1px solid var(--border)" }}>
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.id}
+          caption="Sponsored actions"
+          dense
+          emptyTitle="No sponsored actions yet."
+        />
       </div>
 
-      {rows.length === 0 ? (
-        <p style={{ ...MUTED, margin: 0 }}>No sponsored actions yet.</p>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: "var(--text-muted)" }}>
-                <th>Time</th>
-                <th>Action</th>
-                <th>Who</th>
-                <th>Cost</th>
-                <th>Tx</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => {
-                const link = txLink(chainId, r.txHash);
-                return (
-                  <tr key={r.id}>
-                    <td>{formatTime(r.timestamp)}</td>
-                    <td>{actionLabel(r.action)}</td>
-                    <td style={{ fontFamily: "monospace" }}>{shortAddr(r.account)}</td>
-                    <td>{formatNative(r.cost, chainId, 6)}</td>
-                    <td style={{ fontFamily: "monospace" }}>
-                      {link ? (
-                        <a href={link} target="_blank" rel="noopener noreferrer">
-                          {r.txHash.slice(0, 8)}…{r.txHash.slice(-4)}
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {(hasMore || error || (debtRows.length > 0 && summary)) && (
+        <CardBody style={{ borderTop: "1px solid var(--border)" }}>
+          {hasMore && (
+            <Button variant="secondary" size="sm" loading={paging} onClick={() => void showMore()}>
+              {paging ? "Loading…" : "Show more"}
+            </Button>
+          )}
+          {error && <p className="panel-note" style={{ marginTop: hasMore ? 8 : 0 }}>{error}</p>}
 
-      {hasMore && (
-        <button
-          type="button"
-          className="btn-secondary"
-          style={{ marginTop: "10px", padding: "6px 12px", fontSize: "12px" }}
-          disabled={paging}
-          onClick={() => void showMore()}
-        >
-          {paging ? "Loading…" : "Show more"}
-        </button>
+          {debtRows.length > 0 && summary && (
+            <div className={hasMore || error ? "panel-section" : undefined} style={{ fontSize: 13 }}>
+              <div className="kv-row">
+                <span>Gas debt: sponsored gas repaid from milestone payouts</span>
+                <Amount value={formatNative(summary.debtRecovered, chainId, 6)} />
+              </div>
+              <p className="panel-note" style={{ marginTop: 4 }}>
+                Sponsored gas above the budget is deducted from milestone payouts and paid to the treasury, up to 15%
+                of each payout.
+                {summary.outstanding !== null && <> Still outstanding: {formatNative(summary.outstanding, chainId, 6)}.</>}
+                {BigInt(summary.debtWrittenOff) > BigInt(0) && (
+                  <> Written off at the final milestone: {formatNative(summary.debtWrittenOff, chainId, 6)}.</>
+                )}
+              </p>
+            </div>
+          )}
+        </CardBody>
       )}
-      {error && <p style={{ ...MUTED, marginTop: "8px", marginBottom: 0 }}>{error}</p>}
-
-      {debtRows.length > 0 && summary && (
-        <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px solid var(--border)", fontSize: "13px" }}>
-          <div>
-            Gas debt: sponsored gas repaid from milestone payouts:{" "}
-            <strong>{formatNative(summary.debtRecovered, chainId, 6)}</strong>
-          </div>
-          <p style={{ ...MUTED, margin: "4px 0 0" }}>
-            Sponsored gas above the budget is deducted from milestone payouts and paid to the treasury, up to 15%
-            of each payout.
-            {summary.outstanding !== null && <> Still outstanding: {formatNative(summary.outstanding, chainId, 6)}.</>}
-            {BigInt(summary.debtWrittenOff) > BigInt(0) && (
-              <> Written off at the final milestone: {formatNative(summary.debtWrittenOff, chainId, 6)}.</>
-            )}
-          </p>
-        </div>
-      )}
-    </div>
+    </Card>
   );
 }

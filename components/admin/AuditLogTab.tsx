@@ -1,12 +1,53 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { ArrowRight } from "lucide-react";
-import { listAuditLog, shortAddr } from "@/lib/api";
-import { ADDRESS_REGEX, ADMIN_PAGE_SIZE, AdminPager, ListState, ROW_STYLE, shortId, truncate, useAdminList } from "./shared";
+import { ArrowRight, RotateCw } from "lucide-react";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { Field, Input } from "@/components/ui/Field";
+import { listAuditLog, type AuditLogEntryDto } from "@/lib/api";
+import {
+  ADDRESS_REGEX,
+  ADMIN_PAGE_SIZE,
+  AdminListCard,
+  AdminPageHeader,
+  AdminPager,
+  RelativeTime,
+  shortId,
+  truncate,
+  useAdminList,
+} from "./shared";
 
 const ACTION_REGEX = /^[a-z_]+(\.[a-z_]+)?$/;
-const COLUMNS = "1.4fr 1.4fr 1fr 1.6fr 0.8fr 1fr";
+
+const COLUMNS: ReadonlyArray<DataTableColumn<AuditLogEntryDto>> = [
+  { key: "time", header: "Time", numeric: true, cell: (e) => <RelativeTime iso={e.createdAt} /> },
+  { key: "action", header: "Action", cell: (e) => <span className="mono" style={{ fontSize: 12 }}>{e.action}</span> },
+  { key: "target", header: "Target", cell: (e) => (e.target ? <AddressChip address={e.target} /> : <span className="cell-sub">-</span>) },
+  {
+    key: "change",
+    header: "Change",
+    cell: (e) => (
+      <span className="text-wrap" style={{ fontSize: 13 }} title={`${e.before ?? ""} -> ${e.after ?? ""}`}>
+        <span className="admin-muted">{truncate(e.before ?? "-", 24)}</span>{" "}
+        <ArrowRight size={14} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle", color: "var(--text-3)" }} />
+        <span className="sr-only"> changed to </span> {truncate(e.after ?? "-", 24)}
+      </span>
+    ),
+  },
+  {
+    key: "actor",
+    header: "Actor",
+    cell: (e) => (
+      <span className="mono cell-sub" title={e.actorUserId ?? undefined}>
+        {e.actorUserId ? shortId(e.actorUserId) : "-"}
+      </span>
+    ),
+  },
+  { key: "ip", header: "IP", cell: (e) => <span className="mono cell-sub">{e.ip ?? "-"}</span> },
+];
 
 export function AuditLogTab() {
   const [offset, setOffset] = useState(0);
@@ -28,62 +69,76 @@ export function AuditLogTab() {
       ),
     [offset, action, target],
   );
-  const { page, error, loading } = useAdminList(valid ? load : null, reloadKey);
+  const { page, error, requestId, loading } = useAdminList(valid ? load : null, reloadKey);
   const items = page?.items ?? [];
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "16px" }}>Audit log</h2>
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
-        <input
-          className="input-field"
-          style={{ width: "240px" }}
-          placeholder="Action (e.g. role.change)"
-          maxLength={64}
-          value={actionInput}
-          onChange={(e) => {
-            setActionInput(e.target.value);
-            setOffset(0);
-          }}
-          aria-label="Filter by action"
+      <AdminPageHeader
+        title="Audit log"
+        description="Append-only record of staff and admin actions, newest first."
+        actions={
+          <Button variant="secondary" size="sm" onClick={() => setReloadKey((k) => k + 1)} leftIcon={<RotateCw size={14} aria-hidden="true" />}>
+            Refresh
+          </Button>
+        }
+      />
+      <Card className="admin-toolbar">
+        <Field
+          label="Action"
+          className="toolbar-field"
+          error={!actionValid ? "Action must be lowercase letters and underscores, optionally one dot" : undefined}
+        >
+          <Input
+            placeholder="e.g. role.change"
+            maxLength={64}
+            value={actionInput}
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(e) => {
+              setActionInput(e.target.value);
+              setOffset(0);
+            }}
+          />
+        </Field>
+        <Field
+          label="Target address"
+          className="toolbar-field toolbar-field-wide"
+          error={!targetValid ? "Target must be a full 0x address" : undefined}
+        >
+          <Input
+            placeholder="0x…"
+            maxLength={42}
+            value={targetInput}
+            spellCheck={false}
+            autoComplete="off"
+            className="mono"
+            onChange={(e) => {
+              setTargetInput(e.target.value);
+              setOffset(0);
+            }}
+          />
+        </Field>
+      </Card>
+      <AdminListCard
+        error={error}
+        requestId={requestId}
+        errorTitle="Could not load the audit log"
+        onRetry={() => setReloadKey((k) => k + 1)}
+        hasData={page !== null}
+        footer={<AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />}
+      >
+        <DataTable
+          columns={COLUMNS}
+          rows={items}
+          rowKey={(e) => e.id}
+          caption="Audit log entries"
+          loading={loading}
+          dense
+          stickyHeader
+          emptyTitle="No audit entries."
         />
-        <input
-          className="input-field"
-          style={{ width: "360px", maxWidth: "100%" }}
-          placeholder="Target address (0x…)"
-          maxLength={42}
-          value={targetInput}
-          onChange={(e) => {
-            setTargetInput(e.target.value);
-            setOffset(0);
-          }}
-          aria-label="Filter by target address"
-        />
-        <button type="button" className="btn-secondary" onClick={() => setReloadKey((k) => k + 1)}>
-          Refresh
-        </button>
-      </div>
-      {!actionValid && <div role="alert" className="alert alert-warning" style={{ marginBottom: "12px" }}>Action must be lowercase letters and underscores, optionally one dot</div>}
-      {!targetValid && <div role="alert" className="alert alert-warning" style={{ marginBottom: "12px" }}>Target must be a full 0x address</div>}
-      <div className="glass-card" style={{ padding: "8px" }}>
-        <ListState loading={loading} error={error} empty={items.length === 0} emptyText="No audit entries." />
-        {items.map((e) => (
-          <div key={e.id} style={{ ...ROW_STYLE, gridTemplateColumns: COLUMNS }}>
-            <span style={{ color: "var(--text-secondary)" }}>{new Date(e.createdAt).toLocaleString()}</span>
-            <span style={{ wordBreak: "break-word" }}>{e.action}</span>
-            <span title={e.target ?? undefined}>{e.target ? shortAddr(e.target) : "-"}</span>
-            <span style={{ wordBreak: "break-word" }} title={`${e.before ?? ""} -> ${e.after ?? ""}`}>
-              {truncate(e.before ?? "-", 24)}{" "}
-              <ArrowRight size={14} aria-hidden="true" style={{ display: "inline", verticalAlign: "middle" }} />
-              <span className="sr-only"> changed to </span>{" "}
-              {truncate(e.after ?? "-", 24)}
-            </span>
-            <span title={e.actorUserId ?? undefined}>{e.actorUserId ? shortId(e.actorUserId) : "-"}</span>
-            <span style={{ color: "var(--text-secondary)" }}>{e.ip ?? "-"}</span>
-          </div>
-        ))}
-      </div>
-      <AdminPager offset={offset} total={page?.total ?? 0} onChange={setOffset} />
+      </AdminListCard>
     </section>
   );
 }

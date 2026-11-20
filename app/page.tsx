@@ -1,263 +1,266 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
-import Link from "next/link";
+import { ArrowRight, ChevronDown, Coins, Fuel, Network, ScanSearch, SearchX, ShieldCheck, Sprout, Vote } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { listProjects, type ProjectDto } from "@/lib/api";
 import { ProjectCard } from "@/components/ProjectCard";
-import { MarketplaceFilters as MarketplaceFiltersPanel } from "@/components/MarketplaceFilters";
-import {
-  PAGE_SIZE,
-  canGoNext,
-  hasActiveFilters,
-  parseFilters,
-  toListParams,
-  toQueryString,
-  type MarketplaceFilters,
-} from "@/lib/marketplaceFilters";
+import { ButtonLink } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { StatCard } from "@/components/ui/StatCard";
+import { StatusPill } from "@/components/ui/StatusPill";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Marketplace — ForgeCapita",
+  title: "ForgeCapita — Web3 Milestone-Gated Crowdfunding",
   description:
-    "Browse all active Web3 startup projects. Fund milestone-gated ventures and earn equity tokens on Arbitrum Sepolia and BSC Testnet.",
+    "Milestone-gated crowdfunding where your investment is protected by governance. Fund, vote, and share in revenue on Arbitrum Sepolia and BSC Testnet.",
+  alternates: { canonical: "/" },
 };
 
-function ProjectsSkeleton() {
+const FEATURED_LIMIT = 3;
+
+const STEPS: ReadonlyArray<{ title: string; text: string; Icon: LucideIcon }> = [
+  {
+    title: "Fund",
+    text: "Back a project with testnet ETH or BNB during its funding window and claim your share of the public token supply.",
+    Icon: Coins,
+  },
+  {
+    title: "Milestones",
+    text: "Funds stay in escrow. Each milestone is released only after staked investors approve it with a vote.",
+    Icon: Vote,
+  },
+  {
+    title: "Revenue share",
+    text: "Customer payments are split on-chain, and stakers claim their share of the revenue.",
+    Icon: Sprout,
+  },
+];
+
+const TRUST: ReadonlyArray<{ title: string; text: string; Icon: LucideIcon }> = [
+  {
+    title: "Escrowed milestones",
+    text: "Raised funds sit in an escrow contract and are released one milestone at a time, never all up front.",
+    Icon: ShieldCheck,
+  },
+  {
+    title: "Staked voting",
+    text: "Voting weight is your staked balance, and a vote locks the stake until the poll closes.",
+    Icon: Vote,
+  },
+  {
+    title: "Revenue audit",
+    text: "Payments into each founder's approved wallets are compared with revenue routed on-chain, and gaps are escalated to staff.",
+    Icon: ScanSearch,
+  },
+  {
+    title: "Gasless actions",
+    text: "ForgeCapita sponsors gas for claiming tokens, staking, voting and executing a milestone.",
+    Icon: Fuel,
+  },
+];
+
+const FAQ: ReadonlyArray<{ q: string; a: string }> = [
+  {
+    q: "Is this live money?",
+    a: "No. ForgeCapita currently runs on Arbitrum Sepolia and BSC Testnet. Everything uses testnet funds with no real value. See the legal page for the full testnet notice.",
+  },
+  {
+    q: "How do I sign in?",
+    a: "Connect a wallet and sign a message to prove you own it. There is no password and signing in does not cost anything.",
+  },
+  {
+    q: "What are the fees?",
+    a: "A 5% platform fee is taken from the amount raised when a founder closes a successful funding round. The P2P exchange charges a 1% fee on every filled listing. Customer revenue sent to a project is split 24% to the creator, 1% to the platform and 75% to staking investors.",
+  },
+  {
+    q: "How do milestones and refunds work?",
+    a: "Raised funds are held in escrow and released milestone by milestone after investors vote to approve each one. If the funding goal is missed, or the founder does not close a successful round in time, backers can reclaim 100% of their deposit. If a project is cancelled or a milestone vote fails, investors can refund their share of the remaining funds.",
+  },
+  {
+    q: "What is a takeover?",
+    a: "If a founder abandons a project, ForgeCapita can replace the developer without redeploying contracts. Investors signal support with a vote weighted by staked balance, then the admin executes the handover and the new developer accepts the role.",
+  },
+  {
+    q: "Who can launch a project?",
+    a: "Only approved founders. Apply to become a founder from your account, and once your application is approved you can create a project.",
+  },
+];
+
+interface FeaturedResult {
+  projects: ProjectDto[];
+  /** Total listed projects from the same call; null when the call failed. */
+  total: number | null;
+}
+
+async function loadFeatured(): Promise<FeaturedResult> {
+  try {
+    const res = await listProjects({ limit: FEATURED_LIMIT, offset: 0 });
+    return { projects: res.items, total: res.total };
+  } catch (err) {
+    console.warn("[FeaturedProjects] Unable to load projects:", err);
+    return { projects: [], total: null };
+  }
+}
+
+function FeaturedProjects({ projects, failed }: { projects: ProjectDto[]; failed: boolean }): React.ReactElement {
+  if (projects.length > 0) {
+    return (
+      <div className="project-grid">
+        {projects.map((project, i) => (
+          <ProjectCard key={project.id} project={project} index={i} />
+        ))}
+      </div>
+    );
+  }
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-        gap: "24px",
-      }}
-    >
-      {[1, 2, 3].map((n) => (
-        <div
-          key={n}
-          className="glass-card"
-          style={{
-            height: "360px",
-            background: "rgba(255,255,255,0.02)",
-            borderRadius: "16px",
-            border: "1px solid rgba(255,255,255,0.06)",
-            animation: "pulse 1.8s infinite ease-in-out",
-          }}
-        />
-      ))}
+    <Card>
+      <EmptyState
+        icon={failed ? <SearchX size={20} /> : <Sprout size={20} />}
+        title={failed ? "Projects are unavailable right now" : "No projects yet"}
+        text={
+          failed
+            ? "We could not load projects. Please try again in a moment."
+            : "There are currently no projects. Approved founders can launch the first one."
+        }
+      />
+    </Card>
+  );
+}
+
+function StatStrip({ total }: { total: number | null }): React.ReactElement {
+  return (
+    <div className="stat-strip">
+      {total !== null && <StatCard label="Projects listed" value={total} hint="Across both testnets" icon={<Sprout size={16} />} />}
+      <StatCard label="Networks" value={2} hint="Arbitrum Sepolia and BSC Testnet" icon={<Network size={16} />} />
+      <StatCard label="Revenue to stakers" value="75%" hint="Of customer payments, split on-chain" icon={<Coins size={16} />} />
+      <StatCard label="Platform fee" value="5%" hint="Only when a funding round succeeds" icon={<ShieldCheck size={16} />} />
     </div>
   );
 }
 
-async function ProjectsSection({ filters }: { filters: MarketplaceFilters }) {
-  let projects: ProjectDto[] = [];
-  let total = 0;
-  try {
-    const res = await listProjects(toListParams(filters));
-    projects = res.items;
-    total = res.total;
-  } catch (err) {
-    console.warn("[ProjectsSection] Unable to load projects:", err);
-  }
-
-  const filtered = hasActiveFilters(filters);
-  const from = (filters.page - 1) * PAGE_SIZE + 1;
-  const to = from + projects.length - 1;
-  const hasPrev = filters.page > 1;
-  const hasNext = canGoNext(filters, total);
-  const pageHref = (page: number): string => {
-    const qs = toQueryString({ ...filters, page });
-    return qs ? `/?${qs}` : "/";
-  };
-  const pagerStyle = { textDecoration: "none", padding: "8px 16px", fontSize: "14px" } as const;
-
+export default async function HomePage(): Promise<React.ReactElement> {
+  const { projects, total } = await loadFeatured();
   return (
-    <>
-      {/* Divider with project count or status */}
-      <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "40px" }}>
-        <div className="divider" style={{ flex: 1, margin: 0 }} />
-        <span style={{ fontSize: "13px", color: "var(--text-muted)", whiteSpace: "nowrap", fontWeight: 600 }}>
-          {total > 0
-            ? `${total} project${total !== 1 ? "s" : ""}${filtered ? " found" : ""}`
-            : filtered
-              ? "No matching projects"
-              : "No projects yet"}
-        </span>
-        <div className="divider" style={{ flex: 1, margin: 0 }} />
-      </div>
-
-      {/* Grid or Empty State */}
-      {projects.length > 0 ? (
-        <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-              gap: "24px",
-            }}
-          >
-            {projects.map((project, i) => (
-              <ProjectCard key={project.id} project={project} index={i} />
-            ))}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "16px",
-              marginTop: "32px",
-              flexWrap: "wrap",
-            }}
-          >
-            {hasPrev && (
-              <Link href={pageHref(filters.page - 1)} className="btn-secondary" style={pagerStyle}>
-                ← Previous
-              </Link>
-            )}
-            <span style={{ fontSize: "13px", color: "var(--text-muted)", fontWeight: 600 }}>
-              Showing {from}-{to} of {total}
-            </span>
-            {hasNext && (
-              <Link href={pageHref(filters.page + 1)} className="btn-secondary" style={pagerStyle}>
-                Next →
-              </Link>
-            )}
-          </div>
-        </>
-      ) : filtered || filters.page > 1 ? (
-        <div
-          className="fade-in-up"
-          style={{
-            textAlign: "center",
-            padding: "64px 24px",
-            background: "rgba(255, 255, 255, 0.02)",
-            borderRadius: "24px",
-            border: "1px dashed rgba(255, 255, 255, 0.12)",
-            maxWidth: "600px",
-            margin: "0 auto",
-          }}
-        >
-          <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "10px", color: "var(--text-primary)" }}>
-            No projects match these filters
-          </h2>
-          <Link href="/" className="btn-secondary" style={pagerStyle}>
-            Clear filters
-          </Link>
-        </div>
-      ) : (
-        <div
-          className="fade-in-up"
-          style={{
-            textAlign: "center",
-            padding: "80px 24px",
-            background: "rgba(255, 255, 255, 0.02)",
-            borderRadius: "24px",
-            border: "1px dashed rgba(255, 255, 255, 0.12)",
-            maxWidth: "600px",
-            margin: "0 auto",
-          }}
-        >
-          <div style={{ fontSize: "56px", marginBottom: "16px" }}>🌱</div>
-          <h2 style={{ fontSize: "24px", fontWeight: 700, marginBottom: "10px", color: "var(--text-primary)" }}>
-            No Projects Yet
-          </h2>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              fontSize: "15px",
-              lineHeight: 1.6,
-              maxWidth: "440px",
-              margin: "0 auto 28px",
-            }}
-          >
-            There are currently no startup projects in the database.
-            Be the first founder to launch a milestone-gated project on ForgeCapita!
-          </p>
-          <Link
-            href="/projects/create"
-            className="btn-primary"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              textDecoration: "none",
-              padding: "12px 28px",
-              fontSize: "15px",
-              fontWeight: 600,
-            }}
-          >
-            🚀 Launch Your Project
-          </Link>
-        </div>
-      )}
-    </>
-  );
-}
-
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const filters = parseFilters(await searchParams);
-  const suspenseKey = toQueryString(filters);
-  return (
-    <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 24px" }}>
-      {/* Hero Section */}
-      <div className="fade-in-up" style={{ textAlign: "center", marginBottom: "64px" }}>
-        <span className="section-tag">⚡ Live on testnet</span>
-        <h1
-          style={{
-            fontSize: "clamp(36px, 5vw, 60px)",
-            fontWeight: 900,
-            margin: "0 0 20px",
-            lineHeight: 1.1,
-          }}
-        >
-          Back the Future of <span className="gradient-text">Web3 SaaS</span>
+    <div className="page-container">
+      <section className="home-hero hero-glow fade-in-up" aria-labelledby="hero-heading">
+        <StatusPill tone="accent">Live on testnet</StatusPill>
+        <h1 id="hero-heading">
+          Back the future of <span className="text-accent">Web3 SaaS</span>
         </h1>
-        <p
-          style={{
-            fontSize: "18px",
-            color: "var(--text-secondary)",
-            maxWidth: "560px",
-            margin: "0 auto 32px",
-            lineHeight: 1.7,
-          }}
-        >
-          Milestone-gated crowdfunding where your investment is protected by governance. Fund, vote,
-          and trade equity tokens.
+        <p className="home-hero-lead">
+          Milestone-gated crowdfunding where your investment is protected by governance. Fund, vote, and share in the
+          revenue.
         </p>
+        <div className="home-actions">
+          <ButtonLink href="/projects" size="lg" rightIcon={<ArrowRight size={16} aria-hidden="true" />}>
+            Browse projects
+          </ButtonLink>
+          <ButtonLink href="/how-it-works" variant="secondary" size="lg">
+            How it works
+          </ButtonLink>
+        </div>
+        <StatStrip total={total} />
+      </section>
 
-        {/* Hero features / stats */}
-        <div style={{ display: "flex", justifyContent: "center", gap: "32px", flexWrap: "wrap" }}>
-          {[
-            { label: "Network", value: "Arbitrum & BSC Testnets", icon: "🔗" },
-            { label: "Milestones", value: "On-Chain Escrow", icon: "🛡️" },
-            { label: "Governance", value: "Token Weighted", icon: "🗳️" },
-          ].map(({ label, value, icon }) => (
-            <div
-              key={label}
-              className="stat-card fade-in-up-2"
-              style={{ padding: "16px 24px", minWidth: "140px", textAlign: "center" }}
-            >
-              <div style={{ fontSize: "20px", marginBottom: "6px" }}>{icon}</div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)" }}>
-                {value}
+      <section className="section" aria-labelledby="how-heading">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">Three steps</span>
+            <h2 id="how-heading">How it works</h2>
+            <p>Funding, governance and revenue sharing are enforced by smart contracts.</p>
+          </div>
+          <ButtonLink href="/how-it-works" variant="ghost" rightIcon={<ArrowRight size={16} aria-hidden="true" />}>
+            Full walkthrough
+          </ButtonLink>
+        </div>
+        <div className="feature-grid">
+          {STEPS.map(({ title, text, Icon }, i) => (
+            <Card key={title} className="feature-card">
+              <div className="feature-top">
+                <span className="feature-icon" aria-hidden="true">
+                  <Icon size={20} />
+                </span>
+                <span className="feature-step num">Step {i + 1}</span>
               </div>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
-                {label}
-              </div>
-            </div>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </Card>
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* Projects streaming section */}
-      <MarketplaceFiltersPanel key={filters.q || filters.category ? "text" : "clear"} current={filters} />
-      <Suspense key={suspenseKey} fallback={<ProjectsSkeleton />}>
-        <ProjectsSection filters={filters} />
-      </Suspense>
+      <section className="section" aria-labelledby="featured-heading">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">Marketplace</span>
+            <h2 id="featured-heading">Featured projects</h2>
+          </div>
+          <ButtonLink href="/projects" variant="secondary" rightIcon={<ArrowRight size={16} aria-hidden="true" />}>
+            View all projects
+          </ButtonLink>
+        </div>
+        <FeaturedProjects projects={projects} failed={total === null} />
+      </section>
+
+      <section className="section" aria-labelledby="trust-heading">
+        <div className="section-head">
+          <div>
+            <span className="eyebrow">Safeguards</span>
+            <h2 id="trust-heading">Built for trust</h2>
+            <p>Backers keep leverage after they fund, and founders get a transparent path to the money.</p>
+          </div>
+        </div>
+        <div className="trust-grid">
+          {TRUST.map(({ title, text, Icon }) => (
+            <Card key={title} className="trust-item">
+              <span className="feature-icon feature-icon-sm" aria-hidden="true">
+                <Icon size={16} />
+              </span>
+              <div>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section id="faq" className="section faq-wrap" aria-labelledby="faq-heading">
+        <div className="section-head section-head-center">
+          <div>
+            <span className="eyebrow">FAQ</span>
+            <h2 id="faq-heading">Frequently asked questions</h2>
+          </div>
+        </div>
+        <div className="faq-list">
+          {FAQ.map(({ q, a }) => (
+            <details key={q} className="faq-item">
+              <summary>
+                {q}
+                <ChevronDown size={18} aria-hidden="true" />
+              </summary>
+              <p>{a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section className="cta-band" aria-labelledby="cta-heading">
+        <div>
+          <h2 id="cta-heading">Ready to back a milestone?</h2>
+          <p>Browse live testnet projects, fund the ones you believe in and vote on every release.</p>
+        </div>
+        <div className="home-actions">
+          <ButtonLink href="/projects" rightIcon={<ArrowRight size={16} aria-hidden="true" />}>
+            Browse projects
+          </ButtonLink>
+          <ButtonLink href="/about" variant="secondary">
+            About ForgeCapita
+          </ButtonLink>
+        </div>
+      </section>
     </div>
   );
 }

@@ -4,7 +4,21 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAccount, useConfig, useReadContracts } from "wagmi";
 import { formatUnits } from "viem";
+import { Briefcase, Coins, HandCoins, Plug, Sprout } from "lucide-react";
+import { ProjectStatusBadge } from "@/components/ProjectStatusBadge";
+import { Amount } from "@/components/ui/Amount";
+import { ButtonLink, buttonClass } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { StatCard } from "@/components/ui/StatCard";
+import { StatusPill, type StatusTone } from "@/components/ui/StatusPill";
+import { CHART_PALETTE } from "@/components/ui/charts/ChartFrame";
+import { DonutChart } from "@/components/ui/charts/DonutChart";
 import {
+  ApiError,
+  describeApiError,
   fetchInvestorPositions,
   formatEth,
   listProjects,
@@ -34,25 +48,138 @@ function formatToken(wei: string): string {
   return trimmed ? `${whole}.${trimmed}` : whole;
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+interface LoadError {
+  message: string;
+  requestId?: string;
+}
+
+/** Safe message plus the server request id (when present) for an ErrorState. */
+function loadError(err: unknown, fallback: string): LoadError {
+  return { message: describeApiError(err, fallback), requestId: err instanceof ApiError ? err.requestId : undefined };
+}
+
+interface ChainTotals {
+  chainId: number;
+  net: bigint;
+  claimed: bigint;
+  claimable: bigint;
+  claimableKnown: boolean;
+  count: number;
+}
+
+interface PositionRow {
+  p: InvestorPosition;
+  net: bigint;
+  name: string;
+  claimable: bigint | null;
+  href: string;
+  refundAvailable: boolean;
+  voteEnd: bigint | null;
+}
+
+function relayTone(status: string): StatusTone {
+  if (status === "CONFIRMED") return "success";
+  if (status === "FAILED" || status === "EXPIRED") return "neutral";
+  return "warning";
+}
+
+/** Share of `part` in `total` as text with one decimal, bigint math only. */
+function shareText(part: bigint, total: bigint): string {
+  if (total <= ZERO) return "0.0%";
+  const tenths = (part * BigInt(1000)) / total;
+  return `${(tenths / BigInt(10)).toString()}.${(tenths % BigInt(10)).toString()}%`;
+}
+
+function PositionActions({ row }: { row: PositionRow }) {
   return (
-    <div>
-      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{label}</div>
-      <div style={{ fontSize: "15px", fontWeight: 600 }}>{value}</div>
+    <div className="row-actions">
+      {row.voteEnd !== null && (
+        <ButtonLink
+          href={`${row.href}/milestones`}
+          variant="subtle"
+          size="sm"
+          title={`Vote open until ${new Date(parseInt(row.voteEnd.toString(), 10) * 1000).toLocaleString()}`}
+        >
+          Vote
+        </ButtonLink>
+      )}
+      {row.refundAvailable && (
+        <ButtonLink href={row.href} variant="secondary" size="sm">
+          Refund
+        </ButtonLink>
+      )}
+      <ButtonLink href={row.href} variant="ghost" size="sm">
+        Claim
+      </ButtonLink>
     </div>
   );
 }
 
-function statusBadge(status: string): string {
-  if (status === "CONFIRMED") return "badge-active";
-  if (status === "FAILED" || status === "EXPIRED") return "badge-inactive";
-  return "badge-pending";
+/** KPI cards and (with 2+ positions) an allocation donut for one chain; never summed across chains. */
+function ChainSummary({ totals, rows }: { totals: ChainTotals; rows: PositionRow[] }) {
+  const currency = chainCurrency(totals.chainId);
+  const funded = rows.filter((r) => r.net > ZERO);
+  const showAllocation = rows.length >= 2 && funded.length > 0;
+  const slices = funded.map((r) => ({ name: r.name, value: Number(formatEth(r.net.toString(), 6)) }));
+  const summary = `Net invested on ${chainName(totals.chainId)} by project: ${funded
+    .map((r) => `${r.name} ${formatEth(r.net.toString())} ${currency} (${shareText(r.net, totals.net)})`)
+    .join(", ")}.`;
+
+  return (
+    <div className="chain-block">
+      <div className="chain-block-head">
+        <h3 style={{ fontSize: 15 }}>{chainName(totals.chainId)}</h3>
+      </div>
+      <div className="kpi-grid" style={{ marginBottom: showAllocation ? 12 : 0 }}>
+        <StatCard label="Net invested" value={formatEth(totals.net.toString())} unit={currency} icon={<Coins size={16} />} />
+        <StatCard
+          label="Claimable yield"
+          value={totals.claimableKnown ? formatEth(totals.claimable.toString()) : DASH}
+          unit={totals.claimableKnown ? currency : undefined}
+          hint={totals.claimableKnown ? undefined : "Reading from the chain"}
+          icon={<Sprout size={16} />}
+        />
+        <StatCard label="Yield claimed" value={formatEth(totals.claimed.toString())} unit={currency} icon={<HandCoins size={16} />} />
+        <StatCard label="Positions" value={totals.count} icon={<Briefcase size={16} />} />
+      </div>
+      {showAllocation && (
+        <Card>
+          <CardHeader title="Allocation" subtitle={`Net invested by project, in ${currency}`} as="h4" />
+          <CardBody>
+            <div className="allocation">
+              <DonutChart
+                data={slices}
+                summary={summary}
+                height={200}
+                centerValue={formatEth(totals.net.toString(), 3)}
+                centerLabel={currency}
+                formatter={(v) => `${v.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${currency}`}
+              />
+              <ul className="allocation-legend">
+                {funded.map((r, i) => (
+                  <li key={r.p.projectId}>
+                    <span style={{ display: "inline-flex", alignItems: "center", minWidth: 0 }}>
+                      <span className="legend-swatch" aria-hidden="true" style={{ background: CHART_PALETTE[i % CHART_PALETTE.length] }} />
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                    </span>
+                    <span className="num" style={{ color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                      <Amount value={formatEth(r.net.toString())} unit={currency} /> {shareText(r.net, totals.net)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 function GaslessRequests() {
   const { user, loading: authLoading } = useAuth();
   const [items, setItems] = useState<RelayRequest[] | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<LoadError | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const signedIn = user !== null;
 
@@ -66,70 +193,91 @@ function GaslessRequests() {
       })
       .catch((err: unknown) => {
         if (signal.aborted) return;
-        setError(err instanceof Error ? err.message : "Failed to load gasless requests");
+        setError(loadError(err, "Failed to load gasless requests"));
       });
     return () => controller.abort();
   }, [signedIn, reloadKey]);
 
   const retry = useCallback(() => {
-    setError("");
+    setError(null);
     setItems(null);
     setReloadKey((k) => k + 1);
   }, []);
 
+  const columns: ReadonlyArray<DataTableColumn<RelayRequest>> = [
+    {
+      key: "kind",
+      header: "Action",
+      cell: (r) => {
+        const failure = failureOfRequest(r);
+        return (
+          <div>
+            <span style={{ fontWeight: 600 }}>{r.kind}</span>
+            {failure && <div className="cell-sub" style={{ color: "var(--danger)" }}>{failure.message}</div>}
+          </div>
+        );
+      },
+    },
+    { key: "status", header: "Status", cell: (r) => <StatusPill tone={relayTone(r.status)}>{r.status}</StatusPill> },
+    { key: "chain", header: "Chain", cell: (r) => <span className="cell-sub" style={{ fontSize: 13 }}>{chainName(r.chainId)}</span> },
+    {
+      key: "created",
+      header: "Created",
+      numeric: true,
+      cell: (r) => {
+        const created = new Date(r.createdAt);
+        return <span className="cell-sub" style={{ fontSize: 13 }}>{Number.isNaN(created.getTime()) ? DASH : created.toLocaleString()}</span>;
+      },
+    },
+    {
+      key: "links",
+      header: <span className="sr-only">Links</span>,
+      align: "right",
+      cell: (r) => {
+        const txUrl = r.txHash ? explorerTxUrl(r.chainId, r.txHash) : null;
+        return (
+          <div className="row-actions">
+            <ButtonLink href={`/projects/${encodeURIComponent(r.projectId)}`} variant="ghost" size="sm">Project</ButtonLink>
+            {txUrl && (
+              <a href={txUrl} target="_blank" rel="noopener noreferrer" className={buttonClass("ghost", "sm")}>
+                Transaction
+              </a>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
-    <section style={{ marginTop: "40px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "16px" }}>Gasless requests</h2>
+    <section id="gasless-requests" className="section-block" aria-labelledby="gasless-heading">
+      <Card>
+        <CardHeader title={<span id="gasless-heading">Gasless requests</span>} subtitle="Actions the platform relayed for you, newest first." />
+        <CardBody style={{ paddingLeft: 0, paddingRight: 0, paddingBottom: 4 }}>
+          {!signedIn && (
+            <p className="panel-note" style={{ padding: "0 20px 12px" }}>
+              {authLoading ? "Checking sign-in…" : "Sign in to see your gasless requests"}
+            </p>
+          )}
 
-      {!signedIn && (
-        <p style={{ color: "var(--text-muted)" }}>
-          {authLoading ? "Checking sign-in…" : "Sign in to see your gasless requests"}
-        </p>
-      )}
+          {signedIn && error && (
+            <ErrorState title="Could not load gasless requests" message={error.message} requestId={error.requestId} onRetry={retry} />
+          )}
 
-      {signedIn && error && (
-        <div className="alert alert-error" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <span>⚠️ {error}</span>
-          <button className="btn-secondary" onClick={retry}>Retry</button>
-        </div>
-      )}
-
-      {signedIn && !error && items === null && (
-        <p style={{ color: "var(--text-muted)" }}>Loading gasless requests…</p>
-      )}
-
-      {signedIn && !error && items !== null && items.length === 0 && (
-        <p style={{ color: "var(--text-muted)" }}>No gasless requests yet.</p>
-      )}
-
-      {signedIn && !error && items !== null && items.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {items.map((r) => {
-            const failure = failureOfRequest(r);
-            const txUrl = r.txHash ? explorerTxUrl(r.chainId, r.txHash) : null;
-            const created = new Date(r.createdAt);
-            return (
-              <div key={r.id} className="glass-card" style={{ padding: "16px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
-                  <strong>{r.kind}</strong>
-                  <span className={`badge ${statusBadge(r.status)}`}>{r.status}</span>
-                </div>
-                <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--text-muted)", display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                  <span>{chainName(r.chainId)}</span>
-                  <span>{Number.isNaN(created.getTime()) ? DASH : created.toLocaleString()}</span>
-                  <Link href={`/projects/${encodeURIComponent(r.projectId)}`}>Project</Link>
-                  {txUrl && (
-                    <a href={txUrl} target="_blank" rel="noopener noreferrer">Transaction</a>
-                  )}
-                </div>
-                {failure && (
-                  <div style={{ marginTop: "8px", fontSize: "13px", color: "var(--rose)" }}>{failure.message}</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+          {signedIn && !error && (
+            <DataTable
+              columns={columns}
+              rows={items ?? []}
+              rowKey={(r) => r.id}
+              caption="Gasless requests"
+              loading={items === null}
+              skeletonRows={3}
+              emptyTitle="No gasless requests yet"
+              emptyText="Gasless stakes, claims and votes you submit will appear here."
+            />
+          )}
+        </CardBody>
+      </Card>
     </section>
   );
 }
@@ -137,16 +285,17 @@ function GaslessRequests() {
 export default function PortfolioPage() {
   const { address, isConnected } = useAccount();
   const config = useConfig();
+  const { role } = useAuth();
   const [positions, setPositions] = useState<InvestorPosition[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
   const [distributors, setDistributors] = useState<Record<string, Addr>>({});
   const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
   const [projects, setProjects] = useState<Record<string, ProjectDto>>({});
-  const [error, setError] = useState("");
+  const [error, setError] = useState<LoadError | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const retry = useCallback(() => {
-    setError("");
+    setError(null);
     setPositions(null);
     setReloadKey((k) => k + 1);
   }, []);
@@ -161,7 +310,7 @@ export default function PortfolioPage() {
       })
       .catch((err: unknown) => {
         if (signal.aborted) return;
-        setError(err instanceof Error ? err.message : "Failed to load positions");
+        setError(loadError(err, "Failed to load positions"));
       });
     listProjects({ limit: 100 }, signal)
       .then((list) => {
@@ -271,96 +420,237 @@ export default function PortfolioPage() {
     return end.result > BigInt(nowSeconds) ? end.result : null;
   }
 
-  return (
-    <div style={{ maxWidth: "960px", margin: "0 auto", padding: "40px 24px" }}>
-      <h1 style={{ fontSize: "28px", marginBottom: "24px" }}>Portfolio</h1>
+  function refundAvailableOf(p: InvestorPosition): boolean {
+    const project = projects[p.projectId];
+    return (
+      BigInt(p.invested) - BigInt(p.refunded) > ZERO &&
+      project !== undefined &&
+      refundsOpenFor(BigInt(nowSeconds), phaseInputOf(project))
+    );
+  }
 
-      {isConnected &&
-        Array.from(new Set((positions ?? []).map((p) => p.chainId))).map((id) => (
-          <IndexerLagNote key={id} chainId={id} />
-        ))}
+  // Per-chain totals (different chains use different currencies, so never summed across chains).
+  const chainTotals = new Map<number, ChainTotals>();
+  let refundCount = 0;
+  let openVoteCount = 0;
+  (positions ?? []).forEach((p, index) => {
+    const totals = chainTotals.get(p.chainId) ?? {
+      chainId: p.chainId,
+      net: ZERO,
+      claimed: ZERO,
+      claimable: ZERO,
+      claimableKnown: true,
+      count: 0,
+    };
+    totals.count += 1;
+    totals.net += BigInt(p.invested) - BigInt(p.refunded);
+    totals.claimed += BigInt(p.yieldClaimed);
+    const claimable = claimableOf(index);
+    if (claimable === null) totals.claimableKnown = false;
+    else totals.claimable += claimable;
+    chainTotals.set(p.chainId, totals);
+    if (refundAvailableOf(p)) refundCount++;
+    if (openVoteEndOf(index) !== null) openVoteCount++;
+  });
+  const summaryChains = Array.from(chainTotals.values());
+  const founderLink = role === "founder";
+
+  const rows: PositionRow[] = (positions ?? []).map((p, index) => {
+    const href = `/projects/${encodeURIComponent(p.projectId)}`;
+    return {
+      p,
+      net: BigInt(p.invested) - BigInt(p.refunded),
+      name: names[p.projectId] || p.tokenSymbol || shortAddr(p.escrowAddress),
+      claimable: claimableOf(index),
+      href,
+      refundAvailable: refundAvailableOf(p),
+      voteEnd: openVoteEndOf(index),
+    };
+  });
+  const loading = isConnected && !error && positions === null;
+  const hasPositions = isConnected && !error && positions !== null && positions.length > 0;
+
+  const columns: ReadonlyArray<DataTableColumn<PositionRow>> = [
+    {
+      key: "project",
+      header: "Project",
+      cell: (r) => (
+        <div>
+          <Link href={r.href} className="cell-title">{r.name}</Link>
+          {r.p.tokenSymbol && <div className="cell-sub mono">{r.p.tokenSymbol}</div>}
+        </div>
+      ),
+    },
+    {
+      key: "state",
+      header: "State",
+      cell: (r) => (
+        <div>
+          <ProjectStatusBadge status={r.p.state} />
+          <div className="cell-sub" style={{ marginTop: 4, whiteSpace: "nowrap" }}>{chainName(r.p.chainId)}</div>
+        </div>
+      ),
+    },
+    {
+      key: "invested",
+      header: "Invested",
+      align: "right",
+      cell: (r) => (
+        <div>
+          <Amount value={formatEth(r.net.toString())} unit={chainCurrency(r.p.chainId)} />
+          {BigInt(r.p.refunded) !== ZERO && (
+            <div className="cell-sub num">Refunded {formatEth(r.p.refunded)} {chainCurrency(r.p.chainId)}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "tokens",
+      header: "Tokens",
+      align: "right",
+      cell: (r) => (
+        <div>
+          <Amount value={formatToken(r.p.tokensHeld)} />
+          <span className="sr-only"> held</span>
+          <div className="cell-sub num">Staked {formatToken(r.p.stakedBalance)}</div>
+        </div>
+      ),
+    },
+    {
+      key: "claimable",
+      header: "Claimable",
+      align: "right",
+      cell: (r) => (
+        <div>
+          {r.claimable === null ? <span className="mono">{DASH}</span> : <Amount value={formatEth(r.claimable.toString())} unit={chainCurrency(r.p.chainId)} />}
+          <div className="cell-sub num">Claimed {formatEth(r.p.yieldClaimed)}</div>
+        </div>
+      ),
+    },
+    { key: "actions", header: <span className="sr-only">Actions</span>, align: "right", cell: (r) => <PositionActions row={r} /> },
+  ];
+
+  return (
+    <div className="page-container">
+      <div className="page-title-row">
+        <div>
+          <h1>Portfolio</h1>
+          <p>Your positions, yield and requests across both testnets. Totals are per chain because each chain uses its own currency.</p>
+        </div>
+        {hasPositions && (refundCount > 0 || openVoteCount > 0) && (
+          <div className="page-title-actions">
+            {refundCount > 0 && <StatusPill tone="warning">Refunds available: {refundCount}</StatusPill>}
+            {openVoteCount > 0 && <StatusPill tone="warning">Open votes: {openVoteCount}</StatusPill>}
+          </div>
+        )}
+      </div>
+
+      <nav aria-label="Portfolio shortcuts" className="quick-links">
+        <ButtonLink href="/projects" variant="secondary" size="sm">Browse projects</ButtonLink>
+        <ButtonLink href="/p2p" variant="secondary" size="sm">P2P market</ButtonLink>
+        <a href="#gasless-requests" className={buttonClass("ghost", "sm")}>Gasless requests</a>
+        <a href="#my-complaints" className={buttonClass("ghost", "sm")}>My complaints</a>
+        {founderLink && <ButtonLink href="/founder/projects" variant="ghost" size="sm">Founder projects</ButtonLink>}
+      </nav>
+
+      {isConnected && positions !== null && positions.length > 0 && (
+        <IndexerLagNote chainId={Array.from(new Set(positions.map((p) => p.chainId)))} />
+      )}
 
       {!isConnected && (
-        <div className="alert alert-warning">
-          <span>🔌</span> Connect your wallet to see your positions.
-        </div>
+        <Card>
+          <EmptyState icon={<Plug size={20} />} title="Connect your wallet" text="Connect your wallet to see your positions." />
+        </Card>
       )}
 
       {isConnected && error && (
-        <div className="alert alert-error" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <span>⚠️ {error}</span>
-          <button className="btn-secondary" onClick={retry}>Retry</button>
-        </div>
+        <Card>
+          <ErrorState title="Could not load positions" message={error.message} requestId={error.requestId} onRetry={retry} />
+        </Card>
       )}
 
-      {isConnected && !error && positions === null && (
-        <p style={{ color: "var(--text-muted)" }}>Loading positions…</p>
+      {loading && (
+        <div role="status" aria-live="polite">
+          <span className="sr-only">Loading positions</span>
+          <div className="kpi-grid">
+            {[1, 2, 3, 4].map((n) => (
+              <StatCard key={n} label="Loading" value="" loading />
+            ))}
+          </div>
+          <Card>
+            <DataTable columns={columns} rows={[]} rowKey={(r) => r.p.projectId} caption="Positions" loading skeletonRows={3} />
+          </Card>
+        </div>
       )}
 
       {isConnected && !error && positions !== null && positions.length === 0 && (
-        <p style={{ color: "var(--text-muted)" }}>
-          No positions yet. <Link href="/">Browse projects</Link>
-        </p>
+        <Card>
+          <EmptyState
+            icon={<Briefcase size={20} />}
+            title="No positions yet"
+            text="Fund a project to see your investment, tokens and yield here."
+            action={<ButtonLink href="/projects">Browse projects</ButtonLink>}
+          />
+        </Card>
       )}
 
-      {isConnected && !error && positions !== null && positions.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {positions.map((p, index) => {
-            const net = BigInt(p.invested) - BigInt(p.refunded);
-            const name = names[p.projectId] || p.tokenSymbol || shortAddr(p.escrowAddress);
-            const claimable = claimableOf(index);
-            const href = `/projects/${encodeURIComponent(p.projectId)}`;
-            const project = projects[p.projectId];
-            const refundAvailable =
-              net > ZERO &&
-              project !== undefined &&
-              refundsOpenFor(BigInt(nowSeconds), phaseInputOf(project));
-            const voteEnd = openVoteEndOf(index);
-            return (
-              <div key={p.projectId} className="glass-card" style={{ padding: "20px" }}>
-                <Link href={href} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
-                    <strong style={{ fontSize: "18px" }}>{name}</strong>
-                    <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>
-                      {chainName(p.chainId)} · {p.state} · {p.tokenSymbol}
-                    </span>
+      {hasPositions && (
+        <section aria-labelledby="portfolio-summary">
+          <h2 id="portfolio-summary" className="sr-only">Summary</h2>
+          {summaryChains.map((c) => (
+            <ChainSummary key={c.chainId} totals={c} rows={rows.filter((r) => r.p.chainId === c.chainId)} />
+          ))}
+        </section>
+      )}
+
+      {hasPositions && (
+        <section aria-labelledby="positions-heading" className="section-block table-switch">
+          <div className="chain-block-head">
+            <h2 id="positions-heading" style={{ fontSize: 16 }}>
+              Positions <span className="num" style={{ color: "var(--text-2)", fontWeight: 500 }}>({positions.length})</span>
+            </h2>
+          </div>
+          <Card className="only-desktop">
+            <DataTable columns={columns} rows={rows} rowKey={(r) => r.p.projectId} caption="Your positions" />
+          </Card>
+          <div className="only-mobile">
+            <div className="mobile-cards">
+              {rows.map((r) => (
+                <Card key={r.p.projectId} className="mobile-card">
+                  <div className="mobile-card-head">
+                    <div style={{ minWidth: 0 }}>
+                      <Link href={r.href} className="cell-title">{r.name}</Link>
+                      <div className="cell-sub">{chainName(r.p.chainId)}{r.p.tokenSymbol ? ` - ${r.p.tokenSymbol}` : ""}</div>
+                    </div>
+                    <ProjectStatusBadge status={r.p.state} />
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
-                    <Stat label="Invested" value={`${formatEth(net.toString())} ${chainCurrency(p.chainId)}`} />
-                    {BigInt(p.refunded) !== ZERO && (
-                      <Stat label="Refunded" value={`${formatEth(p.refunded)} ${chainCurrency(p.chainId)}`} />
+                  <div className="kv-list">
+                    <div className="kv-row"><span>Invested</span><Amount value={formatEth(r.net.toString())} unit={chainCurrency(r.p.chainId)} /></div>
+                    {BigInt(r.p.refunded) !== ZERO && (
+                      <div className="kv-row"><span>Refunded</span><Amount value={formatEth(r.p.refunded)} unit={chainCurrency(r.p.chainId)} /></div>
                     )}
-                    <Stat label="Staked" value={`${formatToken(p.stakedBalance)} ${p.tokenSymbol}`} />
-                    <Stat label="Token balance" value={`${formatToken(p.tokensHeld)} ${p.tokenSymbol}`} />
-                    <Stat label="Yield claimed" value={`${formatEth(p.yieldClaimed)} ${chainCurrency(p.chainId)}`} />
+                    <div className="kv-row"><span>Tokens held</span><Amount value={formatToken(r.p.tokensHeld)} unit={r.p.tokenSymbol || undefined} /></div>
+                    <div className="kv-row"><span>Staked</span><Amount value={formatToken(r.p.stakedBalance)} unit={r.p.tokenSymbol || undefined} /></div>
+                    <div className="kv-row">
+                      <span>Claimable yield</span>
+                      {r.claimable === null ? <span className="mono">{DASH}</span> : <Amount value={formatEth(r.claimable.toString())} unit={chainCurrency(r.p.chainId)} />}
+                    </div>
+                    <div className="kv-row"><span>Yield claimed</span><Amount value={formatEth(r.p.yieldClaimed)} unit={chainCurrency(r.p.chainId)} /></div>
                   </div>
-                </Link>
-                {(refundAvailable || voteEnd !== null) && (
-                  <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    {refundAvailable && (
-                      <Link href={href} className="badge badge-pending">Refund available</Link>
-                    )}
-                    {voteEnd !== null && (
-                      <Link href={`${href}/milestones`} className="badge badge-pending">
-                        Vote open until {new Date(parseInt(voteEnd.toString(), 10) * 1000).toLocaleString()}
-                      </Link>
-                    )}
+                  <div style={{ marginTop: 12 }}>
+                    <PositionActions row={r} />
                   </div>
-                )}
-                <div style={{ marginTop: "12px", fontSize: "13px", color: "var(--text-muted)" }}>
-                  Claimable yield:{" "}
-                  {claimable === null ? DASH : `${formatEth(claimable.toString())} ${chainCurrency(p.chainId)}`}
-                  {" · "}
-                  <Link href={href}>Claim</Link>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
       )}
 
       <GaslessRequests />
-      <MyComplaints />
+      <div id="my-complaints" className="section-block">
+        <MyComplaints />
+      </div>
     </div>
   );
 }

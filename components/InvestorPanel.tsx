@@ -3,13 +3,20 @@
 import { useEffect, useState } from "react";
 import { useAccount, useChainId, useConfig, usePublicClient, useReadContracts, useSignTypedData, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
-import { AlertTriangle, Lock, Plug, Wallet } from "lucide-react";
-import { StatusIcon } from "@/components/ui/StatusIcon";
+import { Lock, Wallet } from "lucide-react";
+import { Amount } from "@/components/ui/Amount";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { Field, Input } from "@/components/ui/Field";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Spinner } from "@/components/ui/Spinner";
+import { toast } from "@/lib/toast";
+import { isUserRejection, toastTxError, WALLET_CANCELLED_MESSAGE } from "@/lib/walletErrors";
 import { formatUnits, parseUnits } from "viem";
 import type { ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
 import { getFeeOverrides } from "@/lib/fees";
-import { chainCurrency } from "@/config/chains";
+import { chainCurrency, chainName } from "@/config/chains";
 import { GaslessNotice, RelayStatus } from "@/components/RelayStatus";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { useWriteAllowed } from "@/components/web3/useWriteAllowed";
@@ -32,11 +39,12 @@ function asBig(v: unknown): bigint {
   return typeof v === "bigint" ? v : ZERO;
 }
 
-function fmt(v: bigint): string {
-  const s = formatUnits(v, 18);
-  const [i, f = ""] = s.split(".");
-  const frac = f.slice(0, 6).replace(/0+$/, "");
-  return frac ? `${i}.${frac}` : i;
+/** Live field error: null when empty or within `max`. */
+function amountError(input: string, max: bigint, what: string): string | null {
+  if (input.trim() === "") return null;
+  const amount = parseAmount(input);
+  if (amount === null) return "Enter a valid amount greater than 0.";
+  return amount > max ? `Amount is above your ${what}.` : null;
 }
 
 function parseAmount(input: string): bigint | null {
@@ -46,15 +54,6 @@ function parseAmount(input: string): bigint | null {
   } catch {
     return null;
   }
-}
-
-function errMessage(err: unknown): string {
-  if (typeof err === "object" && err !== null) {
-    const e = err as { shortMessage?: unknown; message?: unknown };
-    if (typeof e.shortMessage === "string") return e.shortMessage;
-    if (typeof e.message === "string") return e.message;
-  }
-  return "Transaction failed";
 }
 
 export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; nowSeconds: number }) {
@@ -108,7 +107,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   const [unstakeInput, setUnstakeInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState("");
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [activeLabel, setActiveLabel] = useState("");
 
   const refundOpen = refundsOpenFor(BigInt(nowSeconds), phaseInputOf(project));
   const crowdfundFailed = project.fundingClosedAt == null;
@@ -125,22 +124,23 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
     calls: { label: string; run: () => Promise<Addr> }[],
   ): Promise<void> {
     setBusy(true);
-    setResult(null);
+    setActiveLabel(label);
     try {
       for (const call of calls) {
         setStep(call.label);
         const hash = await call.run();
         const receipt = await waitForTransactionReceipt(config, { hash });
         if (receipt.status !== "success") {
-          setResult({ ok: false, text: `${call.label} failed (reverted).` });
+          toast.error(`${call.label} failed (reverted).`);
           return;
         }
       }
-      setResult({ ok: true, text: `${label} confirmed.` });
+      toast.success(`${label} confirmed.`);
     } catch (err) {
-      setResult({ ok: false, text: errMessage(err) });
+      toastTxError(err);
     } finally {
       setStep("");
+      setActiveLabel("");
       setBusy(false);
       await refetch();
     }
@@ -150,17 +150,21 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
     if (relayConfirmed) void refetch();
   }, [relayConfirmed, refetch]);
 
+  useEffect(() => {
+    if (relayConfirmed) toast.success(relayKind === "stake" ? "Gasless stake confirmed." : "Gasless token claim confirmed.");
+  }, [relayConfirmed, relayKind]);
+
   async function runRelay(kind: "stake" | "claim", submit: () => Promise<{ id: string }>): Promise<void> {
     setRelayKind(kind);
     setRelayFailure(null);
-    setResult(null);
     relay.reset();
     setRelayBusy(true);
     try {
       const intake = await submit();
       relay.track(intake.id);
     } catch (err) {
-      setRelayFailure(describeRelayError(err));
+      if (isUserRejection(err)) toast.info(WALLET_CANCELLED_MESSAGE);
+      else setRelayFailure(describeRelayError(err));
     } finally {
       setRelayBusy(false);
     }
@@ -169,7 +173,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   function handleGaslessStake(): void {
     const amount = parseAmount(stakeInput);
     if (amount === null || amount > balance) {
-      setResult({ ok: false, text: "Enter a valid amount up to your token balance." });
+      toast.error("Enter a valid amount up to your token balance.");
       return;
     }
     if (!address || !user) return;
@@ -220,7 +224,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   function handleStake(): void {
     const amount = parseAmount(stakeInput);
     if (amount === null || amount > balance) {
-      setResult({ ok: false, text: "Enter a valid amount up to your token balance." });
+      toast.error("Enter a valid amount up to your token balance.");
       return;
     }
     const calls = [];
@@ -235,7 +239,7 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
   function handleUnstake(): void {
     const amount = parseAmount(unstakeInput);
     if (amount === null || amount > staked) {
-      setResult({ ok: false, text: "Enter a valid amount up to your staked balance." });
+      toast.error("Enter a valid amount up to your staked balance.");
       return;
     }
     void send("Unstake", [
@@ -274,126 +278,130 @@ export function InvestorPanel({ project, nowSeconds }: { project: ProjectDto; no
     void send("Refund", calls);
   }
 
-  const row = { display: "flex", justifyContent: "space-between", padding: "8px 0", fontSize: "13px" } as const;
-  const muted = { color: "var(--text-muted)" } as const;
-  const section = { marginTop: "16px", paddingTop: "16px", borderTop: "1px solid var(--border)" } as const;
+  const currency = chainCurrency(project.chainId);
+  const stakeError = amountError(stakeInput, balance, "token balance");
+  const unstakeError = amountError(unstakeInput, staked, "staked balance");
+  const isActive = (label: string): boolean => busy && activeLabel === label;
 
   return (
-    <div className="glass-card" style={{ padding: "28px", marginTop: "24px" }}>
-      <h2 style={{ fontSize: "20px", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}><Wallet size={20} aria-hidden="true" style={{ flexShrink: 0 }} />Your Position</h2>
-      <p style={{ fontSize: "12px", ...muted, marginTop: 0 }}>Staking and claiming tokens can be gasless; the other actions need your own gas.</p>
-
-      {!isConnected ? (
-        <div className="alert alert-warning">
-          <Plug size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-          <span>Connect your wallet to see your position.</span>
-        </div>
-      ) : (
-        <>
-          {wrongChain && (
-            <div className="alert alert-warning" style={{ marginBottom: "16px" }}>
-              <AlertTriangle size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-              <span>Switch your wallet to this project&apos;s network (chain {project.chainId}) to use these actions.</span>
-            </div>
-          )}
-
-          <ProfileRequiredNotice />
-
-          <div>
-            <div style={row}><span style={muted}>Deposited</span><span>{fmt(deposit)} {chainCurrency(project.chainId)}</span></div>
-            <div style={row}><span style={muted}>Token balance</span><span>{fmt(balance)}</span></div>
-            <div style={row}><span style={muted}>Staked</span><span>{fmt(staked)}</span></div>
-            <div style={row}><span style={muted}>Claimable yield</span><span>{fmt(claimable)} {chainCurrency(project.chainId)}</span></div>
-          </div>
-
-          <div style={section}>
-            <label className="label">Stake</label>
-            <GaslessNotice />
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input className="input-field" value={stakeInput} onChange={e => setStakeInput(e.target.value)} placeholder="0.0" disabled={disabled} />
-              <button type="button" className="btn-secondary" disabled={disabled} onClick={() => setStakeInput(formatUnits(balance, 18))}>Max</button>
-            </div>
-            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-              <button type="button" className="btn-primary" style={{ flex: 1 }} disabled={disabled || !user || !stakeInput} onClick={handleGaslessStake}>
-                Stake (gasless)
-              </button>
-              <button type="button" className="btn-secondary" style={{ flex: 1 }} disabled={disabled || !stakeInput} onClick={handleStake}>
-                Stake (pay gas)
-              </button>
-            </div>
-            {relayKind === "stake" && (
-              <RelayStatus chainId={project.chainId} status={relayStatus} request={relay.request} pollError={relay.pollError} failure={relayFailure} onSelfPay={handleStake} />
+    <Card>
+      <CardHeader
+        title={
+          <span className="panel-title">
+            <Wallet size={16} aria-hidden="true" />
+            Your position
+          </span>
+        }
+        subtitle="Staking and claiming tokens can be gasless; the other actions need your own gas."
+      />
+      <CardBody>
+        {!isConnected ? (
+          <InlineAlert tone="warning">Connect your wallet to see your position.</InlineAlert>
+        ) : (
+          <>
+            {wrongChain && (
+              <InlineAlert tone="warning" className="panel-gap">
+                Switch your wallet to this project&apos;s network ({chainName(project.chainId)}) to use these actions.
+              </InlineAlert>
             )}
-          </div>
 
-          {canClaimTokens && (
-            <div style={section}>
-              <label className="label">Claim my tokens</label>
-              <GaslessNotice />
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button type="button" className="btn-primary" style={{ flex: 1 }} disabled={disabled || !user} onClick={handleGaslessClaimTokens}>
-                  Claim tokens (gasless)
-                </button>
-                <button type="button" className="btn-secondary" style={{ flex: 1 }} disabled={disabled} onClick={handleClaimTokens}>
-                  Claim tokens (pay gas)
-                </button>
+            <ProfileRequiredNotice className="panel-gap" />
+
+            <div className="kv-list">
+              <div className="kv-row"><span>Deposited</span><Amount value={deposit} unit={currency} maxFractionDigits={6} /></div>
+              <div className="kv-row"><span>Token balance</span><Amount value={balance} unit={project.tokenSymbol || undefined} maxFractionDigits={6} /></div>
+              <div className="kv-row"><span>Staked</span><Amount value={staked} unit={project.tokenSymbol || undefined} maxFractionDigits={6} /></div>
+              <div className="kv-row"><span>Claimable yield</span><Amount value={claimable} unit={currency} maxFractionDigits={6} /></div>
+            </div>
+
+            <div className="panel-section">
+              <Field label="Stake" error={stakeError ?? undefined}>
+                <div className="input-row">
+                  <Input value={stakeInput} onChange={e => setStakeInput(e.target.value)} placeholder="0.0" inputMode="decimal" className="num" disabled={disabled} />
+                  <Button variant="secondary" disabled={disabled} onClick={() => setStakeInput(formatUnits(balance, 18))}>Max</Button>
+                </div>
+              </Field>
+              <div style={{ marginTop: 10 }}>
+                <GaslessNotice />
               </div>
-              {relayKind === "claim" && (
-                <RelayStatus chainId={project.chainId} status={relayStatus} request={relay.request} pollError={relay.pollError} failure={relayFailure} onSelfPay={handleClaimTokens} />
+              <div className="panel-actions">
+                <Button loading={relayBusy && relayKind === "stake"} disabled={disabled || !user || !stakeInput || stakeError !== null} onClick={handleGaslessStake}>
+                  Stake (gasless)
+                </Button>
+                <Button variant="secondary" loading={isActive("Stake")} disabled={disabled || !stakeInput || stakeError !== null} onClick={handleStake}>
+                  Stake (pay gas)
+                </Button>
+              </div>
+              {relayKind === "stake" && (
+                <RelayStatus chainId={project.chainId} status={relayStatus} request={relay.request} pollError={relay.pollError} failure={relayFailure} onSelfPay={handleStake} />
               )}
             </div>
-          )}
 
-          <div style={section}>
-            <label className="label">Unstake (you pay gas)</label>
-            {voteLocked && (
-              <div className="alert alert-warning" style={{ marginBottom: "8px" }}>
-                <Lock size={16} aria-hidden="true" style={{ flexShrink: 0 }} />
-                <span>Vote-locked: you voted on an active milestone. Unstaking opens when the poll closes.</span>
+            {canClaimTokens && (
+              <div className="panel-section">
+                <h3 className="label">Claim my tokens</h3>
+                <GaslessNotice />
+                <div className="panel-actions">
+                  <Button loading={relayBusy && relayKind === "claim"} disabled={disabled || !user} onClick={handleGaslessClaimTokens}>
+                    Claim tokens (gasless)
+                  </Button>
+                  <Button variant="secondary" loading={isActive("Claim tokens")} disabled={disabled} onClick={handleClaimTokens}>
+                    Claim tokens (pay gas)
+                  </Button>
+                </div>
+                {relayKind === "claim" && (
+                  <RelayStatus chainId={project.chainId} status={relayStatus} request={relay.request} pollError={relay.pollError} failure={relayFailure} onSelfPay={handleClaimTokens} />
+                )}
               </div>
             )}
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input className="input-field" value={unstakeInput} onChange={e => setUnstakeInput(e.target.value)} placeholder="0.0" disabled={disabled || voteLocked} />
-              <button type="button" className="btn-secondary" disabled={disabled || voteLocked} onClick={() => setUnstakeInput(formatUnits(staked, 18))}>Max</button>
-              <button type="button" className="btn-primary" disabled={disabled || voteLocked || !unstakeInput} onClick={handleUnstake}>Unstake</button>
-            </div>
-          </div>
 
-          <div style={section}>
-            <button type="button" className="btn-primary" style={{ width: "100%" }} disabled={disabled || claimable === ZERO} onClick={handleClaim}>
-              Claim yield (you pay gas)
-            </button>
-          </div>
+            <div className="panel-section">
+              {voteLocked && (
+                <InlineAlert tone="warning" title="Vote-locked" className="panel-gap">
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Lock size={12} aria-hidden="true" />
+                    You voted on an active milestone. Unstaking opens when the poll closes.
+                  </span>
+                </InlineAlert>
+              )}
+              <Field label="Unstake (you pay gas)" error={unstakeError ?? undefined}>
+                <div className="input-row">
+                  <Input value={unstakeInput} onChange={e => setUnstakeInput(e.target.value)} placeholder="0.0" inputMode="decimal" className="num" disabled={disabled || voteLocked} />
+                  <Button variant="secondary" disabled={disabled || voteLocked} onClick={() => setUnstakeInput(formatUnits(staked, 18))}>Max</Button>
+                  <Button loading={isActive("Unstake")} disabled={disabled || voteLocked || !unstakeInput || unstakeError !== null} onClick={handleUnstake}>Unstake</Button>
+                </div>
+              </Field>
+            </div>
 
-          {refundOpen && (
-            <div style={section}>
-              <button
-                type="button"
-                className="btn-secondary"
-                style={{ width: "100%" }}
-                disabled={disabled || (crowdfundFailed ? deposit === ZERO : needUnstake)}
-                onClick={handleRefund}
-              >
-                Refund (you pay gas)
-              </button>
-              {needUnstake && <p style={{ fontSize: "12px", ...muted }}>Unstake first: staked tokens must be returned to your wallet.</p>}
+            <div className="panel-section stack-sm">
+              <Button className="btn-block" loading={isActive("Claim yield")} disabled={disabled || claimable === ZERO} onClick={handleClaim}>
+                Claim yield (you pay gas)
+              </Button>
+              {refundOpen && (
+                <>
+                  <Button
+                    variant="secondary"
+                    className="btn-block"
+                    loading={isActive("Refund")}
+                    disabled={disabled || (crowdfundFailed ? deposit === ZERO : needUnstake)}
+                    onClick={handleRefund}
+                  >
+                    Refund (you pay gas)
+                  </Button>
+                  {needUnstake && <p className="panel-note" style={{ fontSize: 12 }}>Unstake first: staked tokens must be returned to your wallet.</p>}
+                </>
+              )}
             </div>
-          )}
 
-          {busy && step && (
-            <div className="alert alert-warning" style={{ marginTop: "16px" }}>
-              <span className="spinner" style={{ width: "14px", height: "14px" }} />
-              <span>{step}: confirm in your wallet and wait for confirmation...</span>
-            </div>
-          )}
-          {result && (
-            <div className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginTop: "16px" }}>
-              <StatusIcon state={result.ok ? "done" : "warning"} />
-              <span>{result.text}</span>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+            {busy && step && (
+              <p className="tx-status" role="status">
+                <Spinner size={12} />
+                <span>{step}: confirm in your wallet and wait for confirmation.</span>
+              </p>
+            )}
+          </>
+        )}
+      </CardBody>
+    </Card>
   );
 }

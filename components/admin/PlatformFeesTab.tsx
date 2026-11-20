@@ -4,20 +4,30 @@ import { useState } from "react";
 import { useAccount, useConfig, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Landmark } from "lucide-react";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Amount } from "@/components/ui/Amount";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { StatCard } from "@/components/ui/StatCard";
 import { chainName } from "@/config/chains";
-import { fetchProjectRevenue, formatNative, listProjects, shortAddr, type ProjectDto } from "@/lib/api";
+import { fetchProjectRevenue, formatNative, listProjects, type ProjectDto } from "@/lib/api";
 import { ABIS } from "@/lib/contracts";
-import { explorerTxUrl } from "@/lib/explorer";
+import { explorerAddressUrl, explorerTxUrl } from "@/lib/explorer";
 import { getFeeOverrides } from "@/lib/fees";
+import { toast } from "@/lib/toast";
+import { isUserRejection, txErrorMessage, WALLET_CANCELLED_MESSAGE } from "@/lib/walletErrors";
+import { AdminPageHeader } from "./shared";
 
 type Addr = `0x${string}`;
 
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 5;
 const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
-const MUTED = { fontSize: "13px", color: "var(--text-muted)" } as const;
-const CELL = { padding: "8px", borderBottom: "1px solid var(--border)", fontSize: "14px", textAlign: "left" } as const;
 
 interface Row {
   project: ProjectDto;
@@ -35,14 +45,14 @@ function asAddr(v: unknown): Addr | null {
   return typeof v === "string" && ADDRESS_REGEX.test(v) ? (v as Addr) : null;
 }
 
+/** Short error text; the contract's "No funds to claim" revert is mapped to a plain explanation. */
 function errMessage(err: unknown): string {
-  if (typeof err === "object" && err !== null) {
-    const e = err as { shortMessage?: unknown; message?: unknown };
-    const text = typeof e.shortMessage === "string" ? e.shortMessage : typeof e.message === "string" ? e.message : "";
-    if (text.includes("No funds to claim")) return "No funds to claim: the pending fee was already sent.";
-    if (text) return text;
+  const raw = typeof err === "object" && err !== null ? (err as { message?: unknown }).message : undefined;
+  const text = txErrorMessage(err, "");
+  if (text.includes("No funds to claim") || (typeof raw === "string" && raw.includes("No funds to claim"))) {
+    return "No funds to claim: the pending fee was already sent.";
   }
-  return "Transaction failed";
+  return text || "Transaction failed";
 }
 
 async function loadAllProjects(signal: AbortSignal): Promise<{ items: ProjectDto[]; capped: boolean }> {
@@ -62,7 +72,7 @@ function TxLink({ chainId, hash }: { chainId: number; hash: string }) {
   const url = explorerTxUrl(chainId, hash);
   if (!url || !url.startsWith("https://")) return <span>{hash}</span>;
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-accent)" }}>
+    <a href={url} target="_blank" rel="noopener noreferrer" className="link-accent">
       View transaction
     </a>
   );
@@ -161,8 +171,10 @@ export function PlatformFeesTab() {
       });
       const receipt = await waitForTransactionReceipt(config, { hash, chainId: project.chainId });
       if (receipt.status !== "success") {
+        toast.error("Transaction failed (reverted).");
         setResult({ ok: false, text: "Transaction failed (reverted).", hash, chainId: project.chainId });
       } else {
+        toast.success("Fee sent to the treasury", { description: "The transaction link is shown on the page." });
         setResult({
           ok: true,
           text: "Fee sent to the treasury. The indexer updates 'total claimed' after about a minute.",
@@ -173,7 +185,13 @@ export function PlatformFeesTab() {
         void queryClient.invalidateQueries({ queryKey: ["project-revenue", project.id] });
       }
     } catch (err) {
-      setResult({ ok: false, text: errMessage(err) });
+      if (isUserRejection(err)) {
+        toast.info(WALLET_CANCELLED_MESSAGE);
+      } else {
+        const text = errMessage(err);
+        toast.error(text);
+        setResult({ ok: false, text });
+      }
       void refetch();
     } finally {
       setBusy(false);
@@ -181,114 +199,159 @@ export function PlatformFeesTab() {
     }
   }
 
+  const loadingAll = projectsQuery.isLoading || revenueLoading || (rows.length > 0 && readsLoading);
+
+  const columns: ReadonlyArray<DataTableColumn<{ r: Row; pending: bigint | null }>> = [
+    { key: "project", header: "Project", cell: ({ r }) => <span className="cell-title">{r.project.profile?.name ?? r.project.tokenName}</span> },
+    { key: "chain", header: "Network", cell: ({ r }) => <span className="cell-sub" style={{ fontSize: 13 }}>{chainName(r.project.chainId)}</span> },
+    { key: "router", header: "Router", cell: ({ r }) => <AddressChip address={r.router} /> },
+    {
+      key: "pending",
+      header: "Pending fee",
+      align: "right",
+      numeric: true,
+      cell: ({ r, pending }) =>
+        pending === null ? <span className="cell-sub">Unavailable</span> : <Amount value={formatNative(pending.toString(), r.project.chainId, 6)} />,
+    },
+    {
+      key: "claimed",
+      header: "Claimed to treasury",
+      align: "right",
+      numeric: true,
+      cell: ({ r }) => <Amount value={formatNative(r.claimed, r.project.chainId, 6)} />,
+    },
+    {
+      key: "actions",
+      header: <span className="sr-only">Actions</span>,
+      align: "right",
+      cell: ({ r, pending }) => {
+        const chainId = r.project.chainId;
+        const wrongChain = address !== undefined && walletChainId !== chainId;
+        const canSend = pending !== null && pending > BigInt(0) && address !== undefined && !wrongChain && !busy;
+        return (
+          <div className="stack-sm" style={{ alignItems: "flex-end", gap: 4 }}>
+            <Button
+              size="sm"
+              disabled={!canSend}
+              onClick={() => setTarget({ project: r.project, router: r.router, treasury: treasuryFor(chainId) })}
+            >
+              Send to treasury
+            </Button>
+            {!address && <span className="cell-sub cell-nowrap">Connect a wallet</span>}
+            {wrongChain && <span className="cell-sub cell-nowrap">Switch to {chainName(chainId)}</span>}
+          </div>
+        );
+      },
+    },
+  ];
+
   let body: React.ReactNode;
   if (projectsQuery.isError) {
-    body = <div role="alert" className="alert alert-error">Failed to load projects</div>;
-  } else if (projectsQuery.isLoading || revenueLoading || (rows.length > 0 && readsLoading)) {
-    body = <p style={{ color: "var(--text-secondary)" }}>Loading...</p>;
-  } else if (rows.length === 0) {
-    body = <p style={{ color: "var(--text-secondary)" }}>No projects with a revenue router.</p>;
+    body = (
+      <Card>
+        <ErrorState title="Could not load projects" message="Failed to load projects" onRetry={() => void projectsQuery.refetch()} />
+      </Card>
+    );
   } else {
     body = (
       <>
-        <div style={{ marginBottom: "12px" }}>
-          {treasuryChains.map((t) => (
-            <p key={t.chainId} style={MUTED}>
-              {chainName(t.chainId)} treasury: {treasuryFor(t.chainId) ?? "Unavailable"}. Pending total:{" "}
-              {formatNative((totals.get(t.chainId) ?? BigInt(0)).toString(), t.chainId, 6)}
-            </p>
-          ))}
+        <div className="kpi-grid">
+          {loadingAll && (
+            <>
+              <StatCard label="Pending platform fees" value="" loading />
+              <StatCard label="Pending platform fees" value="" loading />
+            </>
+          )}
+          {!loadingAll &&
+            treasuryChains.map((t) => {
+              const treasury = treasuryFor(t.chainId);
+              const href = treasury ? explorerAddressUrl(t.chainId, treasury) : null;
+              return (
+                <StatCard
+                  key={t.chainId}
+                  label={`${chainName(t.chainId)} pending total`}
+                  icon={<Landmark size={16} />}
+                  value={<Amount value={formatNative((totals.get(t.chainId) ?? BigInt(0)).toString(), t.chainId, 6)} />}
+                  hint={
+                    treasury ? (
+                      <>
+                        Treasury <AddressChip address={treasury} href={href ?? undefined} />
+                      </>
+                    ) : (
+                      "Treasury: Unavailable"
+                    )
+                  }
+                />
+              );
+            })}
         </div>
-        <label style={{ fontSize: "14px", display: "flex", gap: "8px", alignItems: "center", marginBottom: "12px" }}>
-          <input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} />
-          Only with pending &gt; 0
-        </label>
-        {!anyPending && <p style={{ color: "var(--text-secondary)", marginBottom: "12px" }}>No router has pending platform fees.</p>}
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={CELL}>Project</th>
-                <th style={CELL}>Chain</th>
-                <th style={CELL}>Router</th>
-                <th style={CELL}>Pending platform fee</th>
-                <th style={CELL}>Total claimed to treasury</th>
-                <th style={CELL} />
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map(({ r, pending }) => {
-                const chainId = r.project.chainId;
-                const wrongChain = address !== undefined && walletChainId !== chainId;
-                const canSend = pending !== null && pending > BigInt(0) && address !== undefined && !wrongChain && !busy;
-                return (
-                  <tr key={r.project.id}>
-                    <td style={CELL}>{r.project.profile?.name ?? r.project.tokenName}</td>
-                    <td style={CELL}>{chainName(chainId)}</td>
-                    <td style={CELL} title={r.router}>{shortAddr(r.router)}</td>
-                    <td style={CELL}>{pending === null ? "Unavailable" : formatNative(pending.toString(), chainId, 6)}</td>
-                    <td style={CELL}>{formatNative(r.claimed, chainId, 6)}</td>
-                    <td style={CELL}>
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        disabled={!canSend}
-                        onClick={() => setTarget({ project: r.project, router: r.router, treasury: treasuryFor(chainId) })}
-                      >
-                        Send fee to treasury
-                      </button>
-                      {!address && <div style={MUTED}>Connect a wallet</div>}
-                      {wrongChain && <div style={MUTED}>Switch your wallet to {chainName(chainId)}</div>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {!loadingAll && rows.length > 0 && !anyPending && (
+          <InlineAlert tone="info" className="panel-gap">
+            No router has pending platform fees.
+          </InlineAlert>
+        )}
+        <Card className="admin-toolbar">
+          <label className="admin-check">
+            <input type="checkbox" checked={onlyPending} onChange={(e) => setOnlyPending(e.target.checked)} />
+            Only with pending &gt; 0
+          </label>
+        </Card>
+        <Card className="admin-table-card">
+          <DataTable
+            columns={columns}
+            rows={visible}
+            rowKey={({ r }) => r.project.id}
+            caption="Revenue routers and pending platform fees"
+            loading={loadingAll}
+            dense
+            stickyHeader
+            emptyTitle={rows.length === 0 ? "No projects with a revenue router." : "No routers match the filter."}
+          />
+        </Card>
       </>
     );
   }
 
   return (
     <section>
-      <h2 style={{ fontSize: "22px", marginBottom: "8px" }}>Platform fees</h2>
-      <p style={{ ...MUTED, marginBottom: "16px" }}>
-        The 1% revenue platform fee accrues in each project&apos;s revenue router. The 5% funding fee and the 1% P2P fee are
-        sent automatically.
-      </p>
+      <AdminPageHeader
+        title="Platform fees"
+        description="The 1% revenue platform fee accrues in each project's revenue router. The 5% funding fee and the 1% P2P fee are sent automatically."
+      />
       {projectsQuery.data?.capped && (
-        <p style={{ ...MUTED, marginBottom: "12px" }}>
+        <InlineAlert tone="info" className="panel-gap">
           Showing the newest {PAGE_LIMIT * MAX_PAGES} projects only; older projects are not listed.
-        </p>
+        </InlineAlert>
       )}
       {result && (
-        <div role={result.ok ? "status" : "alert"} className={`alert ${result.ok ? "alert-success" : "alert-error"}`} style={{ marginBottom: "12px" }}>
-          <span>
-            {result.text}
-            {result.hash && result.chainId !== undefined && (
-              <>
-                {" "}
-                <TxLink chainId={result.chainId} hash={result.hash} />
-              </>
-            )}
-          </span>
-        </div>
+        <InlineAlert tone={result.ok ? "success" : "danger"} className="panel-gap">
+          {result.text}
+          {result.hash && result.chainId !== undefined && (
+            <>
+              {" "}
+              <TxLink chainId={result.chainId} hash={result.hash} />
+            </>
+          )}
+        </InlineAlert>
       )}
       {body}
       <ConfirmDialog
         open={target !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setTarget(null);
+        }}
         title="Send platform fee to treasury?"
+        body={
+          <>
+            This sends this project&apos;s pending 1% platform fee to the ForgeCapita treasury address{" "}
+            <span className="mono">{target?.treasury ?? "(unavailable)"}</span>. Anyone can trigger this; the funds always go
+            to the treasury. You pay the network fee.
+          </>
+        }
         confirmLabel="Send transaction"
-        busy={busy}
         confirmDisabled={target?.treasury === null}
-        onConfirm={() => void send()}
-        onCancel={() => setTarget(null)}
-      >
-        This sends this project&apos;s pending 1% platform fee to the ForgeCapita treasury address{" "}
-        {target?.treasury ?? "(unavailable)"}. Anyone can trigger this; the funds always go to the treasury. You pay the
-        network fee.
-      </ConfirmDialog>
+        onConfirm={send}
+      />
     </section>
   );
 }

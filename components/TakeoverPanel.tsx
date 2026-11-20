@@ -12,13 +12,19 @@ import {
   getTakeoverByProject,
   getTakeoverTally,
   postTakeoverVote,
-  shortAddr,
   type PublicTakeoverCaseDto,
   type TakeoverResult,
   type TakeoverTallyDto,
   type VoteChoice,
 } from "@/lib/api";
 import { formatTokenAmount } from "@/lib/format";
+import { toast, toastErrorWithRef } from "@/lib/toast";
+import { isUserRejection, WALLET_CANCELLED_MESSAGE } from "@/lib/walletErrors";
+import { ThumbsDown, ThumbsUp, UserCog } from "lucide-react";
+import { AddressChip } from "@/components/ui/AddressChip";
+import { Button } from "@/components/ui/Button";
+import { CardBody, CardHeader } from "@/components/ui/Card";
+import { StatusPill } from "@/components/ui/StatusPill";
 
 const TALLY_POLL_MS = 30_000;
 const CLOCK_MS = 1_000;
@@ -29,18 +35,7 @@ const RESULT_TEXT: Record<TakeoverResult, string> = {
   no_quorum: "No quorum",
 };
 
-function isUserRejection(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false;
-  const e = err as { name?: unknown; code?: unknown; message?: unknown };
-  return (
-    e.name === "UserRejectedRequestError" ||
-    e.code === 4001 ||
-    (typeof e.message === "string" && /user rejected|user denied/i.test(e.message))
-  );
-}
-
 function voteError(err: unknown): string {
-  if (isUserRejection(err)) return "Signature cancelled";
   if (err instanceof ApiError) {
     if (err.status === 400) return "Check your device clock (signature time window) and try again";
     if (err.status === 403) return "You are not eligible to vote on this case";
@@ -123,6 +118,11 @@ function TakeoverBody({ initial }: { initial: PublicTakeoverCaseDto }) {
     onSuccess: (posted) => {
       queryClient.setQueryData(["takeover-tally", id], posted.tally);
       void queryClient.invalidateQueries({ queryKey: myVoteKey });
+      toast.success("Advisory vote recorded.");
+    },
+    onError: (err) => {
+      if (isUserRejection(err)) toast.info(WALLET_CANCELLED_MESSAGE);
+      else toastErrorWithRef(voteError(err), err);
     },
   });
 
@@ -133,71 +133,121 @@ function TakeoverBody({ initial }: { initial: PublicTakeoverCaseDto }) {
   const canShowButtons = !closed && myVote !== undefined && myVote.canVote && myVote.eligible;
 
   return (
-    <section className="glass-card" style={{ padding: "24px", marginBottom: "24px" }}>
-      <h2 style={{ fontSize: "18px", marginBottom: "12px" }}>Developer takeover vote</h2>
-      <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>
-        Status: {closed ? "Closed" : "Voting open"}
-        {closed && tally.result !== null ? `. Result: ${RESULT_TEXT[tally.result]}` : ""}
-      </p>
-      <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>
-        Candidate: <span style={{ fontFamily: "monospace" }}>{shortAddr(tally.candidateWallet)}</span>
-      </p>
-      <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>
-        Snapshot block: {initial.snapshotBlock ?? "n/a"}. Snapshot total staked: {total === null ? "n/a" : formatTokenAmount(total)}
-      </p>
-      {!closed && <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>{countdown(tally.endsAt, now)}</p>}
-      <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>
-        Yes: {percentOf(tally.yesWeight, total)} ({formatTokenAmount(tally.yesWeight)}). No: {percentOf(tally.noWeight, total)} ({formatTokenAmount(tally.noWeight)})
-      </p>
-      <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>
-        Quorum: {percentOf(tally.votedWeight, total)} voted of {quorumPercent}% required
-        {tally.quorumWeightRequired !== null ? ` (${formatTokenAmount(tally.quorumWeightRequired)} needed)` : ""}. Voters: {tally.voterCount}
-      </div>
-      <div className="progress-bar" style={{ height: "8px", marginBottom: "12px" }}>
-        <div className="progress-fill" style={{ width: barWidth(tally.votedWeight, total) }} />
-      </div>
-      <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>Advisory only: the admin decides on-chain</p>
-
-      {userAddress !== null && myVote !== undefined && (
-        <>
-          {myVote.myChoice !== null && (
-            <p style={{ fontSize: "14px", marginBottom: "8px" }}>
-              Your vote: {myVote.myChoice}
-              {myVote.weight !== null ? ` (weight ${formatTokenAmount(myVote.weight)})` : ""}
-            </p>
+    <section className="ui-card">
+      <CardHeader
+        title={
+          <span className="panel-title">
+            <UserCog size={16} aria-hidden="true" />
+            Developer takeover vote
+          </span>
+        }
+        subtitle="Advisory only: the admin decides on-chain"
+        actions={
+          <StatusPill tone={closed ? (tally.result === "passed" ? "success" : "neutral") : "warning"}>
+            {closed ? `Closed${tally.result !== null ? `: ${RESULT_TEXT[tally.result]}` : ""}` : "Voting open"}
+          </StatusPill>
+        }
+      />
+      <CardBody>
+        <div className="kv-list">
+          <div className="kv-row">
+            <span>Candidate</span>
+            <AddressChip address={tally.candidateWallet} />
+          </div>
+          <div className="kv-row">
+            <span>Snapshot block</span>
+            <span className="num">{initial.snapshotBlock ?? "n/a"}</span>
+          </div>
+          <div className="kv-row">
+            <span>Snapshot total staked</span>
+            <span className="num">{total === null ? "n/a" : formatTokenAmount(total)}</span>
+          </div>
+          {!closed && (
+            <div className="kv-row">
+              <span>Time left</span>
+              <span className="num">{countdown(tally.endsAt, now)}</span>
+            </div>
           )}
-          {!myVote.eligible && !closed && (
-            <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-              {candidateIsMe
-                ? "Not eligible: the candidate cannot vote on their own takeover."
-                : "Not eligible: only wallets that staked at the snapshot, other than the current developer and the candidate, can vote."}
-            </p>
-          )}
-          {canShowButtons && (
-            <>
-              <ProfileRequiredNotice />
-              <div style={{ display: "flex", gap: "12px" }}>
-                {(["YES", "NO"] as const).map((choice) => (
-                  <button
-                    key={choice}
-                    type="button"
-                    className="btn-primary"
-                    disabled={vote.isPending || !writeAllowed}
-                    onClick={() => vote.mutate(choice)}
-                  >
-                    {vote.isPending && vote.variables === choice ? "Waiting…" : `Vote ${choice}`}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </>
-      )}
-      {vote.isError && (
-        <div role="alert" className="alert alert-error" style={{ marginTop: "12px" }}>
-          {voteError(vote.error)}
         </div>
-      )}
+
+        <div className="vote-bars panel-section">
+          <div>
+            <div className="vote-bar-head">
+              <strong>Yes</strong>
+              <span className="num">
+                {percentOf(tally.yesWeight, total)} ({formatTokenAmount(tally.yesWeight)})
+              </span>
+            </div>
+            <div className="vote-track" aria-hidden="true">
+              <div className="vote-fill" style={{ width: barWidth(tally.yesWeight, total) }} />
+            </div>
+          </div>
+          <div>
+            <div className="vote-bar-head">
+              <strong>No</strong>
+              <span className="num">
+                {percentOf(tally.noWeight, total)} ({formatTokenAmount(tally.noWeight)})
+              </span>
+            </div>
+            <div className="vote-track" aria-hidden="true">
+              <div className="vote-fill vote-fill-no" style={{ width: barWidth(tally.noWeight, total) }} />
+            </div>
+          </div>
+          <div>
+            <div className="vote-bar-head">
+              <strong>Turnout</strong>
+              <span className="num">
+                {percentOf(tally.votedWeight, total)} voted of {quorumPercent}% required
+                {tally.quorumWeightRequired !== null ? ` (${formatTokenAmount(tally.quorumWeightRequired)} needed)` : ""}
+              </span>
+            </div>
+            <div className="vote-track" aria-hidden="true">
+              <div className="vote-fill" style={{ width: barWidth(tally.votedWeight, total), background: "var(--text-2)" }} />
+              <span className="vote-marker" style={{ left: `${Math.min(100, Math.max(0, quorumPercent))}%` }} />
+            </div>
+            <p className="panel-note" style={{ marginTop: 6, fontSize: 12 }}>
+              Voters: <span className="num">{tally.voterCount}</span>
+            </p>
+          </div>
+        </div>
+
+        {userAddress !== null && myVote !== undefined && (
+          <div className="panel-section stack-sm">
+            {myVote.myChoice !== null && (
+              <p style={{ fontSize: "14px" }}>
+                Your vote: <strong>{myVote.myChoice}</strong>
+                {myVote.weight !== null ? <span className="num"> (weight {formatTokenAmount(myVote.weight)})</span> : ""}
+              </p>
+            )}
+            {!myVote.eligible && !closed && (
+              <p className="panel-note">
+                {candidateIsMe
+                  ? "Not eligible: the candidate cannot vote on their own takeover."
+                  : "Not eligible: only wallets that staked at the snapshot, other than the current developer and the candidate, can vote."}
+              </p>
+            )}
+            {canShowButtons && (
+              <>
+                <ProfileRequiredNotice />
+                <div className="panel-actions">
+                  {(["YES", "NO"] as const).map((choice) => (
+                    <Button
+                      key={choice}
+                      variant={choice === "YES" ? "primary" : "secondary"}
+                      loading={vote.isPending && vote.variables === choice}
+                      disabled={vote.isPending || !writeAllowed}
+                      leftIcon={choice === "YES" ? <ThumbsUp size={16} aria-hidden="true" /> : <ThumbsDown size={16} aria-hidden="true" />}
+                      onClick={() => vote.mutate(choice)}
+                    >
+                      Vote {choice}
+                    </Button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </CardBody>
     </section>
   );
 }

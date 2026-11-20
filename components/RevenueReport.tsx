@@ -2,15 +2,31 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { BarChart3 } from "lucide-react";
+import { Amount } from "@/components/ui/Amount";
+import { Button } from "@/components/ui/Button";
+import { Card, CardBody, CardHeader } from "@/components/ui/Card";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { InlineAlert } from "@/components/ui/InlineAlert";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { BarChart } from "@/components/ui/charts/BarChart";
 import { chainCurrency } from "@/config/chains";
-import { fetchProjectRevenue, formatNative, shortAddr, type ProjectDto } from "@/lib/api";
+import { fetchProjectRevenue, formatEth, formatNative, shortAddr, type ProjectDto, type RevenueMonthRow } from "@/lib/api";
 
-const MUTED = { fontSize: "13px", color: "var(--text-muted)" } as const;
 const PAGE = 12;
+const CHART_MONTHS = 12;
 
-/** Collapsed founder revenue report from the indexer's monthly totals (native coin only). */
+/** Last CHART_MONTHS months, oldest first. Gross wei is formatted bigint-safely, then parsed for the chart axis only. */
+function chartRows(months: RevenueMonthRow[]): Array<{ month: string; gross: number }> {
+  return months
+    .slice(0, CHART_MONTHS)
+    .reverse()
+    .map((m) => ({ month: m.month, gross: Number(formatEth(m.gross, 6)) }));
+}
+
+/** Founder revenue report from the indexer's monthly totals (native coin only): chart plus monthly table. */
 export function RevenueReport({ project }: { project: ProjectDto }) {
-  const [open, setOpen] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const chainId = project.chainId;
   const currency = chainCurrency(chainId);
@@ -18,78 +34,88 @@ export function RevenueReport({ project }: { project: ProjectDto }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["project-revenue", project.id],
     queryFn: ({ signal }) => fetchProjectRevenue(chainId, project.escrowAddress, signal),
-    enabled: open,
-    refetchInterval: open ? 30_000 : false,
+    refetchInterval: 30_000,
   });
 
-  let body: React.ReactNode = null;
-  if (open) {
-    if (isLoading) {
-      body = <p style={MUTED}>Loading revenue report...</p>;
-    } else if (isError) {
-      body = <p style={MUTED}>Revenue report is not available right now. Try again later.</p>;
-    } else if (!data || data.months.length === 0) {
-      body = <p style={MUTED}>No revenue recorded yet</p>;
-    } else {
-      const rows = data.months.slice(0, shown);
-      body = (
-        <>
-          <div style={{ overflowX: "auto", marginBottom: "8px" }}>
-            <table style={{ width: "100%", fontSize: "13px" }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left" }}>Month</th>
-                  <th style={{ textAlign: "left" }}>Payments</th>
-                  <th style={{ textAlign: "left" }}>Gross</th>
-                  <th style={{ textAlign: "left" }}>Developer 24%</th>
-                  <th style={{ textAlign: "left" }}>Stakers</th>
-                  <th style={{ textAlign: "left" }}>Platform fee</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((m) => (
-                  <tr key={m.month}>
-                    <td>{m.month}</td>
-                    <td>{m.paymentCount}</td>
-                    <td>{formatNative(m.gross, chainId, 6)}</td>
-                    <td>{formatNative(m.creatorCut, chainId, 6)}</td>
-                    <td>{formatNative(m.investorCut, chainId, 6)}</td>
-                    <td>{formatNative(m.platformFee, chainId, 6)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {data.months.length > shown && (
-            <button type="button" className="btn-secondary" onClick={() => setShown((n) => n + PAGE)}>
-              Show more
-            </button>
-          )}
-          <p style={{ fontSize: "14px", margin: "8px 0 0" }}>
-            Total gross {formatNative(data.totals.totalGross, chainId, 6)}, developer share{" "}
-            {formatNative(data.totals.totalCreatorCut, chainId, 6)}, claimed{" "}
-            {formatNative(data.totals.totalCreatorClaimed, chainId, 6)}
-          </p>
-        </>
-      );
-    }
+  const columns: ReadonlyArray<DataTableColumn<RevenueMonthRow>> = [
+    { key: "month", header: "Month", numeric: true, cell: (m) => m.month },
+    { key: "payments", header: "Payments", align: "right", numeric: true, cell: (m) => m.paymentCount },
+    { key: "gross", header: `Gross (${currency})`, align: "right", cell: (m) => <Amount value={formatEth(m.gross, 6)} /> },
+    { key: "creator", header: "Developer 24%", align: "right", cell: (m) => <Amount value={formatEth(m.creatorCut, 6)} /> },
+    { key: "stakers", header: "Stakers", align: "right", cell: (m) => <Amount value={formatEth(m.investorCut, 6)} /> },
+    { key: "fee", header: "Platform fee", align: "right", cell: (m) => <Amount value={formatEth(m.platformFee, 6)} /> },
+  ];
+
+  let body: React.ReactNode;
+  if (isLoading) {
+    body = (
+      <div role="status" className="stack-sm">
+        <span className="sr-only">Loading revenue report...</span>
+        <Skeleton height={160} />
+        <Skeleton width="70%" />
+      </div>
+    );
+  } else if (isError) {
+    body = <InlineAlert tone="warning">Revenue report is not available right now. Try again later.</InlineAlert>;
+  } else if (!data || data.months.length === 0) {
+    body = <EmptyState icon={<BarChart3 size={20} />} title="No revenue recorded yet" />;
+  } else {
+    const rows = chartRows(data.months);
+    body = (
+      <>
+        <h4 className="label">Monthly revenue received ({currency})</h4>
+        <BarChart
+          data={rows}
+          xKey="month"
+          yKey="gross"
+          seriesName={`Revenue (${currency})`}
+          height={200}
+          formatter={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+          summary={`Gross revenue routed to ${project.profile?.name ?? project.tokenName} per month for the last ${rows.length} month(s) with payments, in ${currency}.`}
+        />
+        <div className="panel-section" style={{ marginLeft: -20, marginRight: -20, paddingTop: 0 }}>
+          <DataTable
+            columns={columns}
+            rows={data.months.slice(0, shown)}
+            rowKey={(m) => m.month}
+            caption={`Monthly revenue for ${project.profile?.name ?? project.tokenName}`}
+            dense
+          />
+        </div>
+        {data.months.length > shown && (
+          <Button variant="secondary" size="sm" onClick={() => setShown((n) => n + PAGE)} style={{ marginTop: 8 }}>
+            Show more
+          </Button>
+        )}
+        <p className="panel-note num" style={{ marginTop: 12 }}>
+          Total gross {formatNative(data.totals.totalGross, chainId, 6)}, developer share{" "}
+          {formatNative(data.totals.totalCreatorCut, chainId, 6)}, claimed{" "}
+          {formatNative(data.totals.totalCreatorClaimed, chainId, 6)}
+        </p>
+      </>
+    );
   }
 
   const router = data?.routerAddress ?? null;
 
   return (
-    <details
-      style={{ marginTop: "12px" }}
-      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
-    >
-      <summary style={{ cursor: "pointer", fontSize: "14px" }}>Revenue report</summary>
-      <div style={{ marginTop: "8px" }}>
-        <p style={{ ...MUTED, marginBottom: "6px" }}>
+    <Card>
+      <CardHeader
+        as="h3"
+        title={
+          <span className="panel-title">
+            <BarChart3 size={16} aria-hidden="true" />
+            Revenue report
+          </span>
+        }
+      />
+      <CardBody>
+        <p className="panel-note panel-gap">
           Revenue only counts when it is sent through this project&apos;s RevenueRouter
           {router && (
             <>
               {": "}
-              <span style={{ fontFamily: "monospace" }} title={router}>{shortAddr(router)}</span>
+              <span className="mono" title={router}>{shortAddr(router)}</span>
             </>
           )}
           . Only the native coin ({currency}) is audited today. Stablecoin and other ERC-20 revenue is not audited or
@@ -97,7 +123,7 @@ export function RevenueReport({ project }: { project: ProjectDto }) {
           your registered shadow wallet, and revenue that is not routed shows up as a shortfall.
         </p>
         {body}
-      </div>
-    </details>
+      </CardBody>
+    </Card>
   );
 }

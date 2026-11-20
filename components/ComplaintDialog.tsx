@@ -1,13 +1,17 @@
 "use client";
 
-import { useId, useState } from "react";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useState } from "react";
+import Link from "next/link";
+import { Flag } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { toast } from "@/lib/toast";
 import { useAuth } from "@/components/web3/AuthProvider";
 import { useWriteAllowed } from "@/components/web3/useWriteAllowed";
 import { ProfileRequiredNotice } from "@/components/ProfileRequiredNotice";
 import {
   createComplaint,
-  describeApiError,
   type ComplaintCategory,
   type ComplaintStatus,
 } from "@/lib/api";
@@ -47,95 +51,60 @@ function ComplaintForm({ projectId, onClose }: { projectId: string; onClose: (fi
   const [category, setCategory] = useState<ComplaintCategory>("MISREPRESENTATION");
   const [body, setBody] = useState("");
   const [evidence, setEvidence] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const categoryId = useId();
-  const bodyId = useId();
-  const evidenceId = useId();
 
   const trimmedBody = body.trim();
   const trimmedEvidence = evidence.trim();
   const bodyOk = trimmedBody.length >= BODY_MIN && trimmedBody.length <= BODY_MAX;
   const evidenceOk = validEvidenceUrl(trimmedEvidence);
+  const bodyError = trimmedBody.length > 0 && trimmedBody.length < BODY_MIN ? `At least ${BODY_MIN} characters.` : undefined;
 
+  /** Throws on failure so the dialog shows the mapped API error inline and stays open. */
   const submit = async (): Promise<void> => {
-    if (busy || !bodyOk || !evidenceOk) return;
-    setBusy(true);
-    setError("");
-    try {
-      await createComplaint({
-        projectId,
-        category,
-        body: trimmedBody,
-        evidenceUrl: trimmedEvidence || undefined,
-      });
-      onClose(true);
-    } catch (err) {
-      setError(describeApiError(err, "Could not submit the complaint"));
-    } finally {
-      setBusy(false);
-    }
+    if (!bodyOk || !evidenceOk) return;
+    await createComplaint({
+      projectId,
+      category,
+      body: trimmedBody,
+      evidenceUrl: trimmedEvidence || undefined,
+    });
+    onClose(true);
   };
 
   return (
     <ConfirmDialog
       open
+      onOpenChange={(next) => {
+        if (!next) onClose(false);
+      }}
       title="Report a problem"
+      body="Only you and ForgeCapita staff can see this report. The founder is not shown who filed it."
       confirmLabel="Submit"
-      busy={busy}
       confirmDisabled={!bodyOk || !evidenceOk}
-      onConfirm={() => void submit()}
-      onCancel={() => onClose(false)}
+      onConfirm={submit}
+      errorFallback="Could not submit the complaint"
     >
-      <p style={{ marginBottom: "12px" }}>
-        Only you and ForgeCapita staff can see this report. The founder is not shown who filed it.
-      </p>
-      <label htmlFor={categoryId} style={{ display: "block", fontSize: "13px", marginBottom: "6px" }}>Category</label>
-      <select
-        id={categoryId}
-        className="input-field"
-        value={category}
-        disabled={busy}
-        onChange={(e) => setCategory(CATEGORIES.find((c) => c === e.target.value) ?? "OTHER")}
-        style={{ marginBottom: "12px" }}
+      <Field label="Category">
+        <Select value={category} onChange={(e) => setCategory(CATEGORIES.find((c) => c === e.target.value) ?? "OTHER")}>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+          ))}
+        </Select>
+      </Field>
+      <Field
+        label={`What happened? (${BODY_MIN}-${BODY_MAX} characters)`}
+        hint={
+          <span className="num">
+            {trimmedBody.length} / {BODY_MAX}
+            {trimmedBody.length < BODY_MIN ? ` (at least ${BODY_MIN})` : ""}
+          </span>
+        }
+        error={bodyError}
       >
-        {CATEGORIES.map((c) => (
-          <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
-        ))}
-      </select>
-      <label htmlFor={bodyId} style={{ display: "block", fontSize: "13px", marginBottom: "6px" }}>
-        What happened? ({BODY_MIN}-{BODY_MAX} characters)
-      </label>
-      <textarea
-        id={bodyId}
-        className="input-field"
-        rows={5}
-        maxLength={BODY_MAX}
-        value={body}
-        disabled={busy}
-        onChange={(e) => setBody(e.target.value)}
-      />
-      <p style={{ fontSize: "12px", color: bodyOk ? "var(--text-muted)" : "var(--rose)", margin: "4px 0 12px" }}>
-        {trimmedBody.length} / {BODY_MAX}
-        {trimmedBody.length < BODY_MIN ? ` (at least ${BODY_MIN})` : ""}
-      </p>
-      <label htmlFor={evidenceId} style={{ display: "block", fontSize: "13px", marginBottom: "6px" }}>
-        Evidence link (optional, https only)
-      </label>
-      <input
-        id={evidenceId}
-        className="input-field"
-        type="url"
-        maxLength={URL_MAX}
-        placeholder="https://"
-        value={evidence}
-        disabled={busy}
-        onChange={(e) => setEvidence(e.target.value)}
-      />
-      {!evidenceOk && (
-        <p style={{ fontSize: "12px", color: "var(--rose)", marginTop: "4px" }}>Enter a valid https link.</p>
-      )}
-      {error && <p role="alert" style={{ color: "var(--rose)", fontSize: "13px", marginTop: "8px" }}>{error}</p>}
+        <Textarea rows={5} maxLength={BODY_MAX} value={body} onChange={(e) => setBody(e.target.value)} />
+      </Field>
+      <Field label="Evidence link (optional, https only)" error={evidenceOk ? undefined : "Enter a valid https link."}>
+        <Input type="url" maxLength={URL_MAX} placeholder="https://" value={evidence} onChange={(e) => setEvidence(e.target.value)} />
+      </Field>
     </ConfirmDialog>
   );
 }
@@ -149,22 +118,29 @@ export function ReportProblem({ projectId }: { projectId: string }) {
 
   if (!user) {
     return (
-      <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "16px" }}>
-        <button type="button" className="btn-secondary" onClick={() => void signIn()}>Sign in</button>{" "}
-        to report a problem with this project.
-      </p>
+      <div className="ui-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <Flag size={16} aria-hidden="true" style={{ color: "var(--text-2)", flexShrink: 0 }} />
+        <p className="panel-note" style={{ flex: 1, minWidth: 200 }}>Sign in to report a problem with this project.</p>
+        <Button variant="secondary" size="sm" onClick={() => void signIn()}>Sign in</Button>
+      </div>
     );
   }
 
   return (
-    <div style={{ marginTop: "16px" }}>
+    <div className="ui-card stack-md" style={{ padding: "16px 20px" }}>
       <ProfileRequiredNotice />
-      <button type="button" className="btn-secondary" disabled={!writeAllowed} onClick={() => { setFiled(false); setOpen(true); }}>
-        Report a problem
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <Flag size={16} aria-hidden="true" style={{ color: "var(--text-2)", flexShrink: 0 }} />
+        <p className="panel-note" style={{ flex: 1, minWidth: 200 }}>
+          Something wrong with this project? Reports are private to you and ForgeCapita staff.
+        </p>
+        <Button variant="secondary" size="sm" disabled={!writeAllowed} onClick={() => { setFiled(false); setOpen(true); }}>
+          Report a problem
+        </Button>
+      </div>
       {filed && (
-        <p role="status" style={{ fontSize: "13px", color: "var(--emerald)", marginTop: "8px" }}>
-          Report submitted. You can follow it under My complaints on your portfolio.
+        <p role="status" className="panel-note">
+          Report submitted. You can follow it under <Link href="/portfolio#my-complaints">My complaints</Link> on your portfolio.
         </p>
       )}
       {open && (
@@ -172,7 +148,10 @@ export function ReportProblem({ projectId }: { projectId: string }) {
           projectId={projectId}
           onClose={(done) => {
             setOpen(false);
-            if (done) setFiled(true);
+            if (done) {
+              setFiled(true);
+              toast.success("Report submitted.");
+            }
           }}
         />
       )}
