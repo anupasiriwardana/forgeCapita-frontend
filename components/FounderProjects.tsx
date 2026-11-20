@@ -171,11 +171,21 @@ function TakeoverNotice({ project }: { project: ProjectDto }) {
   }, [project.chainId, project.escrowAddress]);
 
   if (!item || (item.status !== "vote_open" && item.status !== "closed")) return null;
+  // Once the candidate has accepted on-chain they are the project's developer: the takeover is finished.
+  if (item.status === "closed" && item.candidateWallet.toLowerCase() === project.developer.toLowerCase()) return null;
   const href = `/projects/${encodeURIComponent(project.id)}`;
+  if (item.status === "closed" && item.result !== "passed") {
+    return (
+      <InlineAlert tone="info" title="Takeover vote closed">
+        Vote closed: {item.result ? (TAKEOVER_RESULT[item.result] ?? item.result) : "no result"}. The developer does not
+        change.
+      </InlineAlert>
+    );
+  }
   return (
     <InlineAlert
       tone="warning"
-      title={item.status === "vote_open" ? "Takeover vote open" : "Takeover vote closed"}
+      title={item.status === "vote_open" ? "Takeover vote open" : "Takeover vote passed"}
       action={
         <ButtonLink href={href} variant="secondary" size="sm">
           View project
@@ -190,8 +200,8 @@ function TakeoverNotice({ project }: { project: ProjectDto }) {
         </>
       ) : (
         <>
-          Vote closed: {item.result ? (TAKEOVER_RESULT[item.result] ?? item.result) : "no result"}. Staff may propose a new
-          developer on-chain.
+          The community vote passed. Staff may propose <span className="mono">{shortAddr(item.candidateWallet)}</span> as the
+          new developer on-chain; the change takes effect once the candidate accepts.
         </>
       )}
     </InlineAlert>
